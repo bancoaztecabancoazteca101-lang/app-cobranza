@@ -1,0 +1,105 @@
+package com.example.matrizapp
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
+    val allItems by viewModel.matrizList.collectAsState()
+    var itemToEdit by remember { mutableStateOf<MatrizEntity?>(null) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+
+    val items = remember(allItems, searchQuery) {
+        if (searchQuery.isBlank()) allItems else allItems.filter { item ->
+            val q = searchQuery.trim()
+            item.nombre.contains(q, ignoreCase = true) ||
+                item.numTT.contains(q, ignoreCase = true) ||
+                item.ref1.contains(q, ignoreCase = true) ||
+                item.ref2.contains(q, ignoreCase = true) ||
+                item.observaciones?.contains(q, ignoreCase = true) == true ||
+                item.estado.contains(q, ignoreCase = true)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(items, key = { it.id }) { item ->
+                    MatrizItemCard(
+                        item = item,
+                        onCardClick = { itemToEdit = item }
+                    )
+                }
+            }
+        }
+        FloatingActionButton(
+            onClick = { showCreateDialog = true },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+        ) { Icon(Icons.Default.Add, contentDescription = "Nuevo registro") }
+    }
+
+    itemToEdit?.let { item ->
+        MatrizFullFormDialog(
+            item = item,
+            viewModel = viewModel,
+            onDismiss = { itemToEdit = null },
+            onSave = { nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+                viewModel.guardarRegistroCompleto(
+                    item.id, nombre, semana, requisito, numTT, ref1, ref2,
+                    observaciones, estado, ubicacion, fecha, hora, ruta, folioP
+                )
+                itemToEdit = null
+            }
+        )
+    }
+
+    if (showCreateDialog) {
+        MatrizFullFormDialog(
+            item = null,
+            viewModel = viewModel,
+            onDismiss = { showCreateDialog = false },
+            onSave = { nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+                viewModel.crearRegistro(nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP)
+                showCreateDialog = false
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MatrizItemCard(
+    item: MatrizEntity,
+    onCardClick: () -> Unit
+) {
+    Card(onClick = onCardClick, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(text = item.nombre, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                StatusBadge(estado = item.estado)
+            }
+            Text(text = item.observaciones ?: "Sin observaciones", style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ubicacion = item.ubicacion)
+                Spacer(modifier = Modifier.weight(1f))
+                if (item.isDirty) {
+                    Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-files-path name="my_images" path="Pictures" />
+    <files-path name="my_audios" path="audios" />
+    <cache-path name="my_shared_cache" path="compartir/" />
+</paths>

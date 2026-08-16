@@ -1,0 +1,117 @@
+package com.example.matrizapp
+import androidx.room.*
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface MatrizDao {
+    @Query("SELECT * FROM matriz_table WHERE nombre NOT LIKE '%Pase semana%' AND nombre != '' ORDER BY id ASC")
+    fun getAllMatriz(): Flow<List<MatrizEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<MatrizEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOne(item: MatrizEntity)
+    @Query("UPDATE matriz_table SET estado = :nuevoEstado, observaciones = :obs, isDirty = 1 WHERE id = :id")
+    suspend fun updateGestionLocal(id: String, nuevoEstado: String, obs: String)
+    @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
+        numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
+        ubicacion = :ubicacion, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP, isDirty = 1
+        WHERE id = :id""")
+    suspend fun updateRegistroCompleto(
+        id: String, nombre: String, semana: String, requisito: String, numTT: String,
+        ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
+        fecha: Long?, hora: String?, ruta: String?, folioP: String?
+    )
+    @Query("UPDATE matriz_table SET imagenUrl = :uri, isDirty = 1 WHERE id = :id")
+    suspend fun updateImagenLocal(id: String, uri: String)
+    @Query("UPDATE matriz_table SET imagenUrl2 = :uri, isDirty = 1 WHERE id = :id")
+    suspend fun updateImagen2Local(id: String, uri: String)
+    @Query("SELECT * FROM matriz_table WHERE isDirty = 1")
+    suspend fun getDirtyItems(): List<MatrizEntity>
+    @Query("UPDATE matriz_table SET isDirty = 0, imagenUrl = :remoteImg, imagenUrl2 = :remoteImg2, lastSync = :syncTime WHERE id = :id")
+    suspend fun markAsClean(id: String, remoteImg: String?, remoteImg2: String?, syncTime: Long = System.currentTimeMillis())
+}
+
+@Dao
+interface PaseCarteraDao {
+    @Query("SELECT * FROM pase_cartera_table ORDER BY id ASC")
+    fun getAllPase(): Flow<List<PaseEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<PaseEntity>)
+    @Query("UPDATE pase_cartera_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
+    suspend fun updateEstadoLocal(id: String, nuevoEstado: String)
+    @Query("SELECT * FROM pase_cartera_table WHERE isDirty = 1")
+    suspend fun getDirtyItems(): List<PaseEntity>
+    @Query("UPDATE pase_cartera_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
+    suspend fun markAsClean(id: String, syncTime: Long = System.currentTimeMillis())
+}
+
+@Dao
+interface SolicitudDao {
+    @Query("SELECT * FROM solicitud_table ORDER BY id ASC")
+    fun getAllSolicitud(): Flow<List<SolicitudEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<SolicitudEntity>)
+    @Query("UPDATE solicitud_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
+    suspend fun updateEstadoLocal(id: String, nuevoEstado: String)
+    @Query("UPDATE solicitud_table SET audioUrl = :uri, isDirty = 1 WHERE id = :id")
+    suspend fun updateAudioLocal(id: String, uri: String)
+    @Query("UPDATE solicitud_table SET imageUrl = :uri, isDirty = 1 WHERE id = :id")
+    suspend fun updateImagenLocal(id: String, uri: String)
+    @Query("UPDATE solicitud_table SET imageUrl2 = :uri, isDirty = 1 WHERE id = :id")
+    suspend fun updateImagen2Local(id: String, uri: String)
+    @Query("UPDATE solicitud_table SET imageUrl3 = :uri, isDirty = 1 WHERE id = :id")
+    suspend fun updateImagen3Local(id: String, uri: String)
+    @Query("UPDATE solicitud_table SET imageUrl4 = :uri, isDirty = 1 WHERE id = :id")
+    suspend fun updateImagen4Local(id: String, uri: String)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOne(item: SolicitudEntity)
+    @Query("""UPDATE solicitud_table SET nombre = :nombre, numero = :numero, sucursal = :sucursal,
+        ubicacionRaw = :ubicacion, nombreRef1 = :nombreRef1, ref1 = :ref1, nombreRef2 = :nombreRef2, ref2 = :ref2,
+        observaciones = :observaciones, estado = :estado, isDirty = 1
+        WHERE id = :id""")
+    suspend fun updateCompleto(
+        id: String, nombre: String, numero: String, sucursal: String, ubicacion: String,
+        nombreRef1: String, ref1: String, nombreRef2: String, ref2: String,
+        observaciones: String, estado: String
+    )
+    @Query("SELECT * FROM solicitud_table WHERE isDirty = 1")
+    suspend fun getDirtyItems(): List<SolicitudEntity>
+    @Query("UPDATE solicitud_table SET isDirty = 0, audioUrl = :remoteAudio, imageUrl = :remoteImg, imageUrl2 = :remoteImg2, imageUrl3 = :remoteImg3, imageUrl4 = :remoteImg4, lastSync = :syncTime WHERE id = :id")
+    suspend fun markAsClean(id: String, remoteAudio: String?, remoteImg: String? = null, remoteImg2: String? = null, remoteImg3: String? = null, remoteImg4: String? = null, syncTime: Long = System.currentTimeMillis())
+}
+
+@Dao
+interface FiltroFechaDao {
+    @Query("SELECT * FROM filtro_fecha_table ORDER BY fecha DESC")
+    fun getAll(): Flow<List<FiltroFechaEntity>>
+    @Query("SELECT * FROM filtro_fecha_table WHERE fecha BETWEEN :desde AND :hasta ORDER BY fecha DESC")
+    fun getItemsByRange(desde: Long, hasta: Long): Flow<List<FiltroFechaEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<FiltroFechaEntity>)
+    @Query("DELETE FROM filtro_fecha_table")
+    suspend fun deleteAll()
+}
+
+@Dao
+interface FiltrarDao {
+    @Query("SELECT * FROM filtrar_table ORDER BY nombre ASC")
+    fun getAll(): Flow<List<FiltrarEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<FiltrarEntity>)
+    @Query("UPDATE filtrar_table SET estado = :nuevoEstado, observaciones = :obs, isDirty = 1 WHERE id = :id")
+    suspend fun updateGestionLocal(id: String, nuevoEstado: String, obs: String)
+    @Query("SELECT * FROM filtrar_table WHERE isDirty = 1")
+    suspend fun getDirtyItems(): List<FiltrarEntity>
+    @Query("UPDATE filtrar_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
+    suspend fun markAsClean(id: String, syncTime: Long = System.currentTimeMillis())
+}
+
+@Dao
+interface ControlDao {
+    @Query("SELECT * FROM control_table ORDER BY rowid ASC")
+    fun getAll(): Flow<List<ControlEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<ControlEntity>)
+    @Query("DELETE FROM control_table")
+    suspend fun deleteAll()
+}
