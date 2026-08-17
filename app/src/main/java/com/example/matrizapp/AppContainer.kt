@@ -11,6 +11,7 @@ class AppContainer(private val context: Context) {
 
     val driveHelper: DriveHelper by lazy { DriveHelper(driveService, context) }
     val audioHelper: AudioHelper by lazy { AudioHelper(context) }
+    val sem6CacheStore: Sem6CacheStore by lazy { Sem6CacheStore(context) }
 
     val repository: SheetsRepository by lazy {
         SheetsRepository(

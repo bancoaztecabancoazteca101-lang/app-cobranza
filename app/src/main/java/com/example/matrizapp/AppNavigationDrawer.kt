@@ -180,6 +180,25 @@ fun AppNavigationDrawer(
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
 
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                Text(
+                    text = "CONSULTA",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp)
+                )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Visibility, contentDescription = null) },
+                    label = { Text("Semana 6") },
+                    selected = currentRoute == "sem6",
+                    onClick = {
+                        onNavigate("sem6")
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
+
                 Spacer(modifier = Modifier.height(8.dp))
             }
         },

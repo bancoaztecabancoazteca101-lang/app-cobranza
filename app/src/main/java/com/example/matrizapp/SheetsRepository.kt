@@ -41,6 +41,35 @@ class SheetsRepository(
         Unit
     }
 
+    /** Trae en vivo la hoja de la semana actual "Cont-Sem-NN" (Nombre, Sem, Req, Id, CU,
+     * Visitas, UltimaFechaVisita). No se guarda en Room: es solo lectura y son pocos datos.
+     * Si la hoja de esta semana aún no existe (ej. lunes muy temprano, antes de la primera
+     * corrida del trigger de Apps Script), regresa lista vacía en vez de fallar. */
+    suspend fun fetchSem6Data(): List<Sem6Item> = withContext(Dispatchers.IO) {
+        val sheetNameGuess = currentSem6SheetName()
+        val realName = resolveSheetName(sheetNameGuess)
+        val range = "'$realName'!A2:G"
+        val rows = try {
+            sheetsService.spreadsheets().values().get(Constants.SPREADSHEET_ID, range).execute().getValues()
+        } catch (e: Exception) {
+            null // hoja de esta semana todavía no existe, o error de red puntual
+        } ?: emptyList()
+
+        rows.mapNotNull { row ->
+            val nombre = row.getOrNull(0)?.toString()?.trim()
+            if (nombre.isNullOrBlank()) return@mapNotNull null
+            Sem6Item(
+                nombre = nombre,
+                sem = row.getOrNull(1)?.toString()?.trim() ?: "",
+                req = row.getOrNull(2)?.toString()?.trim() ?: "",
+                id = row.getOrNull(3)?.toString()?.trim() ?: "",
+                cu = row.getOrNull(4)?.toString()?.trim() ?: "",
+                visitas = row.getOrNull(5)?.toString()?.trim()?.toIntOrNull() ?: 0,
+                ultimaFechaVisita = row.getOrNull(6)?.toString()?.trim() ?: ""
+            )
+        }
+    }
+
     suspend fun getDirtyMatrizItems() = matrizDao.getDirtyItems()
     suspend fun markMatrizAsClean(id: String, remoteImg: String?, remoteImg2: String?) = matrizDao.markAsClean(id, remoteImg, remoteImg2)
 

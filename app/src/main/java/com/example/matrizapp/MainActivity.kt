@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
                 val filtroVm: FiltroFechaViewModel = viewModel(factory = factory)
                 val filtrarVm: FiltrarViewModel = viewModel(factory = factory)
                 val controlVm: ControlViewModel = viewModel(factory = factory)
+                val sem6Vm: Sem6ViewModel = viewModel(factory = factory)
                 var searchQuery by remember { mutableStateOf("") }
                 var searchActive by remember { mutableStateOf(false) }
                 var isRefreshing by remember { mutableStateOf(false) }
@@ -189,6 +190,7 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Filtrar.route) { FiltrarScreen(filtrarVm, searchQuery) }
                         composable(Screen.Control.route) { ControlScreen(controlVm) }
                         composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
+                        composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
                     }
                 }
                 }
@@ -204,4 +206,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Filtrar : Screen("filtrar", "Filtrar", Icons.Default.FilterAlt)
     object Control : Screen("control", "Control", Icons.Default.BarChart)
     object Ubi : Screen("ubi", "Ubi", Icons.Default.Map)
+    object Sem6 : Screen("sem6", "Semana 6", Icons.Default.Visibility)
 }
