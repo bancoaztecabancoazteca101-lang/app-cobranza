@@ -66,7 +66,8 @@ class SheetsRepository(
                 req = row.getOrNull(2)?.toString()?.trim() ?: "",
                 id = row.getOrNull(3)?.toString()?.trim() ?: "",
                 cu = row.getOrNull(4)?.toString()?.trim() ?: "",
-                // índices 5 y 6 son Imagen / Imagen 2, no se usan en esta pantalla
+                // índice 5 es Imagen (se usa como portada), 6 es Imagen 2 (no se usa en esta pantalla)
+                imagenUrl = row.getOrNull(5)?.toString()?.trim(),
                 colonia = row.getOrNull(7)?.toString()?.trim() ?: "",
                 visitas = row.getOrNull(8)?.toString()?.trim()?.toIntOrNull() ?: 0,
                 ultimaFechaVisita = row.getOrNull(9)?.toString()?.trim() ?: ""
@@ -228,7 +229,10 @@ class SheetsRepository(
                 numTT = cell(row, Constants.FiltroCols.NUMTT) ?: "",
                 fecha = fechaMillis,
                 hora = cell(row, Constants.FiltroCols.HORA),
-                imagenUrl = cell(row, Constants.FiltroCols.IMAGEN)
+                imagenUrl = cell(row, Constants.FiltroCols.IMAGEN),
+                ref1 = cell(row, Constants.FiltroCols.REF1),
+                ref2 = cell(row, Constants.FiltroCols.REF2),
+                ubicacion = cell(row, Constants.FiltroCols.UBICACION)
             )
         }
         filtroDao.deleteAll()
