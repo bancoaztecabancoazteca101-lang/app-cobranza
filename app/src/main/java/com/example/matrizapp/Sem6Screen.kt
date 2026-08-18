@@ -94,7 +94,7 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(items, key = { it.id }) { item -> Sem6ItemCard(item) }
+                items(items, key = { it.id }) { item -> Sem6ItemCard(item, driveHelper = viewModel.driveHelper) }
             }
         }
     }
@@ -111,19 +111,22 @@ private fun formatearReq(req: String): String {
 }
 
 @Composable
-fun Sem6ItemCard(item: Sem6Item) {
+fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper) {
     ClayCard {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(item.nombre, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                Text("CU: ${item.cu}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                if (item.colonia.isNotBlank()) {
-                    Text("Colonia: ${item.colonia}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                }
-                if (item.ultimaFechaVisita.isNotBlank()) {
-                    Text("Última vez: ${item.ultimaFechaVisita}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper)
+                Column {
+                    Text(item.nombre, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text("CU: ${item.cu}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    if (item.colonia.isNotBlank()) {
+                        Text("Colonia: ${item.colonia}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                    if (item.ultimaFechaVisita.isNotBlank()) {
+                        Text("Última vez: ${item.ultimaFechaVisita}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
                 }
             }
             Surface(
