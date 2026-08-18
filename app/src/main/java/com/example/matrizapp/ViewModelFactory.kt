@@ -25,7 +25,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
                 ControlViewModel(container.database.controlDao()) as T
 
             modelClass.isAssignableFrom(Sem6ViewModel::class.java) ->
-                Sem6ViewModel(container.repository, container.sem6CacheStore) as T
+                Sem6ViewModel(container.repository, container.sem6CacheStore, container.driveHelper) as T
 
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
