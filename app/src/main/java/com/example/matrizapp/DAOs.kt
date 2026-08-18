@@ -90,6 +90,16 @@ interface FiltroFechaDao {
     suspend fun insertAll(items: List<FiltroFechaEntity>)
     @Query("DELETE FROM filtro_fecha_table")
     suspend fun deleteAll()
+    /** Igual que deleteAll pero conserva las filas con cambios locales aún sin subir (isDirty=1),
+     * para que un refresh no borre un status editado desde la app antes de que se sincronice. */
+    @Query("DELETE FROM filtro_fecha_table WHERE isDirty = 0")
+    suspend fun deleteAllClean()
+    @Query("UPDATE filtro_fecha_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
+    suspend fun updateEstadoLocal(id: String, nuevoEstado: String)
+    @Query("SELECT * FROM filtro_fecha_table WHERE isDirty = 1")
+    suspend fun getDirtyItems(): List<FiltroFechaEntity>
+    @Query("UPDATE filtro_fecha_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
+    suspend fun markAsClean(id: String, syncTime: Long = System.currentTimeMillis())
 }
 
 @Dao
