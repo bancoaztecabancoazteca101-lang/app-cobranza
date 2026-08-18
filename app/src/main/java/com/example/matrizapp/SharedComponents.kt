@@ -1,4 +1,5 @@
 package com.example.matrizapp
+import android.location.Geocoder
 import android.content.Intent
 import android.media.MediaPlayer
 import android.net.Uri
@@ -25,6 +26,8 @@ import coil.compose.AsyncImage
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -554,4 +557,71 @@ fun ImageDetailDialog(url: String, onDismiss: () -> Unit) {
             }
         }
     }
+}
+
+/** Miniatura ("portada") con la primera imagen del registro, usada en Filtro Fecha y Semana 6
+ * (mismo estilo de vista que tenía AppSheet). Resuelve tanto links de Drive (webViewLink) como
+ * rutas relativas del pipeline de OCR, descargándolas a caché local la primera vez que la
+ * tarjeta se muestra. */
+@Composable
+fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: androidx.compose.ui.unit.Dp = 56.dp) {
+    val context = LocalContext.current
+    var uriResuelta by remember(rawImageUrl) { mutableStateOf<String?>(null) }
+    var fallo by remember(rawImageUrl) { mutableStateOf(false) }
+
+    LaunchedEffect(rawImageUrl) {
+        if (!rawImageUrl.isNullOrBlank()) {
+            val uri = resolverArchivoComoUri(context, driveHelper, rawImageUrl, "portada_${rawImageUrl.hashCode()}.jpg")
+            if (uri != null) uriResuelta = uri.toString() else fallo = true
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFE0E0E0)),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            uriResuelta != null -> AsyncImage(model = uriResuelta, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            rawImageUrl.isNullOrBlank() || fallo -> Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(24.dp))
+            else -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        }
+    }
+}
+
+/**
+ * Convierte una "Ubicación" tipo "19.371516, -99.104376" en el nombre de colonia/zona más
+ * cercano, usando el Geocoder del propio dispositivo (sin costo de API, a diferencia del
+ * geocoder de Apps Script que sí gasta cuota de Maps). Si no hay red, el geocoder de Android
+ * no está disponible en el dispositivo, o el texto no trae coordenadas válidas, regresa null
+ * en silencio: la Colonia es un dato "de más", nunca debe tumbar la pantalla.
+ */
+suspend fun resolverColonia(context: android.content.Context, ubicacion: String?): String? = withContext(Dispatchers.IO) {
+    if (ubicacion.isNullOrBlank()) return@withContext null
+    try {
+        val partes = ubicacion.replace('−', '-').replace('–', '-').split(",").map { it.trim() }
+        if (partes.size < 2) return@withContext null
+        val lat = partes[0].toDoubleOrNull() ?: return@withContext null
+        val lng = partes[1].toDoubleOrNull() ?: return@withContext null
+        if (!Geocoder.isPresent()) return@withContext null
+        val geocoder = Geocoder(context, Locale("es", "MX"))
+        @Suppress("DEPRECATION")
+        val resultados = geocoder.getFromLocation(lat, lng, 1)
+        val direccion = resultados?.firstOrNull() ?: return@withContext null
+        direccion.subLocality ?: direccion.locality ?: direccion.thoroughfare
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/** Muestra la Colonia calculada a partir de coordenadas (columna Ubicación) cuando la hoja
+ * de origen no trae ese dato directamente, como es el caso de Filtro Fecha. */
+@Composable
+fun ColoniaLabel(ubicacion: String?, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodySmall) {
+    val context = LocalContext.current
+    var colonia by remember(ubicacion) { mutableStateOf<String?>(null) }
+    LaunchedEffect(ubicacion) { colonia = resolverColonia(context, ubicacion) }
+    colonia?.let { Text("Colonia: $it", style = style, color = Color.Gray) }
 }
