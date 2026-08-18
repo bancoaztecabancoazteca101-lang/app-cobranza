@@ -36,6 +36,7 @@ data class FiltroFechaEntity(
     @PrimaryKey val id: String,
     val nombre: String, val estado: String, val observaciones: String?,
     val numTT: String, val fecha: Long, val hora: String?,
+    val imagenUrl: String? = null,
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 
