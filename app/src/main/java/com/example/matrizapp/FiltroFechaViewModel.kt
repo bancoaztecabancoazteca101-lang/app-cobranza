@@ -6,7 +6,8 @@ import kotlinx.coroutines.flow.*
 
 class FiltroFechaViewModel(
     private val repository: SheetsRepository,
-    private val filtroDao: FiltroFechaDao
+    private val filtroDao: FiltroFechaDao,
+    val driveHelper: DriveHelper
 ) : ViewModel() {
     private val _desde = MutableStateFlow<Long?>(null)
     val desde: StateFlow<Long?> = _desde
