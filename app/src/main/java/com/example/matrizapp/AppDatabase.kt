@@ -6,7 +6,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [MatrizEntity::class, PaseEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class], version = 7, exportSchema = false)
+@Database(entities = [MatrizEntity::class, PaseEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun matrizDao(): MatrizDao
     abstract fun paseDao(): PaseCarteraDao
@@ -59,10 +59,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE filtro_fecha_table ADD COLUMN imagenUrl TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "matriz_database")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
