@@ -3,6 +3,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 
 class FiltroFechaViewModel(
     private val repository: SheetsRepository,
@@ -29,5 +30,10 @@ class FiltroFechaViewModel(
     fun setRangoFecha(desde: Long?, hasta: Long?) {
         _desde.value = desde
         _hasta.value = hasta
+    }
+
+    /** Guarda el nuevo status localmente (Room) y lo marca dirty para subirlo al Sheet en el próximo sync. */
+    fun guardarEstado(id: String, nuevoEstado: String) {
+        viewModelScope.launch { filtroDao.updateEstadoLocal(id, nuevoEstado) }
     }
 }
