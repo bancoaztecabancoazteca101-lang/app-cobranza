@@ -227,7 +227,8 @@ class SheetsRepository(
                 observaciones = cell(row, Constants.FiltroCols.OBSERVACIONES),
                 numTT = cell(row, Constants.FiltroCols.NUMTT) ?: "",
                 fecha = fechaMillis,
-                hora = cell(row, Constants.FiltroCols.HORA)
+                hora = cell(row, Constants.FiltroCols.HORA),
+                imagenUrl = cell(row, Constants.FiltroCols.IMAGEN)
             )
         }
         filtroDao.deleteAll()
