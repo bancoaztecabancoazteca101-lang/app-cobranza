@@ -58,37 +58,43 @@ fun getStatusColor(estado: String): Color {
 @Composable
 fun ContactActionsRow(numTT: String?, ref1: String? = null, ref2: String? = null, ubicacion: String? = null) {
     val context = LocalContext.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    val iconSize = 34.dp
+    val iconButtonModifier = Modifier.size(iconSize)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier.horizontalScroll(rememberScrollState())
+    ) {
         if (!numTT.isNullOrBlank()) {
-            IconButton(onClick = {
+            IconButton(modifier = iconButtonModifier, onClick = {
                 context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$numTT")))
             }) { Icon(Icons.Default.Phone, contentDescription = "Llamar", tint = Color(0xFF1976D2)) }
-            IconButton(onClick = {
+            IconButton(modifier = iconButtonModifier, onClick = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("sms:$numTT")))
             }) { Icon(Icons.Default.Sms, contentDescription = "SMS", tint = Color(0xFF00897B)) }
-            IconButton(onClick = {
+            IconButton(modifier = iconButtonModifier, onClick = {
                 val url = "https://api.whatsapp.com/send?phone=$numTT"
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             }) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = Color(0xFF25D366)) }
         }
         if (!ref1.isNullOrBlank()) {
-            IconButton(onClick = {
+            IconButton(modifier = iconButtonModifier, onClick = {
                 context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$ref1")))
             }) { Icon(Icons.Default.Phone, contentDescription = "Llamar Ref 1", tint = Color(0xFF1976D2).copy(alpha = 0.6f)) }
-            IconButton(onClick = {
+            IconButton(modifier = iconButtonModifier, onClick = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("sms:$ref1")))
             }) { Icon(Icons.Default.Sms, contentDescription = "SMS Ref 1", tint = Color(0xFF00897B).copy(alpha = 0.6f)) }
         }
         if (!ref2.isNullOrBlank()) {
-            IconButton(onClick = {
+            IconButton(modifier = iconButtonModifier, onClick = {
                 context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$ref2")))
             }) { Icon(Icons.Default.Phone, contentDescription = "Llamar Ref 2", tint = Color(0xFF1976D2).copy(alpha = 0.4f)) }
-            IconButton(onClick = {
+            IconButton(modifier = iconButtonModifier, onClick = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("sms:$ref2")))
             }) { Icon(Icons.Default.Sms, contentDescription = "SMS Ref 2", tint = Color(0xFF00897B).copy(alpha = 0.4f)) }
         }
         if (!ubicacion.isNullOrBlank() && ubicacion != "N/A") {
-            IconButton(onClick = {
+            IconButton(modifier = iconButtonModifier, onClick = {
                 val gmmIntentUri = Uri.parse("geo:0,0?q=${Uri.encode(ubicacion)}")
                 val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri).apply { setPackage("com.google.android.apps.maps") }
                 context.startActivity(mapIntent)
