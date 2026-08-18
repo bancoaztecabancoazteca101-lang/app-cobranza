@@ -7,7 +7,8 @@ import kotlinx.coroutines.launch
 
 class Sem6ViewModel(
     private val repository: SheetsRepository,
-    private val cacheStore: Sem6CacheStore
+    private val cacheStore: Sem6CacheStore,
+    val driveHelper: DriveHelper
 ) : ViewModel() {
     private val _items = MutableStateFlow<List<Sem6Item>>(emptyList())
     val items: StateFlow<List<Sem6Item>> = _items
