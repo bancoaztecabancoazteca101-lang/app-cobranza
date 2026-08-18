@@ -100,6 +100,16 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     }
 }
 
+/** Formatea el Req como precio: "5979" -> "$5,979". Si no es numérico, regresa el valor tal cual. */
+private fun formatearReq(req: String): String {
+    val limpio = req.replace("[^0-9.]".toRegex(), "")
+    val numero = limpio.toDoubleOrNull() ?: return req
+    val formateador = java.text.NumberFormat.getNumberInstance(Locale("es", "MX")).apply {
+        maximumFractionDigits = 0
+    }
+    return "$" + formateador.format(numero)
+}
+
 @Composable
 fun Sem6ItemCard(item: Sem6Item) {
     ClayCard {
@@ -107,8 +117,11 @@ fun Sem6ItemCard(item: Sem6Item) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(item.nombre, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Sem: ${item.sem}  ·  Req: ${item.req}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 Text("CU: ${item.cu}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                if (item.colonia.isNotBlank()) {
+                    Text("Colonia: ${item.colonia}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                }
                 if (item.ultimaFechaVisita.isNotBlank()) {
                     Text("Última vez: ${item.ultimaFechaVisita}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
