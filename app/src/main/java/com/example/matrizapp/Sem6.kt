@@ -11,6 +11,7 @@ data class Sem6Item(
     val req: String,
     val id: String,
     val cu: String,
+    val colonia: String,
     val visitas: Int,
     val ultimaFechaVisita: String
 )
@@ -39,6 +40,7 @@ class Sem6CacheStore(context: Context) {
             o.put("req", item.req)
             o.put("id", item.id)
             o.put("cu", item.cu)
+            o.put("colonia", item.colonia)
             o.put("visitas", item.visitas)
             o.put("ultimaFechaVisita", item.ultimaFechaVisita)
             arr.put(o)
@@ -62,6 +64,7 @@ class Sem6CacheStore(context: Context) {
                 req = o.optString("req"),
                 id = o.optString("id"),
                 cu = o.optString("cu"),
+                colonia = o.optString("colonia"),
                 visitas = o.optInt("visitas"),
                 ultimaFechaVisita = o.optString("ultimaFechaVisita")
             )
