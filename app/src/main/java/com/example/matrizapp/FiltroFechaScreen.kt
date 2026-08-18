@@ -1,22 +1,14 @@
 package com.example.matrizapp
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -51,37 +43,6 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
     }
 }
 
-/** Miniatura ("portada") con la primera imagen del registro, igual que la vista de AppSheet.
- * Resuelve tanto links de Drive (webViewLink) como rutas relativas del pipeline de OCR,
- * descargándolas a caché local la primera vez que la tarjeta se muestra. */
-@Composable
-fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: androidx.compose.ui.unit.Dp = 56.dp) {
-    val context = LocalContext.current
-    var uriResuelta by remember(rawImageUrl) { mutableStateOf<String?>(null) }
-    var fallo by remember(rawImageUrl) { mutableStateOf(false) }
-
-    LaunchedEffect(rawImageUrl) {
-        if (!rawImageUrl.isNullOrBlank()) {
-            val uri = resolverArchivoComoUri(context, driveHelper, rawImageUrl, "portada_${rawImageUrl.hashCode()}.jpg")
-            if (uri != null) uriResuelta = uri.toString() else fallo = true
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFE0E0E0)),
-        contentAlignment = Alignment.Center
-    ) {
-        when {
-            uriResuelta != null -> AsyncImage(model = uriResuelta, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            rawImageUrl.isNullOrBlank() || fallo -> Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(24.dp))
-            else -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FiltroItemCard(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: DriveHelper, onClick: () -> Unit) {
@@ -104,8 +65,9 @@ fun FiltroItemCard(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: D
                     Text("TT: ${item.numTT}", style = MaterialTheme.typography.bodySmall)
                     Text(df.format(Date(item.fecha)), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                 }
+                ColoniaLabel(ubicacion = item.ubicacion)
                 Spacer(modifier = Modifier.height(4.dp))
-                ContactActionsRow(numTT = item.numTT)
+                ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ref2 = item.ref2, ubicacion = item.ubicacion)
             }
         }
     }
@@ -127,8 +89,9 @@ fun FiltroFechaDetailDialog(item: FiltroFechaEntity, df: SimpleDateFormat, drive
                 Text("Fecha: ${df.format(Date(item.fecha))}")
                 item.hora?.let { Text("Hora: $it") }
                 Text("Observaciones: ${item.observaciones ?: "Sin observaciones"}")
+                ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(8.dp))
-                ContactActionsRow(numTT = item.numTT)
+                ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ref2 = item.ref2, ubicacion = item.ubicacion)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
