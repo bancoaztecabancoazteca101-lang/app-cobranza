@@ -16,6 +16,7 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
             syncMatriz()
             syncPase()
             syncSolicitud()
+            syncFiltroFecha()
             Result.success()
         } catch (e: Exception) { Result.retry() }
     }
@@ -58,6 +59,18 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                 ))
             }
             repository.markMatrizAsClean(item.id, remoteImg, remoteImg2)
+        }
+    }
+
+    private suspend fun syncFiltroFecha() {
+        repository.getDirtyFiltroFechaItems().forEach { item ->
+            // Filtro Fecha comparte el mismo layout de columnas que Matriz (columna H = Estado,
+            // columna M = Id), porque se alimenta de ahí vía Apps Script.
+            val idx = repository.findRowIndexById(Constants.SHEET_FILTRO, item.id, "M")
+            if (idx != -1) {
+                repository.updateSheetCell(Constants.SHEET_FILTRO, "H", idx, item.estado)
+            }
+            repository.markFiltroFechaAsClean(item.id)
         }
     }
 
