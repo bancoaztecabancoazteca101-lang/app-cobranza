@@ -42,13 +42,15 @@ class SheetsRepository(
     }
 
     /** Trae en vivo la hoja de la semana actual "Cont-Sem-NN" (Nombre, Sem, Req, Id, CU,
-     * Visitas, UltimaFechaVisita). No se guarda en Room: es solo lectura y son pocos datos.
+     * Imagen, Imagen 2, Colonia, Visitas, UltimaFechaVisita). No se guarda en Room: es solo
+     * lectura y son pocos datos. El orden de columnas debe coincidir EXACTO con
+     * "encabezadosDestino" en guardarRegistroSemana6 (Apps Script).
      * Si la hoja de esta semana aún no existe (ej. lunes muy temprano, antes de la primera
      * corrida del trigger de Apps Script), regresa lista vacía en vez de fallar. */
     suspend fun fetchSem6Data(): List<Sem6Item> = withContext(Dispatchers.IO) {
         val sheetNameGuess = currentSem6SheetName()
         val realName = resolveSheetName(sheetNameGuess)
-        val range = "'$realName'!A2:G"
+        val range = "'$realName'!A2:J"
         val rows = try {
             sheetsService.spreadsheets().values().get(Constants.SPREADSHEET_ID, range).execute().getValues()
         } catch (e: Exception) {
@@ -64,8 +66,10 @@ class SheetsRepository(
                 req = row.getOrNull(2)?.toString()?.trim() ?: "",
                 id = row.getOrNull(3)?.toString()?.trim() ?: "",
                 cu = row.getOrNull(4)?.toString()?.trim() ?: "",
-                visitas = row.getOrNull(5)?.toString()?.trim()?.toIntOrNull() ?: 0,
-                ultimaFechaVisita = row.getOrNull(6)?.toString()?.trim() ?: ""
+                // índices 5 y 6 son Imagen / Imagen 2, no se usan en esta pantalla
+                colonia = row.getOrNull(7)?.toString()?.trim() ?: "",
+                visitas = row.getOrNull(8)?.toString()?.trim()?.toIntOrNull() ?: 0,
+                ultimaFechaVisita = row.getOrNull(9)?.toString()?.trim() ?: ""
             )
         }
     }
