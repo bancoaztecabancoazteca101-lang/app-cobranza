@@ -87,6 +87,9 @@ class SheetsRepository(
     suspend fun getDirtyFiltrarItems() = filtrarDao.getDirtyItems()
     suspend fun markFiltrarAsClean(id: String) = filtrarDao.markAsClean(id)
 
+    suspend fun getDirtyFiltroFechaItems() = filtroDao.getDirtyItems()
+    suspend fun markFiltroFechaAsClean(id: String) = filtroDao.markAsClean(id)
+
     /** Trae los datos actuales del Spreadsheet hacia la base local (Room). */
     suspend fun refreshAll() = withContext(Dispatchers.IO) {
         val errors = mutableListOf<String>()
@@ -217,9 +220,14 @@ class SheetsRepository(
     }
 
     private suspend fun refreshFiltroFecha() {
+        // Mismo motivo que en refreshMatriz/refreshSolicitud: si el status se cambió localmente
+        // desde la app y todavía no se sube (isDirty=1), no lo pisamos con lo que trae el Sheet
+        // (que aún no tiene ese cambio) ni lo borramos con el deleteAll de abajo.
+        val dirtyIds = filtroDao.getDirtyItems().map { it.id }.toSet()
         val rows = fetchRows(Constants.SHEET_FILTRO)
         val items = rows.mapNotNull { row ->
             val id = cell(row, Constants.FiltroCols.ID) ?: return@mapNotNull null
+            if (id in dirtyIds) return@mapNotNull null
             val fechaMillis = DateUtils.parseCellDateToEpochMillis(cell(row, Constants.FiltroCols.FECHA)) ?: return@mapNotNull null
             FiltroFechaEntity(
                 id = id,
@@ -235,7 +243,7 @@ class SheetsRepository(
                 ubicacion = cell(row, Constants.FiltroCols.UBICACION)
             )
         }
-        filtroDao.deleteAll()
+        filtroDao.deleteAllClean()
         if (items.isNotEmpty()) filtroDao.insertAll(items)
     }
 
