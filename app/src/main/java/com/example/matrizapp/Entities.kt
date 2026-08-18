@@ -34,7 +34,7 @@ data class SolicitudEntity(
 @Entity(tableName = "filtro_fecha_table")
 data class FiltroFechaEntity(
     @PrimaryKey val id: String,
-    val nombre: String, val estado: String, val observaciones: String?,
+    val nombre: String, var estado: String, val observaciones: String?,
     val numTT: String, val fecha: Long, val hora: String?,
     val imagenUrl: String? = null,
     val ref1: String? = null, val ref2: String? = null, val ubicacion: String? = null,
