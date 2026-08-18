@@ -39,7 +39,11 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
     }
 
     itemToView?.let { item ->
-        FiltroFechaDetailDialog(item = item, df = df, driveHelper = viewModel.driveHelper, onDismiss = { itemToView = null })
+        FiltroFechaDetailDialog(
+            item = item, df = df, driveHelper = viewModel.driveHelper,
+            onDismiss = { itemToView = null },
+            onGuardarEstado = { id, estado -> viewModel.guardarEstado(id, estado) }
+        )
     }
 }
 
@@ -73,9 +77,15 @@ fun FiltroItemCard(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: D
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FiltroFechaDetailDialog(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: DriveHelper, onDismiss: () -> Unit) {
-    // Filtro Fecha solo permite consultar el registro, no editarlo.
+fun FiltroFechaDetailDialog(
+    item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: DriveHelper,
+    onDismiss: () -> Unit, onGuardarEstado: (id: String, nuevoEstado: String) -> Unit
+) {
+    var estado by remember(item.id) { mutableStateOf(item.estado) }
+    var estadoMenuExpanded by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(item.nombre) },
@@ -85,7 +95,22 @@ fun FiltroFechaDetailDialog(item: FiltroFechaEntity, df: SimpleDateFormat, drive
                     PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 120.dp)
                 }
                 Text("Num TT: ${item.numTT}")
-                Text("Status: ${item.estado}")
+
+                ExposedDropdownMenuBox(expanded = estadoMenuExpanded, onExpandedChange = { estadoMenuExpanded = it }) {
+                    OutlinedTextField(
+                        value = estado, onValueChange = { estado = it }, label = { Text("Status") },
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = estadoMenuExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(expanded = estadoMenuExpanded, onDismissRequest = { estadoMenuExpanded = false }) {
+                        DropdownMenuItem(text = { Text("(Sin status)") }, onClick = { estado = ""; estadoMenuExpanded = false })
+                        ESTADOS_MATRIZ.forEach { opcion ->
+                            DropdownMenuItem(text = { Text(opcion) }, onClick = { estado = opcion; estadoMenuExpanded = false })
+                        }
+                    }
+                }
+
                 Text("Fecha: ${df.format(Date(item.fecha))}")
                 item.hora?.let { Text("Hora: $it") }
                 Text("Observaciones: ${item.observaciones ?: "Sin observaciones"}")
@@ -94,7 +119,10 @@ fun FiltroFechaDetailDialog(item: FiltroFechaEntity, df: SimpleDateFormat, drive
                 ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ref2 = item.ref2, ubicacion = item.ubicacion)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+        confirmButton = {
+            Button(onClick = { onGuardarEstado(item.id, estado); onDismiss() }) { Text("Guardar") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
     )
 }
 
