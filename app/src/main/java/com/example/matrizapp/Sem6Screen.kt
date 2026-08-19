@@ -3,6 +3,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
@@ -12,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.*
@@ -101,7 +103,7 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     }
 
     itemToView?.let { item ->
-        Sem6DetailDialog(item = item, driveHelper = viewModel.driveHelper, onDismiss = { itemToView = null })
+        Sem6DetailDialog(item = item, driveHelper = viewModel.driveHelper, viewModel = viewModel, onDismiss = { itemToView = null })
     }
 }
 
@@ -151,12 +153,20 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) 
     }
 }
 
-/** Detalle de un registro de Semana 6: solo lectura (no se puede editar Status/Observaciones
- * aquí, esos se editan en Matriz o Filtro Fecha). Muestra la imagen a tamaño real (tócala para
- * ampliarla más) y, si el Apps Script ya manda NumTT/Ubicación, botones de llamar y navegar. */
+/** Detalle de un registro de Semana 6. Muestra la imagen a tamaño real (tócala para ampliarla
+ * más), botones de llamar/GPS si el Apps Script ya manda NumTT/Ubicación, y 3 notas editables
+ * que se guardan directo en las columnas M/N/O de "Cont-Sem-NN" (Se Contiene, Susceptible,
+ * Observaciones): son pocos registros y se escriben al toque sin necesitar cola local. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, onDismiss: () -> Unit) {
+fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6ViewModel, onDismiss: () -> Unit) {
+    var seContiene by remember(item.id) { mutableStateOf(item.seContiene) }
+    var susceptible by remember(item.id) { mutableStateOf(item.susceptible) }
+    var observaciones by remember(item.id) { mutableStateOf(item.observaciones) }
+    var susceptibleMenuExpanded by remember { mutableStateOf(false) }
+    val isSaving by viewModel.isSavingNotas.collectAsState()
+    val errorNotas by viewModel.errorNotas.collectAsState()
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(item.nombre) },
@@ -179,9 +189,66 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, onDismiss: () -> 
                     Spacer(modifier = Modifier.height(4.dp))
                     ContactActionsRow(numTT = item.numTT, ubicacion = item.ubicacion)
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(4.dp))
+
+                OutlinedTextField(
+                    value = seContiene,
+                    onValueChange = { input -> seContiene = input.filter { it.isDigit() || it == '.' } },
+                    label = { Text("Se Contiene") },
+                    leadingIcon = { Text("$") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                ExposedDropdownMenuBox(expanded = susceptibleMenuExpanded, onExpandedChange = { susceptibleMenuExpanded = it }) {
+                    OutlinedTextField(
+                        value = susceptible, onValueChange = {}, label = { Text("Susceptible") },
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = susceptibleMenuExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                    )
+                    ExposedDropdownMenu(expanded = susceptibleMenuExpanded, onDismissRequest = { susceptibleMenuExpanded = false }) {
+                        DropdownMenuItem(text = { Text("(Sin definir)") }, onClick = { susceptible = ""; susceptibleMenuExpanded = false })
+                        listOf("Si", "No").forEach { opcion ->
+                            DropdownMenuItem(text = { Text(opcion) }, onClick = { susceptible = opcion; susceptibleMenuExpanded = false })
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = observaciones,
+                    onValueChange = { observaciones = it },
+                    label = { Text("Observaciones") },
+                    minLines = 3,
+                    maxLines = 6,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                errorNotas?.let { msg ->
+                    Text(msg, color = Color(0xFFC62828), style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+        confirmButton = {
+            Button(
+                onClick = {
+                    viewModel.guardarNotas(item.id, seContiene, susceptible, observaciones) { ok ->
+                        if (ok) onDismiss()
+                    }
+                },
+                enabled = !isSaving
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                } else {
+                    Text("Guardar")
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Cerrar") } }
     )
 }

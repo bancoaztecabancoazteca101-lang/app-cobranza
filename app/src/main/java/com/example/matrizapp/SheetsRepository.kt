@@ -52,7 +52,7 @@ class SheetsRepository(
     suspend fun fetchSem6Data(): List<Sem6Item> = withContext(Dispatchers.IO) {
         val sheetNameGuess = currentSem6SheetName()
         val realName = resolveSheetName(sheetNameGuess)
-        val range = "'$realName'!A2:L"
+        val range = "'$realName'!A2:O"
         val rows = try {
             sheetsService.spreadsheets().values().get(Constants.SPREADSHEET_ID, range).execute().getValues()
         } catch (e: Exception) {
@@ -75,10 +75,29 @@ class SheetsRepository(
                 colonia = row.getOrNull(8)?.toString()?.trim() ?: "",
                 visitas = row.getOrNull(9)?.toString()?.trim()?.toIntOrNull() ?: 0,
                 ultimaFechaVisita = row.getOrNull(10)?.toString()?.trim() ?: "",
-                numTT = row.getOrNull(11)?.toString()?.trim() ?: ""
+                numTT = row.getOrNull(11)?.toString()?.trim() ?: "",
+                // Notas editables desde la app: M Se Contiene, N Susceptible, O Observaciones
+                seContiene = row.getOrNull(12)?.toString()?.trim() ?: "",
+                susceptible = row.getOrNull(13)?.toString()?.trim() ?: "",
+                observaciones = row.getOrNull(14)?.toString()?.trim() ?: ""
             )
         }
     }
+
+    /** Guarda las notas editables de Semana 6 (Se Contiene, Susceptible, Observaciones) directo en
+     * Sheets: columnas M, N, O de la hoja "Cont-Sem-NN" de la semana actual. Se escribe de inmediato
+     * (sin cola local) porque son pocos registros y el usuario espera confirmación en el momento.
+     * Devuelve false si no encontró el Id en la hoja (por ejemplo, si ya cambió de semana). */
+    suspend fun updateSem6Notas(id: String, seContiene: String, susceptible: String, observaciones: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val realName = resolveSheetName(currentSem6SheetName())
+            val idx = findRowIndexById(realName, id, "D")
+            if (idx == -1) return@withContext false
+            updateSheetCell(realName, "M", idx, seContiene)
+            updateSheetCell(realName, "N", idx, susceptible)
+            updateSheetCell(realName, "O", idx, observaciones)
+            true
+        }
 
     suspend fun getDirtyMatrizItems() = matrizDao.getDirtyItems()
     suspend fun markMatrizAsClean(id: String, remoteImg: String?, remoteImg2: String?) = matrizDao.markAsClean(id, remoteImg, remoteImg2)
