@@ -40,6 +40,7 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
                 items(items, key = { it.id }) { item ->
                     MatrizItemCard(
                         item = item,
+                        driveHelper = viewModel.driveHelper,
                         onCardClick = { itemToEdit = item }
                     )
                 }
@@ -83,21 +84,25 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
 @Composable
 fun MatrizItemCard(
     item: MatrizEntity,
+    driveHelper: DriveHelper,
     onCardClick: () -> Unit
 ) {
     Card(onClick = onCardClick, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = item.nombre, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                StatusBadge(estado = item.estado)
-            }
-            Text(text = item.observaciones ?: "Sin observaciones", style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(text = item.nombre, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    StatusBadge(estado = item.estado)
+                }
+                Text(text = item.observaciones ?: "Sin observaciones", style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
 
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ubicacion = item.ubicacion)
-                Spacer(modifier = Modifier.weight(1f))
-                if (item.isDirty) {
-                    Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ubicacion = item.ubicacion)
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (item.isDirty) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
+                    }
                 }
             }
         }

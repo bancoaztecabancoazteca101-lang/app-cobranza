@@ -17,7 +17,8 @@ import java.util.concurrent.TimeUnit
 class MatrizViewModel(
     private val repository: SheetsRepository,
     private val matrizDao: MatrizDao,
-    private val workManager: WorkManager
+    private val workManager: WorkManager,
+    val driveHelper: DriveHelper
 ) : ViewModel() {
     val matrizList: StateFlow<List<MatrizEntity>> = matrizDao.getAllMatriz()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

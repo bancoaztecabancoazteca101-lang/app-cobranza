@@ -7,7 +7,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
             modelClass.isAssignableFrom(MatrizViewModel::class.java) ->
-                MatrizViewModel(container.repository, container.database.matrizDao(), container.workManager) as T
+                MatrizViewModel(container.repository, container.database.matrizDao(), container.workManager, container.driveHelper) as T
 
             modelClass.isAssignableFrom(PaseCarteraViewModel::class.java) ->
                 PaseCarteraViewModel(container.repository, container.database.paseDao(), container.workManager) as T

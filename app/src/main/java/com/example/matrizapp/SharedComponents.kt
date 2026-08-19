@@ -444,6 +444,7 @@ fun MatrizFullFormDialog(
 
 @Composable
 fun ImagenCaptureBox(url: String?, enabled: Boolean, onClick: () -> Unit) {
+    var mostrarGrande by remember(url) { mutableStateOf(false) }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -456,6 +457,18 @@ fun ImagenCaptureBox(url: String?, enabled: Boolean, onClick: () -> Unit) {
         Box(contentAlignment = Alignment.Center) {
             if (!url.isNullOrBlank()) {
                 AsyncImage(model = url, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                // Icono de lupa aparte del área principal (que sigue abriendo la cámara para
+                // reemplazar la foto): permite ver la imagen actual en grande sin tomar una nueva.
+                IconButton(
+                    onClick = { mostrarGrande = true },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                        .size(28.dp)
+                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                ) {
+                    Icon(Icons.Default.ZoomIn, contentDescription = "Ver en grande", tint = Color.White, modifier = Modifier.size(18.dp))
+                }
             } else {
                 Icon(
                     Icons.Default.PhotoCamera, contentDescription = "Tomar foto",
@@ -463,6 +476,9 @@ fun ImagenCaptureBox(url: String?, enabled: Boolean, onClick: () -> Unit) {
                 )
             }
         }
+    }
+    if (mostrarGrande && !url.isNullOrBlank()) {
+        ImageDetailDialog(url = url, onDismiss = { mostrarGrande = false })
     }
 }
 
@@ -575,6 +591,7 @@ fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: andro
     val context = LocalContext.current
     var uriResuelta by remember(rawImageUrl) { mutableStateOf<String?>(null) }
     var fallo by remember(rawImageUrl) { mutableStateOf(false) }
+    var mostrarGrande by remember(rawImageUrl) { mutableStateOf(false) }
 
     LaunchedEffect(rawImageUrl) {
         if (!rawImageUrl.isNullOrBlank()) {
@@ -587,7 +604,10 @@ fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: andro
         modifier = Modifier
             .size(size)
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFE0E0E0)),
+            .background(Color(0xFFE0E0E0))
+            .then(
+                if (uriResuelta != null) Modifier.clickable { mostrarGrande = true } else Modifier
+            ),
         contentAlignment = Alignment.Center
     ) {
         when {
@@ -595,6 +615,10 @@ fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: andro
             rawImageUrl.isNullOrBlank() || fallo -> Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(24.dp))
             else -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         }
+    }
+
+    if (mostrarGrande && uriResuelta != null) {
+        ImageDetailDialog(url = uriResuelta!!, onDismiss = { mostrarGrande = false })
     }
 }
 
