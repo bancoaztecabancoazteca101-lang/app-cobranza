@@ -51,6 +51,7 @@ fun UbiScreen(matrizViewModel: MatrizViewModel) {
         ModalBottomSheet(onDismissRequest = { selected = null }) {
             MatrizItemCard(
                 item = item,
+                driveHelper = matrizViewModel.driveHelper,
                 onCardClick = { }
             )
         }
