@@ -68,13 +68,14 @@ class SheetsRepository(
                 req = row.getOrNull(2)?.toString()?.trim() ?: "",
                 id = row.getOrNull(3)?.toString()?.trim() ?: "",
                 cu = row.getOrNull(4)?.toString()?.trim() ?: "",
-                // índice 5 es Imagen (se usa como portada), 6 es Imagen 2 (no se usa en esta pantalla)
-                imagenUrl = row.getOrNull(5)?.toString()?.trim(),
-                colonia = row.getOrNull(7)?.toString()?.trim() ?: "",
-                visitas = row.getOrNull(8)?.toString()?.trim()?.toIntOrNull() ?: 0,
-                ultimaFechaVisita = row.getOrNull(9)?.toString()?.trim() ?: "",
-                numTT = row.getOrNull(10)?.toString()?.trim() ?: "",
-                ubicacion = row.getOrNull(11)?.toString()?.trim() ?: ""
+                // Mapeo real de Cont-Sem-NN (guardarRegistroSemana6): A Nombre,B Sem,C Req,D Id,E CU,
+                // F Ubicacion,G Imagen,H Imagen 2 (no se usa aqui),I Colonia,J Visitas,K UltimaFechaVisita,L NumTT
+                ubicacion = row.getOrNull(5)?.toString()?.trim() ?: "",
+                imagenUrl = row.getOrNull(6)?.toString()?.trim(),
+                colonia = row.getOrNull(8)?.toString()?.trim() ?: "",
+                visitas = row.getOrNull(9)?.toString()?.trim()?.toIntOrNull() ?: 0,
+                ultimaFechaVisita = row.getOrNull(10)?.toString()?.trim() ?: "",
+                numTT = row.getOrNull(11)?.toString()?.trim() ?: ""
             )
         }
     }
