@@ -123,15 +123,17 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                 repository.updateSheetCell(Constants.SHEET_SOLICITUD, "M", idx, remoteAudio)
                 repository.updateSheetCell(Constants.SHEET_SOLICITUD, "O", idx, remoteImg3)
                 repository.updateSheetCell(Constants.SHEET_SOLICITUD, "P", idx, remoteImg4)
+                repository.updateSheetCell(Constants.SHEET_SOLICITUD, "Q", idx, item.gestorAsignado)
+                repository.updateSheetCell(Constants.SHEET_SOLICITUD, "R", idx, DateUtils.toSheetsSerial(item.fechaHora))
                 repository.markSolicitudAsClean(item.id, remoteAudio, remoteImg, remoteImg2, remoteImg3, remoteImg4)
             } else {
                 // Registro nuevo creado desde la app: agregar fila al final.
-                // Orden A..P: Id,Nombre,Numero,Sucursal,Ubicacion,Imagen,Imagen2,NombreRef1,Ref1,NombreRef2,Ref2,Observaciones,Audio,Estado,Imagen3,Imagen4
+                // Orden A..R: Id,Nombre,Numero,Sucursal,Ubicacion,Imagen,Imagen2,NombreRef1,Ref1,NombreRef2,Ref2,Observaciones,Audio,Estado,Imagen3,Imagen4,GestorAsignado,FechaYHora
                 repository.appendRow(Constants.SHEET_SOLICITUD, listOf(
                     item.id, item.nombre, item.numero ?: "", item.sucursal ?: "", item.ubicacionRaw ?: "",
                     remoteImg ?: "", remoteImg2 ?: "", item.nombreRef1 ?: "", item.ref1 ?: "",
                     item.nombreRef2 ?: "", item.ref2 ?: "", item.observaciones ?: "", remoteAudio ?: "", item.estado,
-                    remoteImg3 ?: "", remoteImg4 ?: ""
+                    remoteImg3 ?: "", remoteImg4 ?: "", item.gestorAsignado, DateUtils.toSheetsSerial(item.fechaHora)
                 ))
                 repository.markSolicitudAsClean(item.id, remoteAudio, remoteImg, remoteImg2, remoteImg3, remoteImg4)
             }

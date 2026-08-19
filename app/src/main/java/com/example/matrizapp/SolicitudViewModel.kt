@@ -89,7 +89,11 @@ class SolicitudViewModel(
                     ubicacionRaw = ubicacion, imageUrl = imagenUrl, imageUrl2 = imagenUrl2,
                     nombreRef1 = nombreRef1, ref1 = ref1, nombreRef2 = nombreRef2, ref2 = ref2,
                     observaciones = observaciones, audioUrl = audioUrl, estado = estado,
-                    imageUrl3 = imagenUrl3, imageUrl4 = imagenUrl4, isDirty = true
+                    imageUrl3 = imagenUrl3, imageUrl4 = imagenUrl4,
+                    // Gestor asignado siempre "Flores" (fijo, no editable) y fecha/hora
+                    // se capturan automático con la hora del dispositivo al momento de crear.
+                    gestorAsignado = "Flores", fechaHora = System.currentTimeMillis(),
+                    isDirty = true
                 )
             )
             triggerSync()

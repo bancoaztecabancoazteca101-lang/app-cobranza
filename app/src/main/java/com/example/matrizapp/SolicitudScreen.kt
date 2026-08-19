@@ -360,6 +360,22 @@ fun SolicitudFullFormDialog(
                     value = observaciones, onValueChange = { observaciones = it }, label = { Text("Observaciones") },
                     modifier = Modifier.fillMaxWidth(), minLines = 2
                 )
+
+                // Gestor asignado y Fecha y hora: fijos, no editables. Gestor siempre "Flores";
+                // fecha/hora se capturó automático al crear el registro (o se capturará al guardar, si es nuevo).
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Person, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Gestor asignado: Flores", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Schedule, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    val textoFecha = item?.fechaHora?.let {
+                        java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX")).format(java.util.Date(it))
+                    } ?: "Se registrará al guardar"
+                    Text("Fecha y hora: $textoFecha", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                }
                 val audioActual = audioUrlOverride ?: item?.audioUrl
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onAudioToggle) {

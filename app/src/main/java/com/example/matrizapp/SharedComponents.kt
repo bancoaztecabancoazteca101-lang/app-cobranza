@@ -173,6 +173,11 @@ private suspend fun shareSolicitudPorWhatsAppInterno(context: android.content.Co
     if (!item.ubicacionRaw.isNullOrBlank() && item.ubicacionRaw != "N/A") {
         textoBuilder.append("Ubicación: https://maps.google.com/?q=${Uri.encode(item.ubicacionRaw)}\n")
     }
+    textoBuilder.append("Gestor asignado: ${item.gestorAsignado}\n")
+    item.fechaHora?.let { millis ->
+        val df = java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX"))
+        textoBuilder.append("Fecha y hora: ${df.format(java.util.Date(millis))}\n")
+    }
 
     val fallasAdjuntar = mutableListOf<String>()
     suspend fun resolverArchivo(raw: String?, nombreDestino: String, etiqueta: String): Uri? {

@@ -237,7 +237,9 @@ class SheetsRepository(
                 audioUrl = cell(row, Constants.SolicitudCols.AUDIO),
                 estado = cell(row, Constants.SolicitudCols.ESTADO) ?: "",
                 imageUrl3 = cell(row, Constants.SolicitudCols.IMAGEN3),
-                imageUrl4 = cell(row, Constants.SolicitudCols.IMAGEN4)
+                imageUrl4 = cell(row, Constants.SolicitudCols.IMAGEN4),
+                gestorAsignado = cell(row, Constants.SolicitudCols.GESTOR) ?: "Flores",
+                fechaHora = DateUtils.parseCellDateToEpochMillis(cell(row, Constants.SolicitudCols.FECHA_HORA))
             )
         }
         if (items.isNotEmpty()) solicitudDao.insertAll(items)

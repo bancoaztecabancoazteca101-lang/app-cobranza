@@ -31,6 +31,7 @@ object Constants {
         const val NOMBRE_REF1 = 7; const val REF1 = 8; const val NOMBRE_REF2 = 9; const val REF2 = 10
         const val OBSERVACIONES = 11; const val AUDIO = 12; const val ESTADO = 13
         const val IMAGEN3 = 14; const val IMAGEN4 = 15; const val COL_ID = "A"
+        const val GESTOR = 16; const val FECHA_HORA = 17
     }
     // "Filtro Fecha" se alimenta desde Matriz (mismo layout de columnas) vía script de Apps Script.
     object FiltroCols {
