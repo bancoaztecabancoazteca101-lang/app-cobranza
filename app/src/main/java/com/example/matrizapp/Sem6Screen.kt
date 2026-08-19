@@ -24,6 +24,7 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     val error by viewModel.error.collectAsState()
     val lastUpdated by viewModel.lastUpdated.collectAsState()
     val isFromCache by viewModel.isFromCache.collectAsState()
+    var itemToView by remember { mutableStateOf<Sem6Item?>(null) }
 
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
@@ -94,9 +95,13 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(items, key = { it.id }) { item -> Sem6ItemCard(item, driveHelper = viewModel.driveHelper) }
+                items(items, key = { it.id }) { item -> Sem6ItemCard(item, driveHelper = viewModel.driveHelper, onClick = { itemToView = item }) }
             }
         }
+    }
+
+    itemToView?.let { item ->
+        Sem6DetailDialog(item = item, driveHelper = viewModel.driveHelper, onDismiss = { itemToView = null })
     }
 }
 
@@ -111,8 +116,8 @@ private fun formatearReq(req: String): String {
 }
 
 @Composable
-fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper) {
-    ClayCard {
+fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) {
+    ClayCard(onClick = onClick) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper)
@@ -144,4 +149,39 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper) {
             }
         }
     }
+}
+
+/** Detalle de un registro de Semana 6: solo lectura (no se puede editar Status/Observaciones
+ * aquí, esos se editan en Matriz o Filtro Fecha). Muestra la imagen a tamaño real (tócala para
+ * ampliarla más) y, si el Apps Script ya manda NumTT/Ubicación, botones de llamar y navegar. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.nombre) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 160.dp)
+                }
+                Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}")
+                Text("CU: ${item.cu}")
+                if (item.colonia.isNotBlank()) Text("Colonia: ${item.colonia}")
+                if (item.ultimaFechaVisita.isNotBlank()) Text("Última vez: ${item.ultimaFechaVisita}")
+                Text("Visitas: ${item.visitas}")
+                if (item.numTT.isBlank() && item.ubicacion.isBlank()) {
+                    Text(
+                        "Llamar/GPS aún no disponibles para Semana 6 (falta actualizar el script de Apps Script).",
+                        style = MaterialTheme.typography.bodySmall, color = Color.Gray
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ContactActionsRow(numTT = item.numTT, ubicacion = item.ubicacion)
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+    )
 }

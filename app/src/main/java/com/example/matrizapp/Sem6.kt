@@ -14,7 +14,9 @@ data class Sem6Item(
     val imagenUrl: String?,
     val colonia: String,
     val visitas: Int,
-    val ultimaFechaVisita: String
+    val ultimaFechaVisita: String,
+    val numTT: String = "",
+    val ubicacion: String = ""
 )
 
 /** Calcula el nombre de la hoja Sem6 de la semana actual, ej: "Cont-Sem-34".
@@ -45,6 +47,8 @@ class Sem6CacheStore(context: Context) {
             o.put("colonia", item.colonia)
             o.put("visitas", item.visitas)
             o.put("ultimaFechaVisita", item.ultimaFechaVisita)
+            o.put("numTT", item.numTT)
+            o.put("ubicacion", item.ubicacion)
             arr.put(o)
         }
         prefs.edit()
@@ -69,7 +73,9 @@ class Sem6CacheStore(context: Context) {
                 imagenUrl = if (o.isNull("imagenUrl")) null else o.optString("imagenUrl"),
                 colonia = o.optString("colonia"),
                 visitas = o.optInt("visitas"),
-                ultimaFechaVisita = o.optString("ultimaFechaVisita")
+                ultimaFechaVisita = o.optString("ultimaFechaVisita"),
+                numTT = o.optString("numTT"),
+                ubicacion = o.optString("ubicacion")
             )
         }
         return items to ts

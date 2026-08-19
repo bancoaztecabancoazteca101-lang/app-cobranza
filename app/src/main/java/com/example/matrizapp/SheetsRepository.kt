@@ -42,15 +42,17 @@ class SheetsRepository(
     }
 
     /** Trae en vivo la hoja de la semana actual "Cont-Sem-NN" (Nombre, Sem, Req, Id, CU,
-     * Imagen, Imagen 2, Colonia, Visitas, UltimaFechaVisita). No se guarda en Room: es solo
-     * lectura y son pocos datos. El orden de columnas debe coincidir EXACTO con
-     * "encabezadosDestino" en guardarRegistroSemana6 (Apps Script).
+     * Imagen, Imagen 2, Colonia, Visitas, UltimaFechaVisita, NumTT, Ubicacion). No se guarda
+     * en Room: es solo lectura y son pocos datos. El orden de columnas debe coincidir EXACTO
+     * con "encabezadosDestino" en guardarRegistroSemana6 (Apps Script).
      * Si la hoja de esta semana aún no existe (ej. lunes muy temprano, antes de la primera
-     * corrida del trigger de Apps Script), regresa lista vacía en vez de fallar. */
+     * corrida del trigger de Apps Script), regresa lista vacía en vez de fallar.
+     * NumTT/Ubicacion (columnas K, L) son opcionales: si el script de Apps Script aún no las
+     * manda, llegan vacías y simplemente no se muestran los botones de llamar/GPS. */
     suspend fun fetchSem6Data(): List<Sem6Item> = withContext(Dispatchers.IO) {
         val sheetNameGuess = currentSem6SheetName()
         val realName = resolveSheetName(sheetNameGuess)
-        val range = "'$realName'!A2:J"
+        val range = "'$realName'!A2:L"
         val rows = try {
             sheetsService.spreadsheets().values().get(Constants.SPREADSHEET_ID, range).execute().getValues()
         } catch (e: Exception) {
@@ -70,7 +72,9 @@ class SheetsRepository(
                 imagenUrl = row.getOrNull(5)?.toString()?.trim(),
                 colonia = row.getOrNull(7)?.toString()?.trim() ?: "",
                 visitas = row.getOrNull(8)?.toString()?.trim()?.toIntOrNull() ?: 0,
-                ultimaFechaVisita = row.getOrNull(9)?.toString()?.trim() ?: ""
+                ultimaFechaVisita = row.getOrNull(9)?.toString()?.trim() ?: "",
+                numTT = row.getOrNull(10)?.toString()?.trim() ?: "",
+                ubicacion = row.getOrNull(11)?.toString()?.trim() ?: ""
             )
         }
     }
