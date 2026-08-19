@@ -190,7 +190,7 @@ fun SolicitudItemCard(
             )
 
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Row(modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
+                Box(modifier = Modifier.weight(1f)) {
                     ContactActionsRow(numTT = item.numero, ref1 = item.ref1, ref2 = item.ref2, ubicacion = item.ubicacionRaw)
                 }
                 if (!item.audioUrl.isNullOrBlank()) {
@@ -412,9 +412,7 @@ fun SolicitudFullFormDialog(
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Row(modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
-                        ContactActionsRow(numTT = numero, ref1 = ref1, ref2 = ref2, ubicacion = ubicacion)
-                    }
+                    ContactActionsRow(numTT = numero, ref1 = ref1, ref2 = ref2, ubicacion = ubicacion)
                 }
                 if (!esNuevo) {
                     Button(onClick = onShareWhatsApp, modifier = Modifier.fillMaxWidth()) {
