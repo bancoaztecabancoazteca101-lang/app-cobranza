@@ -137,6 +137,9 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) 
                     if (item.capital.isNotBlank()) {
                         Text("Capital: ${formatearReq(item.capital)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
+                    if (item.observaciones.isNotBlank()) {
+                        Text("Obs: ${item.observaciones}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
                 }
             }
             Surface(
@@ -176,13 +179,13 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
         title = { Text(item.nombre) },
         text = {
             Column(
-                modifier = Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 90.dp)
+                    PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 160.dp)
                 }
-                Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}", style = MaterialTheme.typography.bodySmall)
+                Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}")
                 OutlinedTextField(
                     value = capital,
                     onValueChange = { input -> capital = input.filter { it.isDigit() || it == '.' } },
@@ -190,27 +193,28 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     leadingIcon = { Text("$") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                    modifier = Modifier.fillMaxWidth()
                 )
-                val infoLineas = buildList {
-                    add("CU: ${item.cu}")
-                    if (item.colonia.isNotBlank()) add("Colonia: ${item.colonia}")
-                    if (item.ultimaFechaVisita.isNotBlank()) add("Última vez: ${item.ultimaFechaVisita}  ·  Visitas: ${item.visitas}")
-                    else add("Visitas: ${item.visitas}")
-                    if (item.observaciones.isNotBlank()) add("Observaciones: ${item.observaciones}")
+                Text("CU: ${item.cu}")
+                if (item.colonia.isNotBlank()) Text("Colonia: ${item.colonia}")
+                if (item.ultimaFechaVisita.isNotBlank()) Text("Última vez: ${item.ultimaFechaVisita}")
+                Text("Visitas: ${item.visitas}")
+                if (item.observaciones.isNotBlank()) {
+                    Text("Observaciones: ${item.observaciones}", style = MaterialTheme.typography.bodyMedium)
                 }
-                Text(infoLineas.joinToString("\n"), style = MaterialTheme.typography.bodySmall, lineHeight = 16.sp)
                 if (item.numTT.isBlank() && item.ubicacion.isBlank()) {
                     Text(
-                        "Llamar/GPS aún no disponibles para Semana 6.",
+                        "Llamar/GPS aún no disponibles para Semana 6 (falta actualizar el script de Apps Script).",
                         style = MaterialTheme.typography.bodySmall, color = Color.Gray
                     )
                 } else {
+                    Spacer(modifier = Modifier.height(4.dp))
                     ContactActionsRow(numTT = item.numTT, ubicacion = item.ubicacion)
                 }
 
-                Divider(modifier = Modifier.padding(vertical = 2.dp))
+                Spacer(modifier = Modifier.height(4.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(4.dp))
 
                 OutlinedTextField(
                     value = seContiene,
@@ -219,17 +223,15 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     leadingIcon = { Text("$") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 ExposedDropdownMenuBox(expanded = susceptibleMenuExpanded, onExpandedChange = { susceptibleMenuExpanded = it }) {
                     OutlinedTextField(
                         value = susceptible, onValueChange = {}, label = { Text("Susceptible") },
                         readOnly = true,
-                        textStyle = MaterialTheme.typography.bodySmall,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = susceptibleMenuExpanded) },
-                        modifier = Modifier.fillMaxWidth().height(48.dp).menuAnchor()
+                        modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(expanded = susceptibleMenuExpanded, onDismissRequest = { susceptibleMenuExpanded = false }) {
                         DropdownMenuItem(text = { Text("(Sin definir)") }, onClick = { susceptible = ""; susceptibleMenuExpanded = false })
@@ -243,9 +245,8 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     value = observaciones,
                     onValueChange = { observaciones = it },
                     label = { Text("Observaciones") },
-                    textStyle = MaterialTheme.typography.bodySmall,
-                    minLines = 2,
-                    maxLines = 3,
+                    minLines = 3,
+                    maxLines = 6,
                     modifier = Modifier.fillMaxWidth()
                 )
 
