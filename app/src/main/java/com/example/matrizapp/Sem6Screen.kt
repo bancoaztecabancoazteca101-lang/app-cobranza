@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -175,13 +176,13 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
         title = { Text(item.nombre) },
         text = {
             Column(
-                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 160.dp)
+                    PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 90.dp)
                 }
-                Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}")
+                Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     value = capital,
                     onValueChange = { input -> capital = input.filter { it.isDigit() || it == '.' } },
@@ -189,28 +190,27 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     leadingIcon = { Text("$") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
                 )
-                Text("CU: ${item.cu}")
-                if (item.colonia.isNotBlank()) Text("Colonia: ${item.colonia}")
-                if (item.ultimaFechaVisita.isNotBlank()) Text("Última vez: ${item.ultimaFechaVisita}")
-                Text("Visitas: ${item.visitas}")
-                if (item.observaciones.isNotBlank()) {
-                    Text("Observaciones: ${item.observaciones}", style = MaterialTheme.typography.bodyMedium)
+                val infoLineas = buildList {
+                    add("CU: ${item.cu}")
+                    if (item.colonia.isNotBlank()) add("Colonia: ${item.colonia}")
+                    if (item.ultimaFechaVisita.isNotBlank()) add("Última vez: ${item.ultimaFechaVisita}  ·  Visitas: ${item.visitas}")
+                    else add("Visitas: ${item.visitas}")
+                    if (item.observaciones.isNotBlank()) add("Observaciones: ${item.observaciones}")
                 }
+                Text(infoLineas.joinToString("\n"), style = MaterialTheme.typography.bodySmall, lineHeight = 16.sp)
                 if (item.numTT.isBlank() && item.ubicacion.isBlank()) {
                     Text(
-                        "Llamar/GPS aún no disponibles para Semana 6 (falta actualizar el script de Apps Script).",
+                        "Llamar/GPS aún no disponibles para Semana 6.",
                         style = MaterialTheme.typography.bodySmall, color = Color.Gray
                     )
                 } else {
-                    Spacer(modifier = Modifier.height(4.dp))
                     ContactActionsRow(numTT = item.numTT, ubicacion = item.ubicacion)
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-                Divider()
-                Spacer(modifier = Modifier.height(4.dp))
+                Divider(modifier = Modifier.padding(vertical = 2.dp))
 
                 OutlinedTextField(
                     value = seContiene,
@@ -219,15 +219,17 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     leadingIcon = { Text("$") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
                 )
 
                 ExposedDropdownMenuBox(expanded = susceptibleMenuExpanded, onExpandedChange = { susceptibleMenuExpanded = it }) {
                     OutlinedTextField(
                         value = susceptible, onValueChange = {}, label = { Text("Susceptible") },
                         readOnly = true,
+                        textStyle = MaterialTheme.typography.bodySmall,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = susceptibleMenuExpanded) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor()
+                        modifier = Modifier.fillMaxWidth().height(48.dp).menuAnchor()
                     )
                     ExposedDropdownMenu(expanded = susceptibleMenuExpanded, onDismissRequest = { susceptibleMenuExpanded = false }) {
                         DropdownMenuItem(text = { Text("(Sin definir)") }, onClick = { susceptible = ""; susceptibleMenuExpanded = false })
@@ -241,8 +243,9 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     value = observaciones,
                     onValueChange = { observaciones = it },
                     label = { Text("Observaciones") },
-                    minLines = 3,
-                    maxLines = 6,
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    minLines = 2,
+                    maxLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
 
