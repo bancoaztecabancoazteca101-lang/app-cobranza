@@ -195,6 +195,9 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                 if (item.colonia.isNotBlank()) Text("Colonia: ${item.colonia}")
                 if (item.ultimaFechaVisita.isNotBlank()) Text("Última vez: ${item.ultimaFechaVisita}")
                 Text("Visitas: ${item.visitas}")
+                if (item.observaciones.isNotBlank()) {
+                    Text("Observaciones: ${item.observaciones}", style = MaterialTheme.typography.bodyMedium)
+                }
                 if (item.numTT.isBlank() && item.ubicacion.isBlank()) {
                     Text(
                         "Llamar/GPS aún no disponibles para Semana 6 (falta actualizar el script de Apps Script).",
