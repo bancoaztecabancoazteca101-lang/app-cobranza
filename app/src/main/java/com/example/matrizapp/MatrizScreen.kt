@@ -95,7 +95,10 @@ fun MatrizItemCard(
                     Text(text = item.nombre, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                     StatusBadge(estado = item.estado)
                 }
-                Text(text = item.observaciones ?: "Sin observaciones", style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (!item.folioP.isNullOrBlank()) {
+                    Text(text = "CU: ${item.folioP}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                }
+                ColoniaLabel(ubicacion = item.ubicacion)
 
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ubicacion = item.ubicacion)
