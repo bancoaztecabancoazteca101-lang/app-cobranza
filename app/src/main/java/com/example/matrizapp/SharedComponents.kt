@@ -634,30 +634,45 @@ fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: andro
  * no está disponible en el dispositivo, o el texto no trae coordenadas válidas, regresa null
  * en silencio: la Colonia es un dato "de más", nunca debe tumbar la pantalla.
  */
-suspend fun resolverColonia(context: android.content.Context, ubicacion: String?): String? = withContext(Dispatchers.IO) {
-    if (ubicacion.isNullOrBlank()) return@withContext null
+suspend fun resolverColoniaYCalle(context: android.content.Context, ubicacion: String?): Pair<String?, String?> = withContext(Dispatchers.IO) {
+    if (ubicacion.isNullOrBlank()) return@withContext null to null
     try {
         val partes = ubicacion.replace('−', '-').replace('–', '-').split(",").map { it.trim() }
-        if (partes.size < 2) return@withContext null
-        val lat = partes[0].toDoubleOrNull() ?: return@withContext null
-        val lng = partes[1].toDoubleOrNull() ?: return@withContext null
-        if (!Geocoder.isPresent()) return@withContext null
+        if (partes.size < 2) return@withContext null to null
+        val lat = partes[0].toDoubleOrNull() ?: return@withContext null to null
+        val lng = partes[1].toDoubleOrNull() ?: return@withContext null to null
+        if (!Geocoder.isPresent()) return@withContext null to null
         val geocoder = Geocoder(context, Locale("es", "MX"))
         @Suppress("DEPRECATION")
         val resultados = geocoder.getFromLocation(lat, lng, 1)
-        val direccion = resultados?.firstOrNull() ?: return@withContext null
-        direccion.subLocality ?: direccion.locality ?: direccion.thoroughfare
+        val direccion = resultados?.firstOrNull() ?: return@withContext null to null
+        val colonia = direccion.subLocality ?: direccion.locality
+        val calle = direccion.thoroughfare?.let { calleBase ->
+            direccion.subThoroughfare?.let { numero -> "$calleBase $numero" } ?: calleBase
+        }
+        colonia to calle
     } catch (e: Exception) {
-        null
+        null to null
     }
 }
 
-/** Muestra la Colonia calculada a partir de coordenadas (columna Ubicación) cuando la hoja
- * de origen no trae ese dato directamente, como es el caso de Filtro Fecha. */
+suspend fun resolverColonia(context: android.content.Context, ubicacion: String?): String? {
+    val (colonia, calle) = resolverColoniaYCalle(context, ubicacion)
+    return colonia ?: calle
+}
+
+/** Muestra la Colonia y Calle calculadas a partir de coordenadas (columna Ubicación) cuando la hoja
+ * de origen no trae esos datos directamente, como es el caso de Filtro Fecha. */
 @Composable
 fun ColoniaLabel(ubicacion: String?, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodySmall) {
     val context = LocalContext.current
     var colonia by remember(ubicacion) { mutableStateOf<String?>(null) }
-    LaunchedEffect(ubicacion) { colonia = resolverColonia(context, ubicacion) }
+    var calle by remember(ubicacion) { mutableStateOf<String?>(null) }
+    LaunchedEffect(ubicacion) {
+        val (c, cl) = resolverColoniaYCalle(context, ubicacion)
+        colonia = c
+        calle = cl
+    }
     colonia?.let { Text("Colonia: $it", style = style, color = Color.Gray) }
+    calle?.let { Text("Calle: $it", style = style, color = Color.Gray) }
 }
