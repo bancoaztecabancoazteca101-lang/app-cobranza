@@ -133,8 +133,8 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) 
                     if (item.colonia.isNotBlank()) {
                         Text("Colonia: ${item.colonia}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
-                    if (item.ultimaFechaVisita.isNotBlank()) {
-                        Text("Última vez: ${item.ultimaFechaVisita}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    if (item.capital.isNotBlank()) {
+                        Text("Capital: ${formatearReq(item.capital)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
                 }
             }
