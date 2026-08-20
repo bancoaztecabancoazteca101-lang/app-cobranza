@@ -247,7 +247,7 @@ fun SolicitudFullFormDialog(
     var observaciones by remember { mutableStateOf(item?.observaciones ?: "") }
     var estado by remember { mutableStateOf(item?.estado ?: "") }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
-    val opciones = listOf("PENDIENTE", "GESTIONADO", "ENTREGADO", "VISITADO", "EN PROCESO")
+    val opciones = listOf("RECAUCE", "AUTORIZADO", "RECHAZADO", "MALA ORIGINACION", "REACTIVACION")
 
     // Ubicación con un clic: toma las coordenadas del GPS directamente, sin escribir nada.
     var buscandoUbicacion by remember { mutableStateOf(false) }

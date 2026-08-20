@@ -67,13 +67,15 @@ interface SolicitudDao {
     suspend fun insertOne(item: SolicitudEntity)
     @Query("""UPDATE solicitud_table SET nombre = :nombre, numero = :numero, sucursal = :sucursal,
         ubicacionRaw = :ubicacion, nombreRef1 = :nombreRef1, ref1 = :ref1, nombreRef2 = :nombreRef2, ref2 = :ref2,
-        observaciones = :observaciones, estado = :estado, isDirty = 1
+        observaciones = :observaciones, estado = :estado, fechaHora = COALESCE(fechaHora, :fechaHoraSiFalta), isDirty = 1
         WHERE id = :id""")
     suspend fun updateCompleto(
         id: String, nombre: String, numero: String, sucursal: String, ubicacion: String,
         nombreRef1: String, ref1: String, nombreRef2: String, ref2: String,
-        observaciones: String, estado: String
+        observaciones: String, estado: String, fechaHoraSiFalta: Long = System.currentTimeMillis()
     )
+    @Query("UPDATE solicitud_table SET fechaHora = :fechaHora, isDirty = 1 WHERE id = :id AND fechaHora IS NULL")
+    suspend fun backfillFechaHoraSiFalta(id: String, fechaHora: Long)
     @Query("SELECT * FROM solicitud_table WHERE isDirty = 1")
     suspend fun getDirtyItems(): List<SolicitudEntity>
     @Query("UPDATE solicitud_table SET isDirty = 0, audioUrl = :remoteAudio, imageUrl = :remoteImg, imageUrl2 = :remoteImg2, imageUrl3 = :remoteImg3, imageUrl4 = :remoteImg4, lastSync = :syncTime WHERE id = :id")

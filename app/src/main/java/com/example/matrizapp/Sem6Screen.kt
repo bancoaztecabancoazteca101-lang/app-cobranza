@@ -163,6 +163,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
     var seContiene by remember(item.id) { mutableStateOf(item.seContiene) }
     var susceptible by remember(item.id) { mutableStateOf(item.susceptible) }
     var observaciones by remember(item.id) { mutableStateOf(item.observaciones) }
+    var capital by remember(item.id) { mutableStateOf(item.capital) }
     var susceptibleMenuExpanded by remember { mutableStateOf(false) }
     val isSaving by viewModel.isSavingNotas.collectAsState()
     val errorNotas by viewModel.errorNotas.collectAsState()
@@ -176,6 +177,15 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 160.dp)
                 }
                 Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}")
+                OutlinedTextField(
+                    value = capital,
+                    onValueChange = { input -> capital = input.filter { it.isDigit() || it == '.' } },
+                    label = { Text("Capital") },
+                    leadingIcon = { Text("$") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Text("CU: ${item.cu}")
                 if (item.colonia.isNotBlank()) Text("Colonia: ${item.colonia}")
                 if (item.ultimaFechaVisita.isNotBlank()) Text("Última vez: ${item.ultimaFechaVisita}")
@@ -236,7 +246,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
         confirmButton = {
             Button(
                 onClick = {
-                    viewModel.guardarNotas(item.id, seContiene, susceptible, observaciones) { ok ->
+                    viewModel.guardarNotas(item.id, seContiene, susceptible, observaciones, capital) { ok ->
                         if (ok) onDismiss()
                     }
                 },

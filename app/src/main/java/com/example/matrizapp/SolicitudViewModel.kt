@@ -69,6 +69,8 @@ class SolicitudViewModel(
         observaciones: String, estado: String
     ) {
         viewModelScope.launch {
+            // fechaHora solo se rellena si el registro aún no la tenía (registros creados antes
+            // de que existiera este campo); si ya tenía una fecha, COALESCE la conserva intacta.
             solicitudDao.updateCompleto(id, nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado)
             triggerSync()
         }
@@ -191,11 +193,20 @@ class SolicitudViewModel(
      * (WhatsApp descarta los adjuntos si se mezclan fotos+audio en un solo envío) — se
      * avisa por [onAudioPendiente] para que la pantalla ofrezca un botón "Enviar audio" y
      * el usuario decida cuándo mandarlo, evitando lanzar dos Intent seguidos hacia WhatsApp.
+     *
+     * Si el registro es de antes de que existiera el campo Fecha y hora (fechaHora null),
+     * se rellena en ese momento con la hora actual para que no falte en el mensaje.
      */
     fun compartirPorWhatsApp(context: android.content.Context, item: SolicitudEntity, onAudioPendiente: (android.net.Uri, String) -> Unit) {
         viewModelScope.launch {
-            val audioUri = shareSolicitudPorWhatsApp(context, item, driveHelper)
-            if (audioUri != null) onAudioPendiente(audioUri, item.nombre)
+            val itemACompartir = if (item.fechaHora == null) {
+                val ahora = System.currentTimeMillis()
+                solicitudDao.backfillFechaHoraSiFalta(item.id, ahora)
+                triggerSync()
+                item.copy(fechaHora = ahora)
+            } else item
+            val audioUri = shareSolicitudPorWhatsApp(context, itemACompartir, driveHelper)
+            if (audioUri != null) onAudioPendiente(audioUri, itemACompartir.nombre)
         }
     }
 
