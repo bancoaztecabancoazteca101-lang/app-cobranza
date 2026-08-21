@@ -122,10 +122,10 @@ private fun formatearReq(req: String): String {
 
 @Composable
 fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) {
-    val cardColor = if (item.susceptible.equals("Recuperado", ignoreCase = true)) {
-        Color(0xFFDCEDD9)
-    } else {
-        ClaySurface
+    val cardColor = when {
+        item.susceptible.equals("Recuperado", ignoreCase = true) -> Color(0xFFDCEDD9)
+        item.susceptible.equals("Susceptible", ignoreCase = true) -> Color(0xFFFFF3C4)
+        else -> ClaySurface
     }
     ClayCard(onClick = onClick, containerColor = cardColor) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
