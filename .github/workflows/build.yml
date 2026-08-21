@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 jobs:
@@ -51,3 +51,15 @@ jobs:
         with:
           name: MatrizApp-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Publish stable release with APK
+        if: env.BUILD_FAILED != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-debug
+          name: "Última build (debug)"
+          body: "APK generado automáticamente desde el commit ${{ github.sha }}. Este link nunca cambia; siempre apunta a la ultima build exitosa."
+          files: app/build/outputs/apk/debug/*.apk
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
