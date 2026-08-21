@@ -1,5 +1,9 @@
 package com.example.matrizapp
 import com.google.api.services.sheets.v4.Sheets
+import com.google.api.services.sheets.v4.model.BatchUpdateSpreadsheetRequest
+import com.google.api.services.sheets.v4.model.DeleteDimensionRequest
+import com.google.api.services.sheets.v4.model.DimensionRange
+import com.google.api.services.sheets.v4.model.Request
 import com.google.api.services.sheets.v4.model.ValueRange
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,6 +31,35 @@ class SheetsRepository(
         sheetsService.spreadsheets().values().update(Constants.SPREADSHEET_ID, range, body)
             .setValueInputOption("USER_ENTERED").execute()
         Unit
+    }
+
+    /** Busca el sheetId numerico (requerido por la API para batchUpdate/borrado de filas)
+     * a partir del nombre visible de la hoja. */
+    private fun getSheetIdByTitle(sheetName: String): Int? {
+        val meta = sheetsService.spreadsheets().get(Constants.SPREADSHEET_ID)
+            .setFields("sheets.properties").execute()
+        return meta.sheets.orEmpty().firstOrNull { it.properties?.title == sheetName }?.properties?.sheetId
+    }
+
+    /** Elimina por completo la fila de un registro (identificado por su Id) en la hoja indicada.
+     * Devuelve true si se encontro y borro la fila, false si no se encontro el Id. */
+    suspend fun deleteRowById(sheetName: String, id: String, idColumn: String): Boolean = withContext(Dispatchers.IO) {
+        val rowIndex = findRowIndexById(sheetName, id, idColumn)
+        if (rowIndex == -1) return@withContext false
+        val sheetId = getSheetIdByTitle(sheetName) ?: return@withContext false
+        val deleteRequest = Request().setDeleteDimension(
+            DeleteDimensionRequest().setRange(
+                DimensionRange()
+                    .setSheetId(sheetId)
+                    .setDimension("ROWS")
+                    .setStartIndex(rowIndex - 1)
+                    .setEndIndex(rowIndex)
+            )
+        )
+        sheetsService.spreadsheets()
+            .batchUpdate(Constants.SPREADSHEET_ID, BatchUpdateSpreadsheetRequest().setRequests(listOf(deleteRequest)))
+            .execute()
+        true
     }
 
     /** Agrega una fila nueva al final de la hoja (para registros creados desde la app). */

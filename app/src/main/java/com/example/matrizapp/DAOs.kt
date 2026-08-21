@@ -29,6 +29,8 @@ interface MatrizDao {
     suspend fun getDirtyItems(): List<MatrizEntity>
     @Query("UPDATE matriz_table SET isDirty = 0, imagenUrl = :remoteImg, imagenUrl2 = :remoteImg2, lastSync = :syncTime WHERE id = :id")
     suspend fun markAsClean(id: String, remoteImg: String?, remoteImg2: String?, syncTime: Long = System.currentTimeMillis())
+    @Query("DELETE FROM matriz_table WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao

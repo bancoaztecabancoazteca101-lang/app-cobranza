@@ -95,4 +95,24 @@ class MatrizViewModel(
             .build()
         workManager.enqueueUniqueWork("sync_app_data", ExistingWorkPolicy.REPLACE, syncRequest)
     }
+
+    private val _deleteInProgress = MutableStateFlow(false)
+    val deleteInProgress: StateFlow<Boolean> = _deleteInProgress
+
+    /** Elimina el registro tanto en el Google Sheet (columna M = Id) como en Room.
+     * Requiere conexion porque el borrado remoto es inmediato (no pasa por la cola de sync). */
+    fun eliminarRegistro(id: String, onResult: (exito: Boolean, error: String?) -> Unit) {
+        viewModelScope.launch {
+            _deleteInProgress.value = true
+            try {
+                repository.deleteRowById(Constants.SHEET_MATRIZ, id, Constants.MatrizCols.COL_ID)
+                matrizDao.deleteById(id)
+                onResult(true, null)
+            } catch (e: Exception) {
+                onResult(false, e.message)
+            } finally {
+                _deleteInProgress.value = false
+            }
+        }
+    }
 }
