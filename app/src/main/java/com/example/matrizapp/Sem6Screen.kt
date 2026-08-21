@@ -230,14 +230,14 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
 
                 ExposedDropdownMenuBox(expanded = susceptibleMenuExpanded, onExpandedChange = { susceptibleMenuExpanded = it }) {
                     OutlinedTextField(
-                        value = susceptible, onValueChange = {}, label = { Text("Susceptible") },
+                        value = susceptible, onValueChange = {}, label = { Text("Status") },
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = susceptibleMenuExpanded) },
                         modifier = Modifier.fillMaxWidth().menuAnchor()
                     )
                     ExposedDropdownMenu(expanded = susceptibleMenuExpanded, onDismissRequest = { susceptibleMenuExpanded = false }) {
                         DropdownMenuItem(text = { Text("(Sin definir)") }, onClick = { susceptible = ""; susceptibleMenuExpanded = false })
-                        listOf("Si", "No").forEach { opcion ->
+                        listOf("Susceptible", "Si", "No", "Recuperado").forEach { opcion ->
                             DropdownMenuItem(text = { Text(opcion) }, onClick = { susceptible = opcion; susceptibleMenuExpanded = false })
                         }
                     }
