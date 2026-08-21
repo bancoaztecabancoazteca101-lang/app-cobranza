@@ -2,11 +2,14 @@ package com.example.matrizapp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
@@ -42,7 +45,7 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
         FiltroFechaDetailDialog(
             item = item, df = df, driveHelper = viewModel.driveHelper,
             onDismiss = { itemToView = null },
-            onGuardarEstado = { id, estado -> viewModel.guardarEstado(id, estado) }
+            onGuardarEstadoYHora = { id, estado, hora -> viewModel.guardarEstadoYHora(id, estado, hora) }
         )
     }
 }
@@ -81,10 +84,12 @@ fun FiltroItemCard(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: D
 @Composable
 fun FiltroFechaDetailDialog(
     item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: DriveHelper,
-    onDismiss: () -> Unit, onGuardarEstado: (id: String, nuevoEstado: String) -> Unit
+    onDismiss: () -> Unit, onGuardarEstadoYHora: (id: String, nuevoEstado: String, nuevaHora: String) -> Unit
 ) {
+    val context = LocalContext.current
     var estado by remember(item.id) { mutableStateOf(item.estado) }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
+    var hora by remember(item.id) { mutableStateOf(item.hora ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -112,7 +117,22 @@ fun FiltroFechaDetailDialog(
                 }
 
                 Text("Fecha: ${df.format(Date(item.fecha))}")
-                item.hora?.let { Text("Hora: $it") }
+                OutlinedTextField(
+                    value = hora, onValueChange = { hora = it }, label = { Text("Hora") },
+                    readOnly = true,
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val cal = java.util.Calendar.getInstance()
+                            android.app.TimePickerDialog(context, { _, h, min ->
+                                cal.set(java.util.Calendar.HOUR_OF_DAY, h)
+                                cal.set(java.util.Calendar.MINUTE, min)
+                                cal.set(java.util.Calendar.SECOND, 0)
+                                hora = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(cal.time)
+                            }, cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE), true).show()
+                        }) { Icon(Icons.Default.AccessTime, contentDescription = "Elegir hora") }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Text("Observaciones: ${item.observaciones ?: "Sin observaciones"}")
                 ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -120,7 +140,7 @@ fun FiltroFechaDetailDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onGuardarEstado(item.id, estado); onDismiss() }) { Text("Guardar") }
+            Button(onClick = { onGuardarEstadoYHora(item.id, estado, hora); onDismiss() }) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
     )

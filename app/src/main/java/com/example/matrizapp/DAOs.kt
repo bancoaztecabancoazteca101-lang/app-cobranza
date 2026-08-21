@@ -98,6 +98,8 @@ interface FiltroFechaDao {
     suspend fun deleteAllClean()
     @Query("UPDATE filtro_fecha_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
     suspend fun updateEstadoLocal(id: String, nuevoEstado: String)
+    @Query("UPDATE filtro_fecha_table SET estado = :nuevoEstado, hora = :nuevaHora, isDirty = 1 WHERE id = :id")
+    suspend fun updateEstadoYHoraLocal(id: String, nuevoEstado: String, nuevaHora: String)
     @Query("SELECT * FROM filtro_fecha_table WHERE isDirty = 1")
     suspend fun getDirtyItems(): List<FiltroFechaEntity>
     @Query("UPDATE filtro_fecha_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
