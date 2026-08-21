@@ -41,6 +41,7 @@ data class FiltroFechaEntity(
     val numTT: String, val fecha: Long, val hora: String?,
     val imagenUrl: String? = null,
     val ref1: String? = null, val ref2: String? = null, val ubicacion: String? = null,
+    val req: String? = null,
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 

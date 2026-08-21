@@ -70,7 +70,7 @@ fun FiltroItemCard(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: D
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("TT: ${item.numTT}", style = MaterialTheme.typography.bodySmall)
-                    Text(df.format(Date(item.fecha)), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    Text("Req: ${item.req ?: "-"}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                 }
                 ColoniaLabel(ubicacion = item.ubicacion)
                 Spacer(modifier = Modifier.height(4.dp))

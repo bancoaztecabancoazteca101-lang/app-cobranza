@@ -302,7 +302,8 @@ class SheetsRepository(
                 imagenUrl = cell(row, Constants.FiltroCols.IMAGEN),
                 ref1 = cell(row, Constants.FiltroCols.REF1),
                 ref2 = cell(row, Constants.FiltroCols.REF2),
-                ubicacion = cell(row, Constants.FiltroCols.UBICACION)
+                ubicacion = cell(row, Constants.FiltroCols.UBICACION),
+                req = cell(row, Constants.FiltroCols.REQ)
             )
         }
         filtroDao.deleteAllClean()

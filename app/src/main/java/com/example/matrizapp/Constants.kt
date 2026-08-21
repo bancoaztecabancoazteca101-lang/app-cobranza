@@ -35,7 +35,7 @@ object Constants {
     }
     // "Filtro Fecha" se alimenta desde Matriz (mismo layout de columnas) vía script de Apps Script.
     object FiltroCols {
-        const val ID = 12; const val NOMBRE = 0; const val NUMTT = 3; const val OBSERVACIONES = 6
+        const val ID = 12; const val NOMBRE = 0; const val REQ = 2; const val NUMTT = 3; const val OBSERVACIONES = 6
         const val ESTADO = 7; const val REF1 = 4; const val REF2 = 5; const val UBICACION = 8
         const val IMAGEN = 9; const val FECHA = 11; const val HORA = 13
     }
