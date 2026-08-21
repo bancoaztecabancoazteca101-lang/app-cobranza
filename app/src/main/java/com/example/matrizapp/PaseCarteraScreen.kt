@@ -53,6 +53,7 @@ fun PaseItemCard(item: PaseEntity, onCardClick: () -> Unit) {
                 StatusBadge(item.estado)
             }
             Text(text = "Ref: ${item.ref1} / ${item.ref2}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            ColoniaLabel(ubicacion = item.ubicacion)
 
             Spacer(modifier = Modifier.height(8.dp))
 

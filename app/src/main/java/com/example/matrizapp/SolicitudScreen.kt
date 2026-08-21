@@ -188,6 +188,7 @@ fun SolicitudItemCard(
                 text = item.observaciones?.takeIf { it.isNotBlank() } ?: "Sin observaciones",
                 style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis
             )
+            ColoniaLabel(ubicacion = item.ubicacionRaw)
 
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.weight(1f)) {

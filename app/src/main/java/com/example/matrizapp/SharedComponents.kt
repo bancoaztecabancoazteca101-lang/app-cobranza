@@ -676,3 +676,16 @@ fun ColoniaLabel(ubicacion: String?, style: androidx.compose.ui.text.TextStyle =
     colonia?.let { Text("Colonia: $it", style = style, color = Color.Gray) }
     calle?.let { Text("Calle: $it", style = style, color = Color.Gray) }
 }
+
+/** Muestra solo la Calle calculada por geocoding inverso, para pantallas como Semana 6
+ * que ya traen su propia Colonia directo de la hoja (columna G de Cont-Sem-NN). */
+@Composable
+fun CalleLabel(ubicacion: String?, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodySmall) {
+    val context = LocalContext.current
+    var calle by remember(ubicacion) { mutableStateOf<String?>(null) }
+    LaunchedEffect(ubicacion) {
+        val (_, cl) = resolverColoniaYCalle(context, ubicacion)
+        calle = cl
+    }
+    calle?.let { Text("Calle: $it", style = style, color = Color.Gray) }
+}

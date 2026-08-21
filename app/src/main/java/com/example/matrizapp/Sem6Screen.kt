@@ -134,6 +134,7 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) 
                     if (item.colonia.isNotBlank()) {
                         Text("Colonia: ${item.colonia}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
+                    CalleLabel(ubicacion = item.ubicacion)
                     if (item.capital.isNotBlank()) {
                         Text("Capital: ${formatearReq(item.capital)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
@@ -197,6 +198,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                 )
                 Text("CU: ${item.cu}")
                 if (item.colonia.isNotBlank()) Text("Colonia: ${item.colonia}")
+                CalleLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
                 if (item.ultimaFechaVisita.isNotBlank()) Text("Última vez: ${item.ultimaFechaVisita}")
                 Text("Visitas: ${item.visitas}")
                 if (item.observaciones.isNotBlank()) {
