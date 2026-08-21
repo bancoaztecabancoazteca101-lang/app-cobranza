@@ -122,7 +122,12 @@ private fun formatearReq(req: String): String {
 
 @Composable
 fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) {
-    ClayCard(onClick = onClick) {
+    val cardColor = if (item.susceptible.equals("Recuperado", ignoreCase = true)) {
+        Color(0xFFDCEDD9)
+    } else {
+        ClaySurface
+    }
+    ClayCard(onClick = onClick, containerColor = cardColor) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper)

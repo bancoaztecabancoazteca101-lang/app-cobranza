@@ -37,6 +37,7 @@ val ClaySmsTeal = Color(0xFF00897B)
 fun ClayCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    containerColor: Color = ClaySurface,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
@@ -44,7 +45,7 @@ fun ClayCard(
             .fillMaxWidth()
             .padding(vertical = 6.dp, horizontal = 12.dp),
         shape = RoundedCornerShape(24.dp),
-        color = ClaySurface,
+        color = containerColor,
         shadowElevation = 6.dp,
         tonalElevation = 4.dp,
         onClick = onClick ?: {}
