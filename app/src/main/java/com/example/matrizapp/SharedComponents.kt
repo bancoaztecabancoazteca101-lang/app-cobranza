@@ -165,18 +165,18 @@ suspend fun shareSolicitudPorWhatsApp(context: android.content.Context, item: So
 
 private suspend fun shareSolicitudPorWhatsAppInterno(context: android.content.Context, item: SolicitudEntity, driveHelper: DriveHelper): Uri? {
     val textoBuilder = StringBuilder()
-    textoBuilder.append("Solicitud: ${item.nombre}\n")
-    if (!item.numero.isNullOrBlank()) textoBuilder.append("Número: ${item.numero}\n")
-    if (!item.sucursal.isNullOrBlank()) textoBuilder.append("Sucursal: ${item.sucursal}\n")
-    if (!item.estado.isBlank()) textoBuilder.append("Estado: ${item.estado}\n")
-    if (!item.observaciones.isNullOrBlank()) textoBuilder.append("Observaciones: ${item.observaciones}\n")
-    textoBuilder.append("Gestor asignado: ${item.gestorAsignado}\n")
+    textoBuilder.append("*Solicitud:* ${item.nombre}\n")
+    if (!item.numero.isNullOrBlank()) textoBuilder.append("*Número:* ${item.numero}\n")
+    if (!item.sucursal.isNullOrBlank()) textoBuilder.append("*Sucursal:* ${item.sucursal}\n")
+    if (!item.estado.isBlank()) textoBuilder.append("*Estado:* ${item.estado}\n")
+    if (!item.observaciones.isNullOrBlank()) textoBuilder.append("*Observaciones:* ${item.observaciones}\n")
+    textoBuilder.append("*Gestor asignado:* ${item.gestorAsignado}\n")
     item.fechaHora?.let { millis ->
         val df = java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX"))
-        textoBuilder.append("Fecha y hora: ${df.format(java.util.Date(millis))}\n")
+        textoBuilder.append("*Fecha y hora:* ${df.format(java.util.Date(millis))}\n")
     }
     if (!item.ubicacionRaw.isNullOrBlank() && item.ubicacionRaw != "N/A") {
-        textoBuilder.append("Ubicación: https://maps.google.com/?q=${Uri.encode(item.ubicacionRaw)}\n")
+        textoBuilder.append("*Ubicación:* https://maps.google.com/?q=${Uri.encode(item.ubicacionRaw)}\n")
     }
 
     val fallasAdjuntar = mutableListOf<String>()
