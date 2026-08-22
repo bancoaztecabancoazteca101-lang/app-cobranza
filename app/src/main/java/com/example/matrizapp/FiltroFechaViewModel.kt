@@ -16,15 +16,27 @@ class FiltroFechaViewModel(
     private val _hasta = MutableStateFlow<Long?>(null)
     val hasta: StateFlow<Long?> = _hasta
 
+    private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
+    val orden: StateFlow<OrdenLista> = _orden
+    fun setOrden(o: OrdenLista) { _orden.value = o }
+
+    private fun ordenar(list: List<FiltroFechaEntity>, o: OrdenLista): List<FiltroFechaEntity> = when (o) {
+        OrdenLista.FECHA_HORA -> list.sortedByDescending { it.fecha }
+        OrdenLista.UBICACION -> list.sortedBy { it.ubicacion?.lowercase() ?: "" }
+        OrdenLista.ALFABETICO -> list.sortedBy { it.nombre.lowercase() }
+        OrdenLista.ORIGINAL -> list
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    val filteredList: StateFlow<List<FiltroFechaEntity>> = combine(_desde, _hasta) { d, h ->
-        d to h
-    }.flatMapLatest { (d, h) ->
-        if (d != null && h != null) {
+    val filteredList: StateFlow<List<FiltroFechaEntity>> = combine(_desde, _hasta, _orden) { d, h, o ->
+        Triple(d, h, o)
+    }.flatMapLatest { (d, h, o) ->
+        val base = if (d != null && h != null) {
             filtroDao.getItemsByRange(d, h)
         } else {
             filtroDao.getAll()
         }
+        base.map { list -> ordenar(list, o) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setRangoFecha(desde: Long?, hasta: Long?) {

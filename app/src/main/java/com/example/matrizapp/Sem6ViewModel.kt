@@ -3,6 +3,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class Sem6ViewModel(
@@ -10,8 +13,24 @@ class Sem6ViewModel(
     private val cacheStore: Sem6CacheStore,
     val driveHelper: DriveHelper
 ) : ViewModel() {
-    private val _items = MutableStateFlow<List<Sem6Item>>(emptyList())
-    val items: StateFlow<List<Sem6Item>> = _items
+    private val _itemsRaw = MutableStateFlow<List<Sem6Item>>(emptyList())
+
+    private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
+    val orden: StateFlow<OrdenLista> = _orden
+    fun setOrden(o: OrdenLista) { _orden.value = o }
+
+    private val formatoFechaSem6 = java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX"))
+    private fun ordenar(list: List<Sem6Item>, o: OrdenLista): List<Sem6Item> = when (o) {
+        OrdenLista.FECHA_HORA -> list.sortedByDescending {
+            try { formatoFechaSem6.parse(it.ultimaFechaVisita)?.time ?: 0L } catch (e: Exception) { 0L }
+        }
+        OrdenLista.UBICACION -> list.sortedBy { it.ubicacion.lowercase() }
+        OrdenLista.ALFABETICO -> list.sortedBy { it.nombre.lowercase() }
+        OrdenLista.ORIGINAL -> list
+    }
+
+    val items: StateFlow<List<Sem6Item>> = combine(_itemsRaw, _orden) { list, o -> ordenar(list, o) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
@@ -40,10 +59,10 @@ class Sem6ViewModel(
             try {
                 val ok = repository.updateSem6Notas(id, seContiene, susceptible, observaciones, capital)
                 if (ok) {
-                    _items.value = _items.value.map { item ->
+                    _itemsRaw.value = _itemsRaw.value.map { item ->
                         if (item.id == id) item.copy(seContiene = seContiene, susceptible = susceptible, observaciones = observaciones, capital = capital) else item
                     }
-                    cacheStore.save(_items.value)
+                    cacheStore.save(_itemsRaw.value)
                 } else {
                     _errorNotas.value = "No se encontró el registro en la hoja de esta semana"
                 }
@@ -60,7 +79,7 @@ class Sem6ViewModel(
     init {
         // Muestra de inmediato lo último conocido (si hay) mientras llega la respuesta en vivo.
         cacheStore.load()?.let { (cachedItems, ts) ->
-            _items.value = cachedItems
+            _itemsRaw.value = cachedItems
             _lastUpdated.value = ts
             _isFromCache.value = true
         }
@@ -74,7 +93,7 @@ class Sem6ViewModel(
         viewModelScope.launch {
             try {
                 val fresh = repository.fetchSem6Data()
-                _items.value = fresh
+                _itemsRaw.value = fresh
                 _isFromCache.value = false
                 _lastUpdated.value = System.currentTimeMillis()
                 cacheStore.save(fresh)

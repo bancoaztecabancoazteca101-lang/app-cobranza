@@ -6,6 +6,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -18,8 +19,21 @@ class SolicitudViewModel(
     private val workManager: WorkManager,
     val driveHelper: DriveHelper
 ) : ViewModel() {
-    val solicitudList: StateFlow<List<SolicitudEntity>> = solicitudDao.getAllSolicitud()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
+    val orden: StateFlow<OrdenLista> = _orden
+    fun setOrden(o: OrdenLista) { _orden.value = o }
+
+    private fun ordenar(list: List<SolicitudEntity>, o: OrdenLista): List<SolicitudEntity> = when (o) {
+        OrdenLista.FECHA_HORA -> list.sortedByDescending { it.fechaHora ?: 0L }
+        OrdenLista.UBICACION -> list.sortedBy { it.ubicacionRaw?.lowercase() ?: "" }
+        OrdenLista.ALFABETICO -> list.sortedBy { it.nombre.lowercase() }
+        OrdenLista.ORIGINAL -> list
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val solicitudList: StateFlow<List<SolicitudEntity>> = _orden.flatMapLatest { o ->
+        solicitudDao.getAllSolicitud().map { list -> ordenar(list, o) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording

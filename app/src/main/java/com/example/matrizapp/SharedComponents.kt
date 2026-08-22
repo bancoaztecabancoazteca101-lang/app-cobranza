@@ -711,3 +711,27 @@ fun CalleLabel(ubicacion: String?, style: androidx.compose.ui.text.TextStyle = M
     }
     calle?.let { Text("Calle: $it", style = style, color = Color.Gray) }
 }
+/** Botón de ordenar reutilizable: icono que abre un menú con las opciones de OrdenLista.
+ * Usado en Filtro Fecha, Sem6 y Solicitud. */
+@Composable
+fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista) -> Unit) {
+    var expandido by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expandido = true }) {
+            Icon(
+                Icons.Default.Sort,
+                contentDescription = "Ordenar",
+                tint = if (orden != OrdenLista.ORIGINAL) MaterialTheme.colorScheme.primary else LocalContentColor.current
+            )
+        }
+        DropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
+            OrdenLista.values().forEach { opcion ->
+                DropdownMenuItem(
+                    text = { Text(opcion.etiqueta) },
+                    leadingIcon = { if (opcion == orden) Icon(Icons.Default.Check, contentDescription = null) },
+                    onClick = { onOrdenChange(opcion); expandido = false }
+                )
+            }
+        }
+    }
+}

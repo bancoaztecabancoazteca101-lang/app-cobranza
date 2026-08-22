@@ -52,3 +52,11 @@ object Constants {
         const val SEMANA = 0; const val REQUERIDO = 1
     }
 }
+/** Orden aplicable a las listas de Filtro Fecha, Sem6 y Solicitud. ORIGINAL = tal como llega
+ * del Sheet/Room, sin reordenar. */
+enum class OrdenLista(val etiqueta: String) {
+    ORIGINAL("Como llegó"),
+    FECHA_HORA("Fecha y hora"),
+    UBICACION("Ubicación"),
+    ALFABETICO("Alfabético (A-Z)")
+}
