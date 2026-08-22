@@ -68,13 +68,9 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
         ActivityResultContracts.RequestPermission()
     ) { if (it) viewModel.startRecording() else Toast.makeText(context, "Permiso denegado", Toast.LENGTH_SHORT).show() }
 
-    val orden by viewModel.orden.collectAsState()
     Box(modifier = Modifier.fillMaxSize()) {
         Column {
-            Row(modifier = Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End) {
-                OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> viewModel.setOrden(o, loc) })
-            }
-            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(items, key = { it.id }) { item ->
                     SolicitudItemCard(
                         item = item,

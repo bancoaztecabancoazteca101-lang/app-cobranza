@@ -25,7 +25,6 @@ import java.util.*
 @Composable
 fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     val allItems by viewModel.items.collectAsState()
-    val orden by viewModel.orden.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
     val lastUpdated by viewModel.lastUpdated.collectAsState()
@@ -70,7 +69,6 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
                         color = ClayOnSurface
                     )
                 }
-                OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> viewModel.setOrden(o, loc) })
                 IconButton(onClick = { viewModel.cargar() }, enabled = !isLoading) {
                     if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)

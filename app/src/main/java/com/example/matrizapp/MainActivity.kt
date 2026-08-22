@@ -170,11 +170,32 @@ class MainActivity : ComponentActivity() {
                                     IconButton(onClick = { searchActive = true }) {
                                         Icon(Icons.Default.Search, contentDescription = "Buscar")
                                     }
-                                    IconButton(onClick = { refreshData() }) {
-                                        if (isRefreshing) {
-                                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                        } else {
-                                            Icon(Icons.Default.Sync, contentDescription = "Sincronizar")
+                                    // En las pantallas con orden (Filtro Fecha, Sem6, Solicitud) el botón de
+                                    // ordenar ocupa el lugar del ícono de sincronizar, para no empujar la
+                                    // lista hacia abajo con una fila extra. La sincronización en background
+                                    // sigue funcionando igual; en el resto de pantallas el ícono de sync
+                                    // sigue disponible como antes.
+                                    when (currentRouteForDrawer) {
+                                        Screen.FiltroFecha.route -> {
+                                            val orden by filtroVm.orden.collectAsState()
+                                            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> filtroVm.setOrden(o, loc) })
+                                        }
+                                        Screen.Sem6.route -> {
+                                            val orden by sem6Vm.orden.collectAsState()
+                                            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> sem6Vm.setOrden(o, loc) })
+                                        }
+                                        Screen.Solicitud.route -> {
+                                            val orden by solicitudVm.orden.collectAsState()
+                                            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> solicitudVm.setOrden(o, loc) })
+                                        }
+                                        else -> {
+                                            IconButton(onClick = { refreshData() }) {
+                                                if (isRefreshing) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                                } else {
+                                                    Icon(Icons.Default.Sync, contentDescription = "Sincronizar")
+                                                }
+                                            }
                                         }
                                     }
                                 }

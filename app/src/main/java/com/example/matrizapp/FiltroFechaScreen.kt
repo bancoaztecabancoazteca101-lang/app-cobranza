@@ -19,7 +19,6 @@ import java.util.*
 @Composable
 fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "") {
     val allItems by viewModel.filteredList.collectAsState()
-    val orden by viewModel.orden.collectAsState()
     val df = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
     var itemToView by remember { mutableStateOf<FiltroFechaEntity?>(null) }
 
@@ -34,11 +33,8 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End) {
-            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> viewModel.setOrden(o, loc) })
-        }
-        if (items.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
-        else LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
+        else LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(items, key = { it.id }) { item ->
                 FiltroItemCard(item, df, driveHelper = viewModel.driveHelper, onClick = { itemToView = item })
             }
