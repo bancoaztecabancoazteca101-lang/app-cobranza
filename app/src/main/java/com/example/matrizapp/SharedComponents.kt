@@ -466,30 +466,34 @@ fun ImagenCaptureBox(url: String?, enabled: Boolean, driveHelper: DriveHelper?, 
         }
     }
 
+    val hayImagen = uriResuelta != null
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(90.dp)
-            .clickable(enabled = enabled, onClick = onClick),
+            // Si ya hay imagen, tocarla la abre en grande (acción principal, más fácil de
+            // acertar con el dedo). Si no hay imagen, tocar abre la cámara para tomarla.
+            .clickable(enabled = enabled, onClick = if (hayImagen) ({ mostrarGrande = true }) else onClick),
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.5f)),
         color = Color.Transparent
     ) {
         Box(contentAlignment = Alignment.Center) {
             when {
-                uriResuelta != null -> {
+                hayImagen -> {
                     AsyncImage(model = uriResuelta, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                    // Icono de lupa aparte del área principal (que sigue abriendo la cámara para
-                    // reemplazar la foto): permite ver la imagen actual en grande sin tomar una nueva.
+                    // Icono de cámara aparte, para reemplazar la foto sin que estorbe el toque
+                    // principal (que ahora es para ver en grande).
                     IconButton(
-                        onClick = { mostrarGrande = true },
+                        onClick = onClick,
+                        enabled = enabled,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(4.dp)
                             .size(28.dp)
                             .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
                     ) {
-                        Icon(Icons.Default.ZoomIn, contentDescription = "Ver en grande", tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.PhotoCamera, contentDescription = "Tomar otra foto", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
                 resolviendo -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
