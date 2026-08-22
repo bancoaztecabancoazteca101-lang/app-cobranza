@@ -320,12 +320,11 @@ fun MatrizFullFormDialog(
     var observaciones by remember { mutableStateOf(item?.observaciones ?: "") }
     var estado by remember { mutableStateOf(item?.estado ?: "") }
     var ubicacion by remember { mutableStateOf(item?.ubicacion ?: "") }
-    // Fecha y Hora siempre inician en el momento actual (aunque se esté editando un
-    // registro existente), pero el selector permite cambiarlas si se necesita otra fecha.
+    // Fecha y Hora (el selector combinado de arriba) siempre inicia en el momento actual.
+    // El campo "Hora" de abajo es independiente: si es un registro existente conserva su
+    // hora guardada, y si es nuevo empieza en blanco para que se elija a mano.
     var fechaMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    var hora by remember {
-        mutableStateOf(SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(java.util.Date(fechaMillis)))
-    }
+    var hora by remember { mutableStateOf(item?.hora ?: "") }
     var ruta by remember { mutableStateOf(item?.ruta ?: "") }
     var folioP by remember { mutableStateOf(item?.folioP ?: "") }
     var estadoMenuExpanded by remember { mutableStateOf(false) }

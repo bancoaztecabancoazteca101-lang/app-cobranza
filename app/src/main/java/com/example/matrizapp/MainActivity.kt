@@ -176,6 +176,10 @@ class MainActivity : ComponentActivity() {
                                     // sigue funcionando igual; en el resto de pantallas el ícono de sync
                                     // sigue disponible como antes.
                                     when (currentRouteForDrawer) {
+                                        Screen.Matriz.route -> {
+                                            val orden by matrizVm.orden.collectAsState()
+                                            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> matrizVm.setOrden(o, loc) })
+                                        }
                                         Screen.FiltroFecha.route -> {
                                             val orden by filtroVm.orden.collectAsState()
                                             OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> filtroVm.setOrden(o, loc) })

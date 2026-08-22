@@ -9,6 +9,8 @@ import androidx.work.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -20,8 +22,30 @@ class MatrizViewModel(
     private val workManager: WorkManager,
     val driveHelper: DriveHelper
 ) : ViewModel() {
-    val matrizList: StateFlow<List<MatrizEntity>> = matrizDao.getAllMatriz()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
+    val orden: StateFlow<OrdenLista> = _orden
+    private val _miUbicacion = MutableStateFlow<Pair<Double, Double>?>(null)
+    fun setOrden(o: OrdenLista, miUbicacion: Pair<Double, Double>? = null) {
+        _orden.value = o
+        if (miUbicacion != null) _miUbicacion.value = miUbicacion
+    }
+
+    private fun distanciaOrNull(raw: String?, miUbicacion: Pair<Double, Double>): Double? =
+        parseLatLngOrden(raw)?.let { distanciaKm(miUbicacion, it) }
+
+    private fun ordenar(list: List<MatrizEntity>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<MatrizEntity> = when (o) {
+        OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending { it.fecha ?: 0L }
+        OrdenLista.FECHA_HORA_ANTIGUA -> list.sortedBy { it.fecha ?: Long.MAX_VALUE }
+        OrdenLista.UBICACION_CERCA -> if (miUbicacion == null) list else list.sortedBy { distanciaOrNull(it.ubicacion, miUbicacion) ?: Double.MAX_VALUE }
+        OrdenLista.UBICACION_LEJOS -> if (miUbicacion == null) list else list.sortedByDescending { distanciaOrNull(it.ubicacion, miUbicacion) ?: -1.0 }
+        OrdenLista.ALFABETICO_AZ -> list.sortedBy { it.nombre.lowercase() }
+        OrdenLista.ALFABETICO_ZA -> list.sortedByDescending { it.nombre.lowercase() }
+        OrdenLista.ORIGINAL -> list
+    }
+
+    val matrizList: StateFlow<List<MatrizEntity>> = combine(matrizDao.getAllMatriz(), _orden, _miUbicacion) { list, o, loc ->
+        ordenar(list, o, loc)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _pendingPhotoUri = MutableStateFlow<Uri?>(null)
     val pendingPhotoUri: StateFlow<Uri?> = _pendingPhotoUri
