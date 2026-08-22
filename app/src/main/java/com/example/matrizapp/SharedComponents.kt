@@ -450,7 +450,6 @@ fun MatrizFullFormDialog(
 }
 
 @Composable
-@Composable
 fun ImagenCaptureBox(url: String?, enabled: Boolean, driveHelper: DriveHelper?, onClick: () -> Unit) {
     val context = LocalContext.current
     var uriResuelta by remember(url) { mutableStateOf<String?>(null) }
