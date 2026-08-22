@@ -34,7 +34,7 @@ class FiltroFechaViewModel(
         OrdenLista.ORIGINAL -> list
     }
     private fun distanciaOrNull(raw: String?, miUbicacion: Pair<Double, Double>): Double? =
-        parseLatLng(raw)?.let { distanciaKm(miUbicacion, it) }
+        parseLatLngOrden(raw)?.let { distanciaKm(miUbicacion, it) }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val filteredList: StateFlow<List<FiltroFechaEntity>> = combine(_desde, _hasta, _orden, _miUbicacion) { d, h, o, loc ->

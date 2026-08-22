@@ -28,7 +28,7 @@ class SolicitudViewModel(
     }
 
     private fun distanciaOrNull(raw: String?, miUbicacion: Pair<Double, Double>): Double? =
-        parseLatLng(raw)?.let { distanciaKm(miUbicacion, it) }
+        parseLatLngOrden(raw)?.let { distanciaKm(miUbicacion, it) }
 
     private fun ordenar(list: List<SolicitudEntity>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<SolicitudEntity> = when (o) {
         OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending { it.fechaHora ?: 0L }

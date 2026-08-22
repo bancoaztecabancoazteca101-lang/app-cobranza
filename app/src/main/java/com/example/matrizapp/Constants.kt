@@ -68,7 +68,7 @@ enum class OrdenLista(val etiqueta: String) {
 fun OrdenLista.necesitaUbicacionActual() = this == OrdenLista.UBICACION_CERCA || this == OrdenLista.UBICACION_LEJOS
 
 /** Intenta parsear un texto "lat, lng" (el mismo formato que guarda obtenerUbicacionActual) a un par de doubles. */
-fun parseLatLng(raw: String?): Pair<Double, Double>? {
+fun parseLatLngOrden(raw: String?): Pair<Double, Double>? {
     if (raw.isNullOrBlank()) return null
     val partes = raw.split(",").map { it.trim() }
     if (partes.size != 2) return null

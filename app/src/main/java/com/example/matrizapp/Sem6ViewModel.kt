@@ -25,7 +25,7 @@ class Sem6ViewModel(
 
     private val formatoFechaSem6 = java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX"))
     private fun distanciaOrNull(raw: String?, miUbicacion: Pair<Double, Double>): Double? =
-        parseLatLng(raw)?.let { distanciaKm(miUbicacion, it) }
+        parseLatLngOrden(raw)?.let { distanciaKm(miUbicacion, it) }
 
     private fun ordenar(list: List<Sem6Item>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<Sem6Item> = when (o) {
         OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending {

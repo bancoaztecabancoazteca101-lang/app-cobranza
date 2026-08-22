@@ -744,7 +744,7 @@ fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista, Pair<Doub
                         if (opcion.necesitaUbicacionActual()) {
                             buscandoUbicacion = true
                             scope.launch {
-                                val ubic = parseLatLng(obtenerUbicacionActual(context))
+                                val ubic = parseLatLngOrden(obtenerUbicacionActual(context))
                                 buscandoUbicacion = false
                                 if (ubic == null) {
                                     Toast.makeText(context, "No se pudo obtener tu ubicación actual (revisa el GPS)", Toast.LENGTH_SHORT).show()
