@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 val ESTADOS_MATRIZ = listOf("APP", "Retorno", "Pagado", "PASE", "FILTRAR", "Mano")
 
@@ -784,5 +785,39 @@ fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista, Pair<Doub
                 )
             }
         }
+    }
+}
+
+/** OCR local (ML Kit, on-device, sin costo) para el buscador con foto: intenta detectar el
+ * nombre más probable en la imagen (línea sin números, 2 a 5 palabras, elige la de texto
+ * más grande/alto ya que suele ser el título/nombre del cliente en la pantalla fotografiada).
+ * Devuelve null si no encuentra nada que parezca un nombre. */
+suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): String? = suspendCancellableCoroutine { cont ->
+    try {
+        val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
+            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
+        )
+        recognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                var mejorLinea: String? = null
+                var mejorAltura = 0
+                for (block in visionText.textBlocks) {
+                    for (line in block.lines) {
+                        val texto = line.text.trim()
+                        val soloLetras = texto.replace(" ", "").isNotEmpty() &&
+                            texto.replace(" ", "").all { it.isLetter() }
+                        val palabras = texto.split(" ").filter { it.isNotBlank() }
+                        if (soloLetras && palabras.size in 2..5 && texto.length in 5..40) {
+                            val altura = line.boundingBox?.height() ?: 0
+                            if (altura > mejorAltura) { mejorAltura = altura; mejorLinea = texto }
+                        }
+                    }
+                }
+                if (cont.isActive) cont.resume(mejorLinea)
+            }
+            .addOnFailureListener { if (cont.isActive) cont.resume(null) }
+    } catch (e: Exception) {
+        if (cont.isActive) cont.resume(null)
     }
 }

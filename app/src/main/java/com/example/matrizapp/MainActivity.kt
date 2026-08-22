@@ -1,5 +1,6 @@
 package com.example.matrizapp
 import android.Manifest
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -32,7 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.launch
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
@@ -73,6 +76,9 @@ class MainActivity : ComponentActivity() {
                 val sem6Vm: Sem6ViewModel = viewModel(factory = factory)
                 var searchQuery by remember { mutableStateOf("") }
                 var searchActive by remember { mutableStateOf(false) }
+                var buscandoPorFoto by remember { mutableStateOf(false) }
+                var mostrarSelectorFotoBusqueda by remember { mutableStateOf(false) }
+                var fotoBusquedaUri by remember { mutableStateOf<Uri?>(null) }
                 var isRefreshing by remember { mutableStateOf(false) }
                 var syncError by remember { mutableStateOf<String?>(null) }
                 fun refreshData() {
@@ -100,8 +106,52 @@ class MainActivity : ComponentActivity() {
                         confirmButton = { TextButton(onClick = { syncError = null }) { Text("Cerrar") } }
                     )
                 }
+                if (mostrarSelectorFotoBusqueda) {
+                    AlertDialog(
+                        onDismissRequest = { mostrarSelectorFotoBusqueda = false },
+                        title = { Text("Buscar con foto") },
+                        text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para buscar por nombre.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                mostrarSelectorFotoBusqueda = false
+                                val photoFile = File(getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "busqueda_${System.currentTimeMillis()}.jpg")
+                                val uri = FileProvider.getUriForFile(this@MainActivity, "com.example.matrizapp.fileprovider", photoFile)
+                                fotoBusquedaUri = uri
+                                ocrTakePictureLauncher.launch(uri)
+                            }) { Text("Cámara") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                mostrarSelectorFotoBusqueda = false
+                                ocrPickImageLauncher.launch("image/*")
+                            }) { Text("Galería") }
+                        }
+                    )
+                }
                 val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
                     if (!it.values.all { p -> p }) Toast.makeText(this, "Permisos necesarios", Toast.LENGTH_SHORT).show()
+                }
+                // Buscar con foto: OCR local (ML Kit) sobre una foto tomada o elegida de galería,
+                // intenta detectar el nombre del cliente en la imagen y lo usa como búsqueda.
+                fun procesarFotoBusqueda(uri: Uri?) {
+                    if (uri == null) return
+                    buscandoPorFoto = true
+                    coroutineScope.launch {
+                        val nombre = extraerNombreDeImagen(this@MainActivity, uri)
+                        buscandoPorFoto = false
+                        if (nombre.isNullOrBlank()) {
+                            Toast.makeText(this@MainActivity, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
+                        } else {
+                            searchActive = true
+                            searchQuery = nombre
+                        }
+                    }
+                }
+                val ocrTakePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+                    if (success) procesarFotoBusqueda(fotoBusquedaUri)
+                }
+                val ocrPickImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                    procesarFotoBusqueda(uri)
                 }
                 LaunchedEffect(Unit) {
                     permLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION))
@@ -161,6 +211,13 @@ class MainActivity : ComponentActivity() {
                             },
                             actions = {
                                 if (searchActive) {
+                                    if (buscandoPorFoto) {
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        IconButton(onClick = { mostrarSelectorFotoBusqueda = true }) {
+                                            Icon(Icons.Default.CameraAlt, contentDescription = "Buscar con foto")
+                                        }
+                                    }
                                     if (searchQuery.isNotEmpty()) {
                                         IconButton(onClick = { searchQuery = "" }) {
                                             Icon(Icons.Default.Close, contentDescription = "Limpiar búsqueda")
