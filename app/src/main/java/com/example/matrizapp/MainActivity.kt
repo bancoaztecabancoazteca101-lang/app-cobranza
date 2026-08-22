@@ -106,28 +106,6 @@ class MainActivity : ComponentActivity() {
                         confirmButton = { TextButton(onClick = { syncError = null }) { Text("Cerrar") } }
                     )
                 }
-                if (mostrarSelectorFotoBusqueda) {
-                    AlertDialog(
-                        onDismissRequest = { mostrarSelectorFotoBusqueda = false },
-                        title = { Text("Buscar con foto") },
-                        text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para buscar por nombre.") },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                mostrarSelectorFotoBusqueda = false
-                                val photoFile = File(getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "busqueda_${System.currentTimeMillis()}.jpg")
-                                val uri = FileProvider.getUriForFile(this@MainActivity, "com.example.matrizapp.fileprovider", photoFile)
-                                fotoBusquedaUri = uri
-                                ocrTakePictureLauncher.launch(uri)
-                            }) { Text("Cámara") }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = {
-                                mostrarSelectorFotoBusqueda = false
-                                ocrPickImageLauncher.launch("image/*")
-                            }) { Text("Galería") }
-                        }
-                    )
-                }
                 val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
                     if (!it.values.all { p -> p }) Toast.makeText(this, "Permisos necesarios", Toast.LENGTH_SHORT).show()
                 }
@@ -152,6 +130,28 @@ class MainActivity : ComponentActivity() {
                 }
                 val ocrPickImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                     procesarFotoBusqueda(uri)
+                }
+                if (mostrarSelectorFotoBusqueda) {
+                    AlertDialog(
+                        onDismissRequest = { mostrarSelectorFotoBusqueda = false },
+                        title = { Text("Buscar con foto") },
+                        text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para buscar por nombre.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                mostrarSelectorFotoBusqueda = false
+                                val photoFile = File(getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "busqueda_${System.currentTimeMillis()}.jpg")
+                                val uri = FileProvider.getUriForFile(this@MainActivity, "com.example.matrizapp.fileprovider", photoFile)
+                                fotoBusquedaUri = uri
+                                ocrTakePictureLauncher.launch(uri)
+                            }) { Text("Cámara") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                mostrarSelectorFotoBusqueda = false
+                                ocrPickImageLauncher.launch("image/*")
+                            }) { Text("Galería") }
+                        }
+                    )
                 }
                 LaunchedEffect(Unit) {
                     permLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION))

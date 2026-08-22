@@ -814,10 +814,10 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
                         }
                     }
                 }
-                if (cont.isActive) cont.resume(mejorLinea)
+                if (cont.isActive) cont.resume(mejorLinea) {}
             }
-            .addOnFailureListener { if (cont.isActive) cont.resume(null) }
+            .addOnFailureListener { if (cont.isActive) cont.resume(null) {} }
     } catch (e: Exception) {
-        if (cont.isActive) cont.resume(null)
+        if (cont.isActive) cont.resume(null) {}
     }
 }
