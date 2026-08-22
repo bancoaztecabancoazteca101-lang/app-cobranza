@@ -332,24 +332,28 @@ fun SolicitudFullFormDialog(
                 ImagenCaptureBox(
                     url = nuevaImagenUrl ?: item?.imageUrl,
                     enabled = true,
+                    driveHelper = driveHelper,
                     onClick = { slotActivo = 1; mostrarSelectorFoto = 1 }
                 )
                 Text("Imagen 2", style = MaterialTheme.typography.labelMedium)
                 ImagenCaptureBox(
                     url = nuevaImagenUrl2 ?: item?.imageUrl2,
                     enabled = true,
+                    driveHelper = driveHelper,
                     onClick = { slotActivo = 2; mostrarSelectorFoto = 2 }
                 )
                 Text("Imagen 3", style = MaterialTheme.typography.labelMedium)
                 ImagenCaptureBox(
                     url = nuevaImagenUrl3 ?: item?.imageUrl3,
                     enabled = true,
+                    driveHelper = driveHelper,
                     onClick = { slotActivo = 3; mostrarSelectorFoto = 3 }
                 )
                 Text("Imagen 4", style = MaterialTheme.typography.labelMedium)
                 ImagenCaptureBox(
                     url = nuevaImagenUrl4 ?: item?.imageUrl4,
                     enabled = true,
+                    driveHelper = driveHelper,
                     onClick = { slotActivo = 4; mostrarSelectorFoto = 4 }
                 )
 

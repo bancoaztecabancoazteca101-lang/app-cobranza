@@ -387,6 +387,7 @@ fun MatrizFullFormDialog(
                 ImagenCaptureBox(
                     url = item?.imagenUrl,
                     enabled = item != null && viewModel != null,
+                    driveHelper = viewModel?.driveHelper,
                     onClick = {
                         activePhotoSlot = 1
                         val uri = viewModel!!.preparePhotoUri(context, 1)
@@ -397,6 +398,7 @@ fun MatrizFullFormDialog(
                 ImagenCaptureBox(
                     url = item?.imagenUrl2,
                     enabled = item != null && viewModel != null,
+                    driveHelper = viewModel?.driveHelper,
                     onClick = {
                         activePhotoSlot = 2
                         val uri = viewModel!!.preparePhotoUri(context, 2)
@@ -448,8 +450,23 @@ fun MatrizFullFormDialog(
 }
 
 @Composable
-fun ImagenCaptureBox(url: String?, enabled: Boolean, onClick: () -> Unit) {
+@Composable
+fun ImagenCaptureBox(url: String?, enabled: Boolean, driveHelper: DriveHelper?, onClick: () -> Unit) {
+    val context = LocalContext.current
+    var uriResuelta by remember(url) { mutableStateOf<String?>(null) }
+    var resolviendo by remember(url) { mutableStateOf(false) }
     var mostrarGrande by remember(url) { mutableStateOf(false) }
+
+    LaunchedEffect(url) {
+        uriResuelta = null
+        if (!url.isNullOrBlank() && driveHelper != null) {
+            resolviendo = true
+            val uri = resolverArchivoComoUri(context, driveHelper, url, "imagen_${url.hashCode()}.jpg")
+            uriResuelta = uri?.toString()
+            resolviendo = false
+        }
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -460,30 +477,32 @@ fun ImagenCaptureBox(url: String?, enabled: Boolean, onClick: () -> Unit) {
         color = Color.Transparent
     ) {
         Box(contentAlignment = Alignment.Center) {
-            if (!url.isNullOrBlank()) {
-                AsyncImage(model = url, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                // Icono de lupa aparte del área principal (que sigue abriendo la cámara para
-                // reemplazar la foto): permite ver la imagen actual en grande sin tomar una nueva.
-                IconButton(
-                    onClick = { mostrarGrande = true },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .size(28.dp)
-                        .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
-                ) {
-                    Icon(Icons.Default.ZoomIn, contentDescription = "Ver en grande", tint = Color.White, modifier = Modifier.size(18.dp))
+            when {
+                uriResuelta != null -> {
+                    AsyncImage(model = uriResuelta, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    // Icono de lupa aparte del área principal (que sigue abriendo la cámara para
+                    // reemplazar la foto): permite ver la imagen actual en grande sin tomar una nueva.
+                    IconButton(
+                        onClick = { mostrarGrande = true },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .size(28.dp)
+                            .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                    ) {
+                        Icon(Icons.Default.ZoomIn, contentDescription = "Ver en grande", tint = Color.White, modifier = Modifier.size(18.dp))
+                    }
                 }
-            } else {
-                Icon(
+                resolviendo -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                else -> Icon(
                     Icons.Default.PhotoCamera, contentDescription = "Tomar foto",
                     tint = if (enabled) Color.Gray else Color.LightGray
                 )
             }
         }
     }
-    if (mostrarGrande && !url.isNullOrBlank()) {
-        ImageDetailDialog(url = url, onDismiss = { mostrarGrande = false })
+    if (mostrarGrande && uriResuelta != null) {
+        ImageDetailDialog(url = uriResuelta!!, onDismiss = { mostrarGrande = false })
     }
 }
 
