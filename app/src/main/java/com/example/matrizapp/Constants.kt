@@ -53,10 +53,37 @@ object Constants {
     }
 }
 /** Orden aplicable a las listas de Filtro Fecha, Sem6 y Solicitud. ORIGINAL = tal como llega
- * del Sheet/Room, sin reordenar. */
+ * del Sheet/Room, sin reordenar. Las de fecha/alfabético/ubicación tienen las 2 direcciones. */
 enum class OrdenLista(val etiqueta: String) {
     ORIGINAL("Como llegó"),
-    FECHA_HORA("Fecha y hora"),
-    UBICACION("Ubicación"),
-    ALFABETICO("Alfabético (A-Z)")
+    FECHA_HORA_RECIENTE("Fecha y hora: más reciente primero"),
+    FECHA_HORA_ANTIGUA("Fecha y hora: más antiguo primero"),
+    UBICACION_CERCA("Ubicación: más cercano primero"),
+    UBICACION_LEJOS("Ubicación: más lejano primero"),
+    ALFABETICO_AZ("Alfabético: A-Z"),
+    ALFABETICO_ZA("Alfabético: Z-A")
+}
+
+/** true si este orden necesita saber la ubicación actual del dispositivo para calcular distancias. */
+fun OrdenLista.necesitaUbicacionActual() = this == OrdenLista.UBICACION_CERCA || this == OrdenLista.UBICACION_LEJOS
+
+/** Intenta parsear un texto "lat, lng" (el mismo formato que guarda obtenerUbicacionActual) a un par de doubles. */
+fun parseLatLng(raw: String?): Pair<Double, Double>? {
+    if (raw.isNullOrBlank()) return null
+    val partes = raw.split(",").map { it.trim() }
+    if (partes.size != 2) return null
+    val lat = partes[0].toDoubleOrNull() ?: return null
+    val lng = partes[1].toDoubleOrNull() ?: return null
+    return lat to lng
+}
+
+/** Distancia en km entre dos puntos GPS (fórmula de Haversine). */
+fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
+    val r = 6371.0
+    val dLat = Math.toRadians(b.first - a.first)
+    val dLon = Math.toRadians(b.second - a.second)
+    val la1 = Math.toRadians(a.first); val la2 = Math.toRadians(b.first)
+    val h = kotlin.math.sin(dLat / 2).let { it * it } +
+        kotlin.math.cos(la1) * kotlin.math.cos(la2) * kotlin.math.sin(dLon / 2).let { it * it }
+    return 2 * r * kotlin.math.asin(kotlin.math.sqrt(h))
 }

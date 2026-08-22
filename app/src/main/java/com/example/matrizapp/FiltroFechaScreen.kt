@@ -35,7 +35,7 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End) {
-            OrdenSelectorButton(orden = orden, onOrdenChange = { viewModel.setOrden(it) })
+            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> viewModel.setOrden(o, loc) })
         }
         if (items.isEmpty()) Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
         else LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

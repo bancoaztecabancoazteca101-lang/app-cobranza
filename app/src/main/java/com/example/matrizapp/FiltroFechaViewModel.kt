@@ -18,25 +18,35 @@ class FiltroFechaViewModel(
 
     private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
     val orden: StateFlow<OrdenLista> = _orden
-    fun setOrden(o: OrdenLista) { _orden.value = o }
-
-    private fun ordenar(list: List<FiltroFechaEntity>, o: OrdenLista): List<FiltroFechaEntity> = when (o) {
-        OrdenLista.FECHA_HORA -> list.sortedByDescending { it.fecha }
-        OrdenLista.UBICACION -> list.sortedBy { it.ubicacion?.lowercase() ?: "" }
-        OrdenLista.ALFABETICO -> list.sortedBy { it.nombre.lowercase() }
-        OrdenLista.ORIGINAL -> list
+    private val _miUbicacion = MutableStateFlow<Pair<Double, Double>?>(null)
+    fun setOrden(o: OrdenLista, miUbicacion: Pair<Double, Double>? = null) {
+        _orden.value = o
+        if (miUbicacion != null) _miUbicacion.value = miUbicacion
     }
 
+    private fun ordenar(list: List<FiltroFechaEntity>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<FiltroFechaEntity> = when (o) {
+        OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending { it.fecha }
+        OrdenLista.FECHA_HORA_ANTIGUA -> list.sortedBy { it.fecha }
+        OrdenLista.UBICACION_CERCA -> if (miUbicacion == null) list else list.sortedBy { distanciaOrNull(it.ubicacion, miUbicacion) ?: Double.MAX_VALUE }
+        OrdenLista.UBICACION_LEJOS -> if (miUbicacion == null) list else list.sortedByDescending { distanciaOrNull(it.ubicacion, miUbicacion) ?: -1.0 }
+        OrdenLista.ALFABETICO_AZ -> list.sortedBy { it.nombre.lowercase() }
+        OrdenLista.ALFABETICO_ZA -> list.sortedByDescending { it.nombre.lowercase() }
+        OrdenLista.ORIGINAL -> list
+    }
+    private fun distanciaOrNull(raw: String?, miUbicacion: Pair<Double, Double>): Double? =
+        parseLatLng(raw)?.let { distanciaKm(miUbicacion, it) }
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    val filteredList: StateFlow<List<FiltroFechaEntity>> = combine(_desde, _hasta, _orden) { d, h, o ->
-        Triple(d, h, o)
-    }.flatMapLatest { (d, h, o) ->
+    val filteredList: StateFlow<List<FiltroFechaEntity>> = combine(_desde, _hasta, _orden, _miUbicacion) { d, h, o, loc ->
+        Triple(d, h, o) to loc
+    }.flatMapLatest { (t, loc) ->
+        val (d, h, o) = t
         val base = if (d != null && h != null) {
             filtroDao.getItemsByRange(d, h)
         } else {
             filtroDao.getAll()
         }
-        base.map { list -> ordenar(list, o) }
+        base.map { list -> ordenar(list, o, loc) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setRangoFecha(desde: Long?, hasta: Long?) {

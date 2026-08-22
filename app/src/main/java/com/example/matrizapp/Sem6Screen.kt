@@ -70,7 +70,7 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
                         color = ClayOnSurface
                     )
                 }
-                OrdenSelectorButton(orden = orden, onOrdenChange = { viewModel.setOrden(it) })
+                OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> viewModel.setOrden(o, loc) })
                 IconButton(onClick = { viewModel.cargar() }, enabled = !isLoading) {
                     if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)

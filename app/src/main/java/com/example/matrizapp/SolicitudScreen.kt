@@ -72,7 +72,7 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
     Box(modifier = Modifier.fillMaxSize()) {
         Column {
             Row(modifier = Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End) {
-                OrdenSelectorButton(orden = orden, onOrdenChange = { viewModel.setOrden(it) })
+                OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> viewModel.setOrden(o, loc) })
             }
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(items, key = { it.id }) { item ->

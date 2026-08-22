@@ -17,19 +17,31 @@ class Sem6ViewModel(
 
     private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
     val orden: StateFlow<OrdenLista> = _orden
-    fun setOrden(o: OrdenLista) { _orden.value = o }
+    private val _miUbicacion = MutableStateFlow<Pair<Double, Double>?>(null)
+    fun setOrden(o: OrdenLista, miUbicacion: Pair<Double, Double>? = null) {
+        _orden.value = o
+        if (miUbicacion != null) _miUbicacion.value = miUbicacion
+    }
 
     private val formatoFechaSem6 = java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX"))
-    private fun ordenar(list: List<Sem6Item>, o: OrdenLista): List<Sem6Item> = when (o) {
-        OrdenLista.FECHA_HORA -> list.sortedByDescending {
+    private fun distanciaOrNull(raw: String?, miUbicacion: Pair<Double, Double>): Double? =
+        parseLatLng(raw)?.let { distanciaKm(miUbicacion, it) }
+
+    private fun ordenar(list: List<Sem6Item>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<Sem6Item> = when (o) {
+        OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending {
             try { formatoFechaSem6.parse(it.ultimaFechaVisita)?.time ?: 0L } catch (e: Exception) { 0L }
         }
-        OrdenLista.UBICACION -> list.sortedBy { it.ubicacion.lowercase() }
-        OrdenLista.ALFABETICO -> list.sortedBy { it.nombre.lowercase() }
+        OrdenLista.FECHA_HORA_ANTIGUA -> list.sortedBy {
+            try { formatoFechaSem6.parse(it.ultimaFechaVisita)?.time ?: Long.MAX_VALUE } catch (e: Exception) { Long.MAX_VALUE }
+        }
+        OrdenLista.UBICACION_CERCA -> if (miUbicacion == null) list else list.sortedBy { distanciaOrNull(it.ubicacion, miUbicacion) ?: Double.MAX_VALUE }
+        OrdenLista.UBICACION_LEJOS -> if (miUbicacion == null) list else list.sortedByDescending { distanciaOrNull(it.ubicacion, miUbicacion) ?: -1.0 }
+        OrdenLista.ALFABETICO_AZ -> list.sortedBy { it.nombre.lowercase() }
+        OrdenLista.ALFABETICO_ZA -> list.sortedByDescending { it.nombre.lowercase() }
         OrdenLista.ORIGINAL -> list
     }
 
-    val items: StateFlow<List<Sem6Item>> = combine(_itemsRaw, _orden) { list, o -> ordenar(list, o) }
+    val items: StateFlow<List<Sem6Item>> = combine(_itemsRaw, _orden, _miUbicacion) { list, o, loc -> ordenar(list, o, loc) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isLoading = MutableStateFlow(false)

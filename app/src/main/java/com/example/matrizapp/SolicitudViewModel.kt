@@ -21,19 +21,30 @@ class SolicitudViewModel(
 ) : ViewModel() {
     private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
     val orden: StateFlow<OrdenLista> = _orden
-    fun setOrden(o: OrdenLista) { _orden.value = o }
+    private val _miUbicacion = MutableStateFlow<Pair<Double, Double>?>(null)
+    fun setOrden(o: OrdenLista, miUbicacion: Pair<Double, Double>? = null) {
+        _orden.value = o
+        if (miUbicacion != null) _miUbicacion.value = miUbicacion
+    }
 
-    private fun ordenar(list: List<SolicitudEntity>, o: OrdenLista): List<SolicitudEntity> = when (o) {
-        OrdenLista.FECHA_HORA -> list.sortedByDescending { it.fechaHora ?: 0L }
-        OrdenLista.UBICACION -> list.sortedBy { it.ubicacionRaw?.lowercase() ?: "" }
-        OrdenLista.ALFABETICO -> list.sortedBy { it.nombre.lowercase() }
+    private fun distanciaOrNull(raw: String?, miUbicacion: Pair<Double, Double>): Double? =
+        parseLatLng(raw)?.let { distanciaKm(miUbicacion, it) }
+
+    private fun ordenar(list: List<SolicitudEntity>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<SolicitudEntity> = when (o) {
+        OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending { it.fechaHora ?: 0L }
+        OrdenLista.FECHA_HORA_ANTIGUA -> list.sortedBy { it.fechaHora ?: Long.MAX_VALUE }
+        OrdenLista.UBICACION_CERCA -> if (miUbicacion == null) list else list.sortedBy { distanciaOrNull(it.ubicacionRaw, miUbicacion) ?: Double.MAX_VALUE }
+        OrdenLista.UBICACION_LEJOS -> if (miUbicacion == null) list else list.sortedByDescending { distanciaOrNull(it.ubicacionRaw, miUbicacion) ?: -1.0 }
+        OrdenLista.ALFABETICO_AZ -> list.sortedBy { it.nombre.lowercase() }
+        OrdenLista.ALFABETICO_ZA -> list.sortedByDescending { it.nombre.lowercase() }
         OrdenLista.ORIGINAL -> list
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val solicitudList: StateFlow<List<SolicitudEntity>> = _orden.flatMapLatest { o ->
-        solicitudDao.getAllSolicitud().map { list -> ordenar(list, o) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val solicitudList: StateFlow<List<SolicitudEntity>> = combine(_orden, _miUbicacion) { o, loc -> o to loc }
+        .flatMapLatest { (o, loc) ->
+            solicitudDao.getAllSolicitud().map { list -> ordenar(list, o, loc) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording

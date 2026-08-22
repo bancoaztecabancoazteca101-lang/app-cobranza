@@ -712,24 +712,50 @@ fun CalleLabel(ubicacion: String?, style: androidx.compose.ui.text.TextStyle = M
     calle?.let { Text("Calle: $it", style = style, color = Color.Gray) }
 }
 /** Botón de ordenar reutilizable: icono que abre un menú con las opciones de OrdenLista.
+ * Si la opción elegida es por ubicación, primero obtiene el GPS actual del dispositivo
+ * (mostrando un pequeño loader) y luego se lo pasa al ViewModel para calcular distancias.
  * Usado en Filtro Fecha, Sem6 y Solicitud. */
 @Composable
-fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista) -> Unit) {
+fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista, Pair<Double, Double>?) -> Unit) {
     var expandido by remember { mutableStateOf(false) }
+    var buscandoUbicacion by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     Box {
-        IconButton(onClick = { expandido = true }) {
-            Icon(
-                Icons.Default.Sort,
-                contentDescription = "Ordenar",
-                tint = if (orden != OrdenLista.ORIGINAL) MaterialTheme.colorScheme.primary else LocalContentColor.current
-            )
+        IconButton(onClick = { expandido = true }, enabled = !buscandoUbicacion) {
+            if (buscandoUbicacion) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    Icons.Default.Sort,
+                    contentDescription = "Ordenar",
+                    tint = if (orden != OrdenLista.ORIGINAL) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                )
+            }
         }
         DropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
             OrdenLista.values().forEach { opcion ->
                 DropdownMenuItem(
                     text = { Text(opcion.etiqueta) },
                     leadingIcon = { if (opcion == orden) Icon(Icons.Default.Check, contentDescription = null) },
-                    onClick = { onOrdenChange(opcion); expandido = false }
+                    onClick = {
+                        expandido = false
+                        if (opcion.necesitaUbicacionActual()) {
+                            buscandoUbicacion = true
+                            scope.launch {
+                                val ubic = parseLatLng(obtenerUbicacionActual(context))
+                                buscandoUbicacion = false
+                                if (ubic == null) {
+                                    Toast.makeText(context, "No se pudo obtener tu ubicación actual (revisa el GPS)", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    onOrdenChange(opcion, ubic)
+                                }
+                            }
+                        } else {
+                            onOrdenChange(opcion, null)
+                        }
+                    }
                 )
             }
         }
