@@ -66,12 +66,13 @@ class SolicitudViewModel(
     fun guardarRegistroCompleto(
         id: String, nombre: String, numero: String, sucursal: String,
         ubicacion: String, nombreRef1: String, ref1: String, nombreRef2: String, ref2: String,
-        observaciones: String, estado: String
+        observaciones: String, estado: String, fechaHoraEditada: Long? = null
     ) {
         viewModelScope.launch {
-            // fechaHora solo se rellena si el registro aún no la tenía (registros creados antes
-            // de que existiera este campo); si ya tenía una fecha, COALESCE la conserva intacta.
-            solicitudDao.updateCompleto(id, nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado)
+            // fechaHoraEditada: si el usuario tocó el campo y lo cambió, se respeta ese valor.
+            // Si no lo tocó (null), se conserva la fecha/hora automática que ya tenía el registro,
+            // o se rellena con la hora actual si nunca la tuvo (registros viejos sin este campo).
+            solicitudDao.updateCompleto(id, nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, fechaHoraEditada)
             triggerSync()
         }
     }
@@ -81,7 +82,8 @@ class SolicitudViewModel(
         nombreRef1: String, ref1: String, nombreRef2: String, ref2: String,
         observaciones: String, estado: String, audioUrl: String? = null,
         imagenUrl: String? = null, imagenUrl2: String? = null,
-        imagenUrl3: String? = null, imagenUrl4: String? = null
+        imagenUrl3: String? = null, imagenUrl4: String? = null,
+        fechaHoraEditada: Long? = null
     ) {
         val nuevoId = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
         viewModelScope.launch {
@@ -92,9 +94,10 @@ class SolicitudViewModel(
                     nombreRef1 = nombreRef1, ref1 = ref1, nombreRef2 = nombreRef2, ref2 = ref2,
                     observaciones = observaciones, audioUrl = audioUrl, estado = estado,
                     imageUrl3 = imagenUrl3, imageUrl4 = imagenUrl4,
-                    // Gestor asignado siempre "Flores" (fijo, no editable) y fecha/hora
-                    // se capturan automático con la hora del dispositivo al momento de crear.
-                    gestorAsignado = "Flores", fechaHora = System.currentTimeMillis(),
+                    // Gestor asignado siempre "Flores" (fijo, no editable). Fecha/hora se captura
+                    // automático con la hora del dispositivo al crear, salvo que el usuario la
+                    // haya editado a mano en el formulario (fechaHoraEditada).
+                    gestorAsignado = "Flores", fechaHora = fechaHoraEditada ?: System.currentTimeMillis(),
                     isDirty = true
                 )
             )

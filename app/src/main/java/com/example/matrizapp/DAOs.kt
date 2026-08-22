@@ -69,12 +69,14 @@ interface SolicitudDao {
     suspend fun insertOne(item: SolicitudEntity)
     @Query("""UPDATE solicitud_table SET nombre = :nombre, numero = :numero, sucursal = :sucursal,
         ubicacionRaw = :ubicacion, nombreRef1 = :nombreRef1, ref1 = :ref1, nombreRef2 = :nombreRef2, ref2 = :ref2,
-        observaciones = :observaciones, estado = :estado, fechaHora = COALESCE(fechaHora, :fechaHoraSiFalta), isDirty = 1
+        observaciones = :observaciones, estado = :estado,
+        fechaHora = COALESCE(:fechaHoraOverride, fechaHora, :fechaHoraSiFalta), isDirty = 1
         WHERE id = :id""")
     suspend fun updateCompleto(
         id: String, nombre: String, numero: String, sucursal: String, ubicacion: String,
         nombreRef1: String, ref1: String, nombreRef2: String, ref2: String,
-        observaciones: String, estado: String, fechaHoraSiFalta: Long = System.currentTimeMillis()
+        observaciones: String, estado: String, fechaHoraOverride: Long? = null,
+        fechaHoraSiFalta: Long = System.currentTimeMillis()
     )
     @Query("UPDATE solicitud_table SET fechaHora = :fechaHora, isDirty = 1 WHERE id = :id AND fechaHora IS NULL")
     suspend fun backfillFechaHoraSiFalta(id: String, fechaHora: Long)

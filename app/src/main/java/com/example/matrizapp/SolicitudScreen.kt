@@ -132,8 +132,8 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
                 audioPendiente?.let { (uri, nombre) -> compartirAudioSolicitudPorWhatsApp(context, uri, nombre) }
                 audioPendiente = null
             },
-            onSave = { nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, _, _, _, _ ->
-                viewModel.guardarRegistroCompleto(item.id, nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado)
+            onSave = { nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, _, _, _, _, fechaHora ->
+                viewModel.guardarRegistroCompleto(item.id, nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, fechaHora)
                 itemToEditId = null
             }
         )
@@ -158,8 +158,8 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
             },
             onViewImage = {},
             onShareWhatsApp = { Toast.makeText(context, "Guarda el registro primero para poder compartir", Toast.LENGTH_SHORT).show() },
-            onSave = { nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, nuevaImagenUrl, nuevaImagenUrl2, nuevaImagenUrl3, nuevaImagenUrl4 ->
-                viewModel.crearRegistro(nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, nuevoAudioPath, nuevaImagenUrl, nuevaImagenUrl2, nuevaImagenUrl3, nuevaImagenUrl4)
+            onSave = { nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, nuevaImagenUrl, nuevaImagenUrl2, nuevaImagenUrl3, nuevaImagenUrl4, fechaHora ->
+                viewModel.crearRegistro(nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, nuevoAudioPath, nuevaImagenUrl, nuevaImagenUrl2, nuevaImagenUrl3, nuevaImagenUrl4, fechaHora)
                 showCreateDialog = false
             }
         )
@@ -233,7 +233,7 @@ fun SolicitudFullFormDialog(
     onSave: (nombre: String, numero: String, sucursal: String, ubicacion: String,
              nombreRef1: String, ref1: String, nombreRef2: String, ref2: String,
              observaciones: String, estado: String, nuevaImagenUrl: String?, nuevaImagenUrl2: String?,
-             nuevaImagenUrl3: String?, nuevaImagenUrl4: String?) -> Unit
+             nuevaImagenUrl3: String?, nuevaImagenUrl4: String?, fechaHora: Long) -> Unit
 ) {
     val context = LocalContext.current
     val esNuevo = item == null
@@ -249,6 +249,9 @@ fun SolicitudFullFormDialog(
     var estado by remember { mutableStateOf(item?.estado ?: "") }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
     val opciones = listOf("RECAUCE", "AUTORIZADO", "RECHAZADO", "MALA ORIGINACION", "REACTIVACION")
+    // Fecha y hora: se autocompleta con la actual (o la que ya tenía el registro) igual que
+    // antes, pero ahora se puede editar a mano tocando el ícono del reloj.
+    var fechaHoraEditable by remember { mutableStateOf(item?.fechaHora ?: System.currentTimeMillis()) }
 
     // Ubicación con un clic: toma las coordenadas del GPS directamente, sin escribir nada.
     var buscandoUbicacion by remember { mutableStateOf(false) }
@@ -362,20 +365,32 @@ fun SolicitudFullFormDialog(
                     modifier = Modifier.fillMaxWidth(), minLines = 2
                 )
 
-                // Gestor asignado y Fecha y hora: fijos, no editables. Gestor siempre "Flores";
-                // fecha/hora se capturó automático al crear el registro (o se capturará al guardar, si es nuevo).
+                // Gestor asignado: fijo, no editable, siempre "Flores".
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Person, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Gestor asignado: Flores", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 }
+                // Fecha y hora: se autocompleta con la actual como hasta ahora, pero se puede
+                // editar a mano tocando el ícono del lápiz (por si se necesita corregir).
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Schedule, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    val textoFecha = item?.fechaHora?.let {
-                        java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX")).format(java.util.Date(it))
-                    } ?: "Se registrará al guardar"
-                    Text("Fecha y hora: $textoFecha", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                    val textoFecha = java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX")).format(java.util.Date(fechaHoraEditable))
+                    Text("Fecha y hora: $textoFecha", style = MaterialTheme.typography.bodyMedium, color = Color.Gray, modifier = Modifier.weight(1f))
+                    IconButton(onClick = {
+                        val cal = java.util.Calendar.getInstance().apply { timeInMillis = fechaHoraEditable }
+                        android.app.DatePickerDialog(context, { _, y, m, d ->
+                            cal.set(y, m, d)
+                            android.app.TimePickerDialog(context, { _, h, min ->
+                                cal.set(java.util.Calendar.HOUR_OF_DAY, h)
+                                cal.set(java.util.Calendar.MINUTE, min)
+                                fechaHoraEditable = cal.timeInMillis
+                            }, cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE), true).show()
+                        }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                    }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Editar fecha y hora", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                    }
                 }
                 val audioActual = audioUrlOverride ?: item?.audioUrl
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -441,7 +456,7 @@ fun SolicitudFullFormDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, nuevaImagenUrl, nuevaImagenUrl2, nuevaImagenUrl3, nuevaImagenUrl4) }) { Text("Guardar") }
+            Button(onClick = { onSave(nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, nuevaImagenUrl, nuevaImagenUrl2, nuevaImagenUrl3, nuevaImagenUrl4, fechaHoraEditable) }) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
     )
