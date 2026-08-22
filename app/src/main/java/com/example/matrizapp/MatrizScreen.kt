@@ -1,4 +1,5 @@
 package com.example.matrizapp
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,12 +10,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 @Composable
 fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
+    val context = LocalContext.current
     val allItems by viewModel.matrizList.collectAsState()
     val deleteInProgress by viewModel.deleteInProgress.collectAsState()
     var itemToEdit by remember { mutableStateOf<MatrizEntity?>(null) }
@@ -64,11 +67,15 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
             item = item,
             viewModel = viewModel,
             onDismiss = { itemToEdit = null },
-            onSave = { nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
-                viewModel.guardarRegistroCompleto(
-                    item.id, nombre, semana, requisito, numTT, ref1, ref2,
+            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+                viewModel.cambiarIdYGuardar(
+                    item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2,
                     observaciones, estado, ubicacion, fecha, hora, ruta, folioP
-                )
+                ) { exito, error ->
+                    if (!exito) {
+                        Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
+                    }
+                }
                 itemToEdit = null
             }
         )
@@ -79,8 +86,8 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
             item = null,
             viewModel = viewModel,
             onDismiss = { showCreateDialog = false },
-            onSave = { nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
-                viewModel.crearRegistro(nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP)
+            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+                viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP)
                 showCreateDialog = false
             }
         )

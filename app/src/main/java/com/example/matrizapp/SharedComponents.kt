@@ -300,11 +300,16 @@ fun MatrizFullFormDialog(
     item: MatrizEntity?,
     viewModel: MatrizViewModel? = null,
     onDismiss: () -> Unit,
-    onSave: (nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String,
+    onSave: (id: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String,
              observaciones: String, estado: String, ubicacion: String, fecha: Long, hora: String, ruta: String, folioP: String) -> Unit
 ) {
     val context = LocalContext.current
     val esNuevo = item == null
+
+    // ID: si es un registro existente, arranca con su ID actual; si es nuevo, sugiere uno
+    // autogenerado (hex corto), pero en ambos casos el usuario lo puede editar por si choca
+    // con un ID que ya haya generado AppSheet.
+    var idEditable by remember { mutableStateOf(item?.id ?: java.util.UUID.randomUUID().toString().replace("-", "").take(8)) }
 
     var nombre by remember { mutableStateOf(item?.nombre ?: "") }
     var semana by remember { mutableStateOf(item?.semana ?: "") }
@@ -435,14 +440,35 @@ fun MatrizFullFormDialog(
                     FilterChip(selected = ruta == "Cartucho 2", onClick = { ruta = "Cartucho 2" }, label = { Text("Cartucho 2") })
                 }
                 OutlinedTextField(value = folioP, onValueChange = { folioP = it }, label = { Text("CU") }, modifier = Modifier.fillMaxWidth())
+
+                // Hora editable por separado (igual que en AppSheet): se autocompleta al elegir
+                // fecha y hora arriba, pero se puede ajustar aparte sin tocar la fecha.
+                OutlinedTextField(
+                    value = hora, onValueChange = { hora = it }, label = { Text("Hora") },
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val cal = java.util.Calendar.getInstance().apply { timeInMillis = fechaMillis }
+                            android.app.TimePickerDialog(context, { _, h, min ->
+                                hora = String.format(Locale.getDefault(), "%02d:%02d:00", h, min)
+                            }, cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE), true).show()
+                        }) { Icon(Icons.Default.AccessTime, contentDescription = "Elegir hora") }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                // ID: autogenerado, pero editable por si choca con uno que ya generó AppSheet.
+                OutlinedTextField(
+                    value = idEditable, onValueChange = { idEditable = it }, label = { Text("ID") },
+                    supportingText = { Text("Se genera automático, pero puedes cambiarlo si choca con otro ID") },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fechaMillis, hora, ruta, folioP)
+                    onSave(idEditable, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fechaMillis, hora, ruta, folioP)
                 },
-                enabled = nombre.isNotBlank()
+                enabled = nombre.isNotBlank() && idEditable.isNotBlank()
             ) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }

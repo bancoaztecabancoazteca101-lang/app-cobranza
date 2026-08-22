@@ -68,17 +68,51 @@ class MatrizViewModel(
         }
     }
 
-    /** Crea un registro nuevo (no existe aun en el Sheet). Genera un ID unico tipo hex corto. */
+    /** Igual que guardarRegistroCompleto, pero primero intenta renombrar el ID del registro
+     * (columna M) si el usuario lo editó a mano en el formulario. El renombrado en el Sheet
+     * necesita conexión; si falla, no se guarda nada (para no dejar el registro inconsistente
+     * entre Room y el Sheet) y se avisa el error por onResult. Si el registro es tan nuevo que
+     * todavía no existe en el Sheet, el renombrado local simplemente no tiene nada que buscar
+     * remotamente y sigue de largo: el ID nuevo se sube tal cual en el próximo push. */
+    fun cambiarIdYGuardar(
+        idAnterior: String, idNuevo: String, nombre: String, semana: String, requisito: String, numTT: String,
+        ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
+        fecha: Long?, hora: String?, ruta: String?, folioP: String?,
+        onResult: (exito: Boolean, error: String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            val idFinal = idNuevo.trim().ifBlank { idAnterior }
+            if (idFinal != idAnterior) {
+                try {
+                    repository.renameRowId(Constants.SHEET_MATRIZ, idAnterior, idFinal, Constants.MatrizCols.COL_ID)
+                    matrizDao.renameId(idAnterior, idFinal)
+                } catch (e: Exception) {
+                    onResult(false, "No se pudo cambiar el ID en el Sheet (revisa tu conexión): ${e.message}")
+                    return@launch
+                }
+            }
+            matrizDao.updateRegistroCompleto(
+                idFinal, nombre, semana, requisito, numTT, ref1, ref2,
+                observaciones, estado, ubicacion, fecha, hora, ruta, folioP
+            )
+            triggerSync()
+            onResult(true, null)
+        }
+    }
+
+    /** Crea un registro nuevo (no existe aun en el Sheet). El ID lo sugiere generarIdMatriz()
+     * (hex corto), pero el formulario permite editarlo antes de guardar por si choca con uno
+     * que ya haya generado AppSheet. */
     fun crearRegistro(
-        nombre: String, semana: String, requisito: String, numTT: String,
+        id: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
         fecha: Long, hora: String?, ruta: String?, folioP: String?
     ) {
-        val nuevoId = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+        val idFinal = id.trim().ifBlank { java.util.UUID.randomUUID().toString().replace("-", "").take(8) }
         viewModelScope.launch {
             matrizDao.insertOne(
                 MatrizEntity(
-                    id = nuevoId, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT,
+                    id = idFinal, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT,
                     ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado,
                     ubicacion = ubicacion, imagenUrl = null, imagenUrl2 = null, fecha = fecha,
                     hora = hora, ruta = ruta, folioP = folioP, isDirty = true

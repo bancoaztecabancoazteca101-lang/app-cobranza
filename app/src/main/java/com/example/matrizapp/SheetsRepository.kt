@@ -62,6 +62,18 @@ class SheetsRepository(
         true
     }
 
+    /** Renombra el ID (columna M en Matriz) de una fila ya existente en el Sheet, buscándola
+     * por su ID anterior. Usado cuando el usuario edita a mano el ID autogenerado (p. ej. para
+     * evitar que choque con uno que ya generó AppSheet). Devuelve false si la fila con el ID
+     * anterior no existe todavía en el Sheet (registro nuevo aún no sincronizado: no hay nada
+     * que renombrar remotamente, el ID nuevo se usará directamente en el próximo push). */
+    suspend fun renameRowId(sheetName: String, idAnterior: String, idNuevo: String, idColumn: String): Boolean = withContext(Dispatchers.IO) {
+        val rowIndex = findRowIndexById(sheetName, idAnterior, idColumn)
+        if (rowIndex == -1) return@withContext false
+        updateSheetCell(sheetName, idColumn, rowIndex, idNuevo)
+        true
+    }
+
     /** Agrega una fila nueva al final de la hoja (para registros creados desde la app). */
     suspend fun appendRow(sheetNameGuess: String, values: List<Any?>) = withContext(Dispatchers.IO) {
         val realName = resolveSheetName(sheetNameGuess)
