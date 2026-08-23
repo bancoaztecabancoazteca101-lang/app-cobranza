@@ -70,7 +70,7 @@ class NotificacionesHelper(private val context: Context) {
             val trigger = calcularTriggerHoy(item.hora!!) ?: continue
             if (trigger <= ahora) continue // ya pasó esa hora hoy: no tiene caso programarla
             idsNuevos.add(item.id)
-            programarAlarmaGenerica(alarmManager, crearPendingIntent(item.id, item.nombre, item.numTT, item.estado), trigger)
+            programarAlarmaGenerica(alarmManager, crearPendingIntent(item.id, item.nombre, item.numTT, item.estado, item.ubicacion), trigger)
         }
 
         // Cancela las alarmas de IDs que quedaron fuera del set nuevo (cambiaron de estado,
@@ -108,7 +108,7 @@ class NotificacionesHelper(private val context: Context) {
             // Prefijo "matriz_" para que nunca choque con un ID de Filtro Fecha idéntico.
             val idPrefijado = "matriz_${item.id}"
             idsNuevos.add(idPrefijado)
-            programarAlarmaGenerica(alarmManager, crearPendingIntent(idPrefijado, item.nombre, item.numTT, item.estado), trigger)
+            programarAlarmaGenerica(alarmManager, crearPendingIntent(idPrefijado, item.nombre, item.numTT, item.estado, item.ubicacion), trigger)
         }
 
         for (idViejo in idsAnteriores) {
@@ -151,12 +151,13 @@ class NotificacionesHelper(private val context: Context) {
         return cal.timeInMillis
     }
 
-    private fun crearPendingIntent(id: String, nombre: String, numTT: String?, estado: String): PendingIntent {
+    private fun crearPendingIntent(id: String, nombre: String, numTT: String?, estado: String, ubicacion: String? = null): PendingIntent {
         val intent = Intent(context, RetornoAlarmReceiver::class.java).apply {
             putExtra("id", id)
             putExtra("nombre", nombre)
             putExtra("numTT", numTT)
             putExtra("estado", estado)
+            putExtra("ubicacion", ubicacion)
         }
         return PendingIntent.getBroadcast(
             context, id.hashCode(), intent,
@@ -165,7 +166,7 @@ class NotificacionesHelper(private val context: Context) {
     }
 
     companion object {
-        fun mostrarNotificacion(context: Context, nombre: String, numTT: String?, estado: String?) {
+        fun mostrarNotificacion(context: Context, nombre: String, numTT: String?, estado: String?, calle: String?, ubicacion: String?) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
             }
@@ -173,14 +174,48 @@ class NotificacionesHelper(private val context: Context) {
                 "app" -> "App"
                 else -> "Retorno"
             }
-            val notif = NotificationCompat.Builder(context, CANAL_RETORNOS)
+            val texto = when {
+                !calle.isNullOrBlank() && !numTT.isNullOrBlank() -> "TT: $numTT — $calle"
+                !calle.isNullOrBlank() -> calle
+                !numTT.isNullOrBlank() -> "TT: $numTT — es hora de contactar"
+                else -> "Es hora de contactar"
+            }
+            val builder = NotificationCompat.Builder(context, CANAL_RETORNOS)
                 .setSmallIcon(android.R.drawable.ic_popup_reminder)
                 .setContentTitle("$etiqueta: $nombre")
-                .setContentText(if (!numTT.isNullOrBlank()) "TT: $numTT — es hora de contactar" else "Es hora de contactar")
+                .setContentText(texto)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
-                .build()
-            NotificationManagerCompat.from(context).notify(nombre.hashCode(), notif)
+
+            // Botón "Cómo llegar": abre Google Maps con navegación directa a las coordenadas
+            // guardadas del cliente.
+            val latLng = parseLatLngOrden(ubicacion)
+            if (latLng != null) {
+                val navIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=${latLng.first},${latLng.second}")).apply {
+                    setPackage("com.google.android.apps.maps")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                val navPendingIntent = PendingIntent.getActivity(
+                    context, "nav_${nombre.hashCode()}".hashCode(), navIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                builder.addAction(android.R.drawable.ic_menu_mylocation, "Cómo llegar", navPendingIntent)
+            }
+
+            // Botón "Llamar": abre el marcador con el número ya escrito (ACTION_DIAL no
+            // necesita permiso especial, a diferencia de ACTION_CALL).
+            if (!numTT.isNullOrBlank()) {
+                val dialIntent = Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:$numTT")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                val dialPendingIntent = PendingIntent.getActivity(
+                    context, "call_${nombre.hashCode()}".hashCode(), dialIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                builder.addAction(android.R.drawable.ic_menu_call, "Llamar", dialPendingIntent)
+            }
+
+            NotificationManagerCompat.from(context).notify(nombre.hashCode(), builder.build())
         }
     }
 }
