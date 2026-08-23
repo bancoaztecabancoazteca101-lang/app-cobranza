@@ -42,6 +42,9 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // La barra de estado del sistema (arriba del todo) no la pinta Compose: hay que
+        // fijarla a mano o si no queda con el morado por defecto del tema base Material3.
+        window.statusBarColor = android.graphics.Color.parseColor("#1565C0")
         val container = (application as MainApplication).container
         val factory = ViewModelFactory(container)
         val crashFile = java.io.File(filesDir, "crash_log.txt")
@@ -52,9 +55,26 @@ class MainActivity : ComponentActivity() {
                 onPrimary = Color.White,
                 primaryContainer = Color(0xFFD2E4FF),
                 onPrimaryContainer = Color(0xFF001D36),
+                inversePrimary = Color(0xFFA0CAFD),
                 secondary = Color(0xFF3A608F),
+                onSecondary = Color.White,
+                secondaryContainer = Color(0xFFD3E4FF),
+                onSecondaryContainer = Color(0xFF001D36),
+                tertiary = Color(0xFF2E5F6B),
+                onTertiary = Color.White,
+                tertiaryContainer = Color(0xFFD0E7F0),
+                onTertiaryContainer = Color(0xFF001F26),
                 background = Color(0xFFF3F7FD),
-                surface = Color(0xFFEAF1FB)
+                onBackground = Color(0xFF1A1C1E),
+                surface = Color(0xFFEAF1FB),
+                onSurface = Color(0xFF1A1C1E),
+                surfaceVariant = Color(0xFFDDE3EA),
+                onSurfaceVariant = Color(0xFF41474D),
+                outline = Color(0xFF71787E),
+                outlineVariant = Color(0xFFC1C7CE),
+                inverseSurface = Color(0xFF2E3133),
+                inverseOnSurface = Color(0xFFF0F0F3),
+                scrim = Color.Black
             )
             MaterialTheme(colorScheme = colorSchemeAzul) {
                 var crashLog by remember { mutableStateOf(previousCrash) }
