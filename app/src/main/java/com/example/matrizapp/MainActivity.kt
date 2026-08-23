@@ -1,6 +1,7 @@
 package com.example.matrizapp
 import android.Manifest
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -154,7 +155,11 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 LaunchedEffect(Unit) {
-                    permLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION))
+                    val permisos = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        permisos.add(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    permLauncher.launch(permisos.toTypedArray())
                 }
                 val drawerState = rememberDrawerState(DrawerValue.Closed)
                 val lastSyncLabel = if (isRefreshing) "Sincronizando…" else "Lista"

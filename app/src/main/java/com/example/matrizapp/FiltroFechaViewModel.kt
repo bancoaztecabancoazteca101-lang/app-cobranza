@@ -8,8 +8,19 @@ import kotlinx.coroutines.launch
 class FiltroFechaViewModel(
     private val repository: SheetsRepository,
     private val filtroDao: FiltroFechaDao,
-    val driveHelper: DriveHelper
+    val driveHelper: DriveHelper,
+    private val notificacionesHelper: NotificacionesHelper
 ) : ViewModel() {
+    init {
+        // Cada vez que cambian los datos de Filtro Fecha (sync, edición de estado/hora, etc.)
+        // se revisan los "Retorno" con hora y se reprograman/cancelan las alarmas locales.
+        viewModelScope.launch {
+            filtroDao.getAll().collect { items ->
+                notificacionesHelper.sincronizarAlarmasRetorno(items)
+            }
+        }
+    }
+
     private val _desde = MutableStateFlow<Long?>(null)
     val desde: StateFlow<Long?> = _desde
 
