@@ -14,10 +14,14 @@ import androidx.core.content.ContextCompat
 private const val CANAL_RETORNOS = "retornos_filtro_fecha"
 private const val PREFS_RETORNOS = "retornos_programados"
 
-/** Programa una notificación local a la hora puesta para cada registro de Filtro Fecha que
- * esté marcado como "Retorno", y las cancela cuando dejan de aplicar (cambian de estado, se
- * eliminan, o ya pasó su hora). No requiere conexión ni servidor: todo corre en el dispositivo
- * vía AlarmManager. */
+/** Estados que activan la notificación programada (además de "Retorno", también "App"). */
+private val ESTADOS_NOTIFICABLES = setOf("retorno", "app")
+private fun esEstadoNotificable(estado: String) = estado.trim().lowercase() in ESTADOS_NOTIFICABLES
+
+/** Programa una notificación local a la hora puesta para cada registro de Filtro Fecha o
+ * Matriz que esté marcado como "Retorno" o "App", y las cancela cuando dejan de aplicar
+ * (cambian de estado, se eliminan, o ya pasó su hora). No requiere conexión ni servidor: todo
+ * corre en el dispositivo vía AlarmManager. */
 class NotificacionesHelper(private val context: Context) {
     init { crearCanal() }
 
@@ -26,7 +30,7 @@ class NotificacionesHelper(private val context: Context) {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             if (nm.getNotificationChannel(CANAL_RETORNOS) == null) {
                 val canal = NotificationChannel(CANAL_RETORNOS, "Retornos programados", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Avisa a la hora puesta cuando un cliente en Filtro Fecha está marcado como Retorno"
+                    description = "Avisa a la hora puesta cuando un cliente está marcado como Retorno o App"
                 }
                 nm.createNotificationChannel(canal)
             }
@@ -38,8 +42,8 @@ class NotificacionesHelper(private val context: Context) {
      * si la notificación quedó programada). La programación real la hace
      * sincronizarAlarmasRetorno, que se dispara solo automáticamente al cambiar los datos. */
     fun evaluarProgramacion(estado: String, hora: String?): String? {
-        if (!estado.equals("Retorno", ignoreCase = true)) return null
-        if (hora.isNullOrBlank()) return "Marca \"Retorno\" y pon una Hora para programar el aviso"
+        if (!esEstadoNotificable(estado)) return null
+        if (hora.isNullOrBlank()) return "Marca \"Retorno\" o \"App\" y pon una Hora para programar el aviso"
         val trigger = calcularTriggerHoy(hora) ?: return "No se pudo interpretar la hora"
         val ahora = System.currentTimeMillis()
         return if (trigger <= ahora) {
@@ -59,21 +63,21 @@ class NotificacionesHelper(private val context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val ahora = System.currentTimeMillis()
 
-        val objetivos = items.filter { it.estado.equals("Retorno", ignoreCase = true) && !it.hora.isNullOrBlank() }
+        val objetivos = items.filter { esEstadoNotificable(it.estado) && !it.hora.isNullOrBlank() }
         val idsNuevos = mutableSetOf<String>()
 
         for (item in objetivos) {
             val trigger = calcularTriggerHoy(item.hora!!) ?: continue
             if (trigger <= ahora) continue // ya pasó esa hora hoy: no tiene caso programarla
             idsNuevos.add(item.id)
-            programarAlarma(alarmManager, item, trigger)
+            programarAlarmaGenerica(alarmManager, crearPendingIntent(item.id, item.nombre, item.numTT, item.estado), trigger)
         }
 
         // Cancela las alarmas de IDs que quedaron fuera del set nuevo (cambiaron de estado,
         // se eliminaron, o su hora ya pasó).
         for (idViejo in idsAnteriores) {
             if (idViejo !in idsNuevos) {
-                alarmManager.cancel(crearPendingIntent(idViejo, "", null))
+                alarmManager.cancel(crearPendingIntent(idViejo, "", null, ""))
             }
         }
 
@@ -83,7 +87,7 @@ class NotificacionesHelper(private val context: Context) {
     /** Igual que sincronizarAlarmasRetorno, pero para registros de Matriz. Solo considera los
      * que tienen Fecha de HOY: así el usuario puede registrar la visita directo en Matriz (sin
      * tener que ir también a editar Filtro Fecha) y le llega el aviso igual, pero sin arriesgarse
-     * a que se disparen de golpe decenas de "Retorno" viejos del historial al sincronizar. */
+     * a que se disparen de golpe decenas de "Retorno"/"App" viejos del historial al sincronizar. */
     fun sincronizarAlarmasRetornoMatriz(items: List<MatrizEntity>) {
         val prefs = context.getSharedPreferences(PREFS_RETORNOS, Context.MODE_PRIVATE)
         val idsAnteriores = prefs.getStringSet("ids_matriz", emptySet()) ?: emptySet()
@@ -92,7 +96,7 @@ class NotificacionesHelper(private val context: Context) {
         val hoyCal = java.util.Calendar.getInstance()
 
         val objetivos = items.filter { item ->
-            item.estado.equals("Retorno", ignoreCase = true) &&
+            esEstadoNotificable(item.estado) &&
                 !item.hora.isNullOrBlank() &&
                 item.fecha != null && esHoy(item.fecha!!, hoyCal)
         }
@@ -104,12 +108,12 @@ class NotificacionesHelper(private val context: Context) {
             // Prefijo "matriz_" para que nunca choque con un ID de Filtro Fecha idéntico.
             val idPrefijado = "matriz_${item.id}"
             idsNuevos.add(idPrefijado)
-            programarAlarmaGenerica(alarmManager, crearPendingIntent(idPrefijado, item.nombre, item.numTT), trigger)
+            programarAlarmaGenerica(alarmManager, crearPendingIntent(idPrefijado, item.nombre, item.numTT, item.estado), trigger)
         }
 
         for (idViejo in idsAnteriores) {
             if (idViejo !in idsNuevos) {
-                alarmManager.cancel(crearPendingIntent(idViejo, "", null))
+                alarmManager.cancel(crearPendingIntent(idViejo, "", null, ""))
             }
         }
 
@@ -120,10 +124,6 @@ class NotificacionesHelper(private val context: Context) {
         val cal = java.util.Calendar.getInstance().apply { timeInMillis = fechaMillis }
         return cal.get(java.util.Calendar.YEAR) == hoyCal.get(java.util.Calendar.YEAR) &&
             cal.get(java.util.Calendar.DAY_OF_YEAR) == hoyCal.get(java.util.Calendar.DAY_OF_YEAR)
-    }
-
-    private fun programarAlarma(alarmManager: AlarmManager, item: FiltroFechaEntity, trigger: Long) {
-        programarAlarmaGenerica(alarmManager, crearPendingIntent(item.id, item.nombre, item.numTT), trigger)
     }
 
     private fun programarAlarmaGenerica(alarmManager: AlarmManager, pendingIntent: PendingIntent, trigger: Long) {
@@ -151,11 +151,12 @@ class NotificacionesHelper(private val context: Context) {
         return cal.timeInMillis
     }
 
-    private fun crearPendingIntent(id: String, nombre: String, numTT: String?): PendingIntent {
+    private fun crearPendingIntent(id: String, nombre: String, numTT: String?, estado: String): PendingIntent {
         val intent = Intent(context, RetornoAlarmReceiver::class.java).apply {
             putExtra("id", id)
             putExtra("nombre", nombre)
             putExtra("numTT", numTT)
+            putExtra("estado", estado)
         }
         return PendingIntent.getBroadcast(
             context, id.hashCode(), intent,
@@ -164,13 +165,17 @@ class NotificacionesHelper(private val context: Context) {
     }
 
     companion object {
-        fun mostrarNotificacion(context: Context, nombre: String, numTT: String?) {
+        fun mostrarNotificacion(context: Context, nombre: String, numTT: String?, estado: String?) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
             }
+            val etiqueta = when (estado?.trim()?.lowercase()) {
+                "app" -> "App"
+                else -> "Retorno"
+            }
             val notif = NotificationCompat.Builder(context, CANAL_RETORNOS)
                 .setSmallIcon(android.R.drawable.ic_popup_reminder)
-                .setContentTitle("Retorno: $nombre")
+                .setContentTitle("$etiqueta: $nombre")
                 .setContentText(if (!numTT.isNullOrBlank()) "TT: $numTT — es hora de contactar" else "Es hora de contactar")
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
