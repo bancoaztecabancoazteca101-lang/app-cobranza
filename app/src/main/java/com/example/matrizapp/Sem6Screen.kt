@@ -34,9 +34,9 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
             val q = searchQuery.trim()
-            item.nombre.contains(q, ignoreCase = true) ||
-                item.cu.contains(q, ignoreCase = true) ||
-                item.id.contains(q, ignoreCase = true)
+            coincideBusqueda(item.nombre, q) ||
+                coincideBusqueda(item.cu, q) ||
+                coincideBusqueda(item.id, q)
         }
     }
 

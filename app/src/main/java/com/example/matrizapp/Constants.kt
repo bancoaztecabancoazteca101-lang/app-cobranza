@@ -87,3 +87,18 @@ fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
         kotlin.math.cos(la1) * kotlin.math.cos(la2) * kotlin.math.sin(dLon / 2).let { it * it }
     return 2 * r * kotlin.math.asin(kotlin.math.sqrt(h))
 }
+
+/** Quita acentos/diacríticos (á->a, é->e, ñ se mantiene... en realidad ñ no lleva tilde de
+ * acento así que también se normaliza é,í,ó,ú,ü). Usado para que la búsqueda encuentre
+ * "Jesus" y "Jesús" como el mismo texto, sin importar cuál se haya escrito en el Sheet o
+ * en el campo de búsqueda. */
+fun quitarAcentos(texto: String): String {
+    val normalizado = java.text.Normalizer.normalize(texto, java.text.Normalizer.Form.NFD)
+    return normalizado.replace(Regex("\\p{Mn}+"), "")
+}
+
+/** Compara texto contra una búsqueda ignorando mayúsculas/minúsculas Y acentos. */
+fun coincideBusqueda(texto: String?, query: String): Boolean {
+    if (texto.isNullOrBlank()) return false
+    return quitarAcentos(texto).contains(quitarAcentos(query), ignoreCase = true)
+}

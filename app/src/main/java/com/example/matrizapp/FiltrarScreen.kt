@@ -18,10 +18,10 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
             val q = searchQuery.trim()
-            item.nombre.contains(q, ignoreCase = true) ||
-                item.numTT.contains(q, ignoreCase = true) ||
-                item.observaciones?.contains(q, ignoreCase = true) == true ||
-                item.estado.contains(q, ignoreCase = true)
+            coincideBusqueda(item.nombre, q) ||
+                coincideBusqueda(item.numTT, q) ||
+                coincideBusqueda(item.observaciones, q) ||
+                coincideBusqueda(item.estado, q)
         }
     }
     var itemToEdit by remember { mutableStateOf<FiltrarEntity?>(null) }

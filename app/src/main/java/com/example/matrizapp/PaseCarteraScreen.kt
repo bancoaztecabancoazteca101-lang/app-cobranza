@@ -18,11 +18,11 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
             val q = searchQuery.trim()
-            item.nombre.contains(q, ignoreCase = true) ||
-                item.numTT.contains(q, ignoreCase = true) ||
-                item.ref1.contains(q, ignoreCase = true) ||
-                item.ref2.contains(q, ignoreCase = true) ||
-                item.estado.contains(q, ignoreCase = true)
+            coincideBusqueda(item.nombre, q) ||
+                coincideBusqueda(item.numTT, q) ||
+                coincideBusqueda(item.ref1, q) ||
+                coincideBusqueda(item.ref2, q) ||
+                coincideBusqueda(item.estado, q)
         }
     }
     var itemToEdit by remember { mutableStateOf<PaseEntity?>(null) }

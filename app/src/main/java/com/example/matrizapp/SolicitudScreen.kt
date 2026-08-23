@@ -27,11 +27,11 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
             val q = searchQuery.trim()
-            item.nombre.contains(q, ignoreCase = true) ||
-                item.estado.contains(q, ignoreCase = true) ||
-                item.numero?.contains(q, ignoreCase = true) == true ||
-                item.sucursal?.contains(q, ignoreCase = true) == true ||
-                item.ubicacionRaw?.contains(q, ignoreCase = true) == true
+            coincideBusqueda(item.nombre, q) ||
+                coincideBusqueda(item.estado, q) ||
+                coincideBusqueda(item.numero, q) ||
+                coincideBusqueda(item.sucursal, q) ||
+                coincideBusqueda(item.ubicacionRaw, q)
         }
     }
     val isRecording by viewModel.isRecording.collectAsState()
