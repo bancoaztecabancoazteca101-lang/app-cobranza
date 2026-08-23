@@ -72,7 +72,10 @@ class FiltroFechaViewModel(
 
     /** Guarda status y hora localmente (Room) y los marca dirty para subirlos al Sheet
      * (columnas H y N respectivamente) en el próximo sync. */
-    fun guardarEstadoYHora(id: String, nuevoEstado: String, nuevaHora: String) {
-        viewModelScope.launch { filtroDao.updateEstadoYHoraLocal(id, nuevoEstado, nuevaHora) }
+    fun guardarEstadoYHora(id: String, nuevoEstado: String, nuevaHora: String, onResult: (String?) -> Unit = {}) {
+        viewModelScope.launch {
+            filtroDao.updateEstadoYHoraLocal(id, nuevoEstado, nuevaHora)
+            onResult(notificacionesHelper.evaluarProgramacion(nuevoEstado, nuevaHora))
+        }
     }
 }

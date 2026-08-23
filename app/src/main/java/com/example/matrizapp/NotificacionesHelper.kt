@@ -33,6 +33,23 @@ class NotificacionesHelper(private val context: Context) {
         }
     }
 
+    /** Evalúa (sin programar nada todavía) qué pasaría con este registro específico, para
+     * mostrarle al usuario un mensaje claro justo al guardar (en vez de que tenga que adivinar
+     * si la notificación quedó programada). La programación real la hace
+     * sincronizarAlarmasRetorno, que se dispara solo automáticamente al cambiar los datos. */
+    fun evaluarProgramacion(estado: String, hora: String?): String? {
+        if (!estado.equals("Retorno", ignoreCase = true)) return null
+        if (hora.isNullOrBlank()) return "Marca \"Retorno\" y pon una Hora para programar el aviso"
+        val trigger = calcularTriggerHoy(hora) ?: return "No se pudo interpretar la hora"
+        val ahora = System.currentTimeMillis()
+        return if (trigger <= ahora) {
+            "Esa hora ya pasó — no se programó notificación"
+        } else {
+            val df = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+            "Notificación programada para las ${df.format(java.util.Date(trigger))}"
+        }
+    }
+
     /** Se debe llamar cada vez que se actualiza la lista completa de Filtro Fecha (no la
      * filtrada por rango de fechas, sino todos los registros), para mantener las alarmas
      * sincronizadas con el estado actual de cada uno. */

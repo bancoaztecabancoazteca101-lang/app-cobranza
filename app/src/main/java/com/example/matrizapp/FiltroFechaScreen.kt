@@ -21,6 +21,7 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
     val allItems by viewModel.filteredList.collectAsState()
     val df = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
     var itemToView by remember { mutableStateOf<FiltroFechaEntity?>(null) }
+    val context = LocalContext.current
 
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
@@ -45,7 +46,13 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
         FiltroFechaDetailDialog(
             item = item, df = df, driveHelper = viewModel.driveHelper,
             onDismiss = { itemToView = null },
-            onGuardarEstadoYHora = { id, estado, hora -> viewModel.guardarEstadoYHora(id, estado, hora) }
+            onGuardarEstadoYHora = { id, estado, hora ->
+                viewModel.guardarEstadoYHora(id, estado, hora) { mensaje ->
+                    if (mensaje != null) {
+                        android.widget.Toast.makeText(context, mensaje, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
         )
     }
 }
