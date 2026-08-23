@@ -22,10 +22,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 // Color Palette - Claymorphism Style
-val ClayBackground = Color(0xFFF4F3FA)
-val ClaySurface = Color(0xFFEEEEF8)
-val ClayPrimary = Color(0xFF673AB7)
-val ClayPrimaryContainer = Color(0xFFE8DDFF)
+val ClayBackground = Color(0xFFF3F7FD)
+val ClaySurface = Color(0xFFEAF1FB)
+val ClayPrimary = Color(0xFF1565C0)
+val ClayPrimaryContainer = Color(0xFFD2E4FF)
 val ClayOnSurface = Color(0xFF1D1B20)
 val ClayGreenSuccess = Color(0xFF2E7D32)
 val ClayWhatsAppGreen = Color(0xFF25D366)

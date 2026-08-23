@@ -47,7 +47,16 @@ class MainActivity : ComponentActivity() {
         val crashFile = java.io.File(filesDir, "crash_log.txt")
         val previousCrash = if (crashFile.exists()) crashFile.readText().also { crashFile.delete() } else null
         setContent {
-            MaterialTheme {
+            val colorSchemeAzul = lightColorScheme(
+                primary = Color(0xFF1565C0),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFD2E4FF),
+                onPrimaryContainer = Color(0xFF001D36),
+                secondary = Color(0xFF3A608F),
+                background = Color(0xFFF3F7FD),
+                surface = Color(0xFFEAF1FB)
+            )
+            MaterialTheme(colorScheme = colorSchemeAzul) {
                 var crashLog by remember { mutableStateOf(previousCrash) }
                 crashLog?.let { text ->
                     AlertDialog(
