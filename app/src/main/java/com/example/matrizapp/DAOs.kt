@@ -86,6 +86,8 @@ interface SolicitudDao {
     suspend fun getDirtyItems(): List<SolicitudEntity>
     @Query("UPDATE solicitud_table SET isDirty = 0, audioUrl = :remoteAudio, imageUrl = :remoteImg, imageUrl2 = :remoteImg2, imageUrl3 = :remoteImg3, imageUrl4 = :remoteImg4, lastSync = :syncTime WHERE id = :id")
     suspend fun markAsClean(id: String, remoteAudio: String?, remoteImg: String? = null, remoteImg2: String? = null, remoteImg3: String? = null, remoteImg4: String? = null, syncTime: Long = System.currentTimeMillis())
+    @Query("DELETE FROM solicitud_table WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao

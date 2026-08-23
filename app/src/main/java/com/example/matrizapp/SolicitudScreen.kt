@@ -35,6 +35,8 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
         }
     }
     val isRecording by viewModel.isRecording.collectAsState()
+    val deleteInProgress by viewModel.deleteInProgress.collectAsState()
+    var itemToDelete by remember { mutableStateOf<SolicitudEntity?>(null) }
     val context = LocalContext.current
     var activeIdForAudio by remember { mutableStateOf("") }
     var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
@@ -75,7 +77,8 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
                     SolicitudItemCard(
                         item = item,
                         onCardClick = { itemToEditId = item.id },
-                        onShareWhatsApp = { compartir(item) }
+                        onShareWhatsApp = { compartir(item) },
+                        onDeleteClick = { itemToDelete = item }
                     )
                 }
             }
@@ -93,6 +96,33 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
 
         fullScreenImageUrl?.let { url ->
             ImageDetailDialog(url = url, onDismiss = { fullScreenImageUrl = null })
+        }
+
+        itemToDelete?.let { item ->
+            AlertDialog(
+                onDismissRequest = { if (!deleteInProgress) itemToDelete = null },
+                title = { Text("Eliminar registro") },
+                text = { Text("¿Seguro que quieres eliminar a \"${item.nombre}\"? Esta acción borra el registro tanto en la app como en la hoja de Google Sheets y no se puede deshacer.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.eliminarRegistro(item.id) { exito, error ->
+                                itemToDelete = null
+                                Toast.makeText(
+                                    context,
+                                    if (exito) "Registro eliminado" else "No se pudo eliminar: ${error ?: "sin conexión"}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        },
+                        enabled = !deleteInProgress,
+                        colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                    ) { Text(if (deleteInProgress) "Eliminando…" else "Eliminar") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { itemToDelete = null }, enabled = !deleteInProgress) { Text("Cancelar") }
+                }
+            )
         }
 
         audioPendiente?.let { (uri, nombre) ->
@@ -176,13 +206,17 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
 fun SolicitudItemCard(
     item: SolicitudEntity,
     onCardClick: () -> Unit,
-    onShareWhatsApp: () -> Unit
+    onShareWhatsApp: () -> Unit,
+    onDeleteClick: () -> Unit = {}
 ) {
     Card(onClick = onCardClick, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(text = item.nombre, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 StatusBadge(estado = item.estado)
+                IconButton(onClick = onDeleteClick, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, contentDescription = "Eliminar registro", tint = Color.Gray)
+                }
             }
             Text(
                 text = item.observaciones?.takeIf { it.isNotBlank() } ?: "Sin observaciones",

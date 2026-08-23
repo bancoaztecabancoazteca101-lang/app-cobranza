@@ -49,6 +49,9 @@ class SolicitudViewModel(
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
 
+    private val _deleteInProgress = MutableStateFlow(false)
+    val deleteInProgress: StateFlow<Boolean> = _deleteInProgress
+
     fun startRecording() {
         audioHelper.startRecording()
         _isRecording.value = true
@@ -247,6 +250,21 @@ class SolicitudViewModel(
         viewModelScope.launch {
             val uri = resolverArchivoComoUri(context, driveHelper, raw, "vista_${System.currentTimeMillis()}.jpg")
             onResultado(uri?.toString())
+        }
+    }
+
+    fun eliminarRegistro(id: String, onResult: (exito: Boolean, error: String?) -> Unit) {
+        viewModelScope.launch {
+            _deleteInProgress.value = true
+            try {
+                repository.deleteRowById(Constants.SHEET_SOLICITUD, id, Constants.SolicitudCols.COL_ID)
+                solicitudDao.deleteById(id)
+                onResult(true, null)
+            } catch (e: Exception) {
+                onResult(false, e.message)
+            } finally {
+                _deleteInProgress.value = false
+            }
         }
     }
 
