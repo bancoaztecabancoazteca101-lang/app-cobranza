@@ -17,8 +17,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val db = AppDatabase.getDatabase(context.applicationContext)
-                val items = db.filtroDao().getAll().first()
-                NotificacionesHelper(context.applicationContext).sincronizarAlarmasRetorno(items)
+                val helper = NotificacionesHelper(context.applicationContext)
+                helper.sincronizarAlarmasRetorno(db.filtroDao().getAll().first())
+                helper.sincronizarAlarmasRetornoMatriz(db.matrizDao().getAllMatriz().first())
             } catch (e: Exception) {
                 // Si algo falla aquí no hay forma de avisarle al usuario (no hay UI); se
                 // reintentará solo la próxima vez que se abra la app y cambien los datos.

@@ -80,8 +80,53 @@ class NotificacionesHelper(private val context: Context) {
         prefs.edit().putStringSet("ids", idsNuevos).apply()
     }
 
+    /** Igual que sincronizarAlarmasRetorno, pero para registros de Matriz. Solo considera los
+     * que tienen Fecha de HOY: así el usuario puede registrar la visita directo en Matriz (sin
+     * tener que ir también a editar Filtro Fecha) y le llega el aviso igual, pero sin arriesgarse
+     * a que se disparen de golpe decenas de "Retorno" viejos del historial al sincronizar. */
+    fun sincronizarAlarmasRetornoMatriz(items: List<MatrizEntity>) {
+        val prefs = context.getSharedPreferences(PREFS_RETORNOS, Context.MODE_PRIVATE)
+        val idsAnteriores = prefs.getStringSet("ids_matriz", emptySet()) ?: emptySet()
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val ahora = System.currentTimeMillis()
+        val hoyCal = java.util.Calendar.getInstance()
+
+        val objetivos = items.filter { item ->
+            item.estado.equals("Retorno", ignoreCase = true) &&
+                !item.hora.isNullOrBlank() &&
+                item.fecha != null && esHoy(item.fecha!!, hoyCal)
+        }
+        val idsNuevos = mutableSetOf<String>()
+
+        for (item in objetivos) {
+            val trigger = calcularTriggerHoy(item.hora!!) ?: continue
+            if (trigger <= ahora) continue
+            // Prefijo "matriz_" para que nunca choque con un ID de Filtro Fecha idéntico.
+            val idPrefijado = "matriz_${item.id}"
+            idsNuevos.add(idPrefijado)
+            programarAlarmaGenerica(alarmManager, crearPendingIntent(idPrefijado, item.nombre, item.numTT), trigger)
+        }
+
+        for (idViejo in idsAnteriores) {
+            if (idViejo !in idsNuevos) {
+                alarmManager.cancel(crearPendingIntent(idViejo, "", null))
+            }
+        }
+
+        prefs.edit().putStringSet("ids_matriz", idsNuevos).apply()
+    }
+
+    private fun esHoy(fechaMillis: Long, hoyCal: java.util.Calendar): Boolean {
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = fechaMillis }
+        return cal.get(java.util.Calendar.YEAR) == hoyCal.get(java.util.Calendar.YEAR) &&
+            cal.get(java.util.Calendar.DAY_OF_YEAR) == hoyCal.get(java.util.Calendar.DAY_OF_YEAR)
+    }
+
     private fun programarAlarma(alarmManager: AlarmManager, item: FiltroFechaEntity, trigger: Long) {
-        val pendingIntent = crearPendingIntent(item.id, item.nombre, item.numTT)
+        programarAlarmaGenerica(alarmManager, crearPendingIntent(item.id, item.nombre, item.numTT), trigger)
+    }
+
+    private fun programarAlarmaGenerica(alarmManager: AlarmManager, pendingIntent: PendingIntent, trigger: Long) {
         val puedeExacta = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarmManager.canScheduleExactAlarms() else true
         try {
             if (puedeExacta) {

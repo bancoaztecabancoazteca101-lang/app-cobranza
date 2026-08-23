@@ -20,8 +20,20 @@ class MatrizViewModel(
     private val repository: SheetsRepository,
     private val matrizDao: MatrizDao,
     private val workManager: WorkManager,
-    val driveHelper: DriveHelper
+    val driveHelper: DriveHelper,
+    private val notificacionesHelper: NotificacionesHelper
 ) : ViewModel() {
+    init {
+        // Igual que en Filtro Fecha: cada vez que cambian los datos de Matriz se revisan los
+        // "Retorno" de HOY con hora y se reprograman/cancelan las alarmas locales. Así no hace
+        // falta ir también a Filtro Fecha a repetir la captura.
+        viewModelScope.launch {
+            matrizDao.getAllMatriz().collect { items ->
+                notificacionesHelper.sincronizarAlarmasRetornoMatriz(items)
+            }
+        }
+    }
+
     private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
     val orden: StateFlow<OrdenLista> = _orden
     private val _miUbicacion = MutableStateFlow<Pair<Double, Double>?>(null)
