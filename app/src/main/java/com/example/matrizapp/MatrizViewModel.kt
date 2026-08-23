@@ -6,6 +6,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,9 +26,12 @@ class MatrizViewModel(
 ) : ViewModel() {
     init {
         // Igual que en Filtro Fecha: cada vez que cambian los datos de Matriz se revisan los
-        // "Retorno" de HOY con hora y se reprograman/cancelan las alarmas locales. Así no hace
-        // falta ir también a Filtro Fecha a repetir la captura.
-        viewModelScope.launch {
+        // "Retorno"/"App" de HOY con hora y se reprograman/cancelan las alarmas locales. Así no
+        // hace falta ir también a Filtro Fecha a repetir la captura. Corre en Dispatchers.IO
+        // (no en el hilo principal) para no causar lag al presionar botones cada vez que se
+        // sincronizan datos: recorrer toda la lista y llamar repetidamente a AlarmManager es
+        // trabajo que no debe bloquear la UI.
+        viewModelScope.launch(Dispatchers.IO) {
             matrizDao.getAllMatriz().collect { items ->
                 notificacionesHelper.sincronizarAlarmasRetornoMatriz(items)
             }

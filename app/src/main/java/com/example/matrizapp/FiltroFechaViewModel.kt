@@ -1,6 +1,7 @@
 package com.example.matrizapp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -14,7 +15,10 @@ class FiltroFechaViewModel(
     init {
         // Cada vez que cambian los datos de Filtro Fecha (sync, edición de estado/hora, etc.)
         // se revisan los "Retorno" con hora y se reprograman/cancelan las alarmas locales.
-        viewModelScope.launch {
+        // Corre en Dispatchers.IO (no en el hilo principal) porque recorre toda la lista y
+        // llama repetidamente a AlarmManager/SharedPreferences: hacerlo en el hilo de UI era
+        // la causa del lag al presionar botones cada vez que se sincronizaban datos.
+        viewModelScope.launch(Dispatchers.IO) {
             filtroDao.getAll().collect { items ->
                 notificacionesHelper.sincronizarAlarmasRetorno(items)
             }

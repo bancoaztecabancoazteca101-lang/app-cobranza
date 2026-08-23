@@ -64,13 +64,18 @@ class NotificacionesHelper(private val context: Context) {
         val ahora = System.currentTimeMillis()
 
         val objetivos = items.filter { esEstadoNotificable(it.estado) && !it.hora.isNullOrBlank() }
+        // Atajo: si no hay ningún candidato y tampoco había nada programado antes, no hay
+        // nada que hacer (evita tocar AlarmManager/SharedPreferences en cada sync sin motivo).
+        if (objetivos.isEmpty() && idsAnteriores.isEmpty()) return
+
+        val puedeExacta = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarmManager.canScheduleExactAlarms() else true
         val idsNuevos = mutableSetOf<String>()
 
         for (item in objetivos) {
             val trigger = calcularTriggerHoy(item.hora!!) ?: continue
             if (trigger <= ahora) continue // ya pasó esa hora hoy: no tiene caso programarla
             idsNuevos.add(item.id)
-            programarAlarmaGenerica(alarmManager, crearPendingIntent(item.id, item.nombre, item.numTT, item.estado, item.ubicacion), trigger)
+            programarAlarmaGenerica(alarmManager, crearPendingIntent(item.id, item.nombre, item.numTT, item.estado, item.ubicacion), trigger, puedeExacta)
         }
 
         // Cancela las alarmas de IDs que quedaron fuera del set nuevo (cambiaron de estado,
@@ -100,6 +105,9 @@ class NotificacionesHelper(private val context: Context) {
                 !item.hora.isNullOrBlank() &&
                 item.fecha != null && esHoy(item.fecha!!, hoyCal)
         }
+        if (objetivos.isEmpty() && idsAnteriores.isEmpty()) return
+
+        val puedeExacta = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarmManager.canScheduleExactAlarms() else true
         val idsNuevos = mutableSetOf<String>()
 
         for (item in objetivos) {
@@ -108,7 +116,7 @@ class NotificacionesHelper(private val context: Context) {
             // Prefijo "matriz_" para que nunca choque con un ID de Filtro Fecha idéntico.
             val idPrefijado = "matriz_${item.id}"
             idsNuevos.add(idPrefijado)
-            programarAlarmaGenerica(alarmManager, crearPendingIntent(idPrefijado, item.nombre, item.numTT, item.estado, item.ubicacion), trigger)
+            programarAlarmaGenerica(alarmManager, crearPendingIntent(idPrefijado, item.nombre, item.numTT, item.estado, item.ubicacion), trigger, puedeExacta)
         }
 
         for (idViejo in idsAnteriores) {
@@ -126,8 +134,7 @@ class NotificacionesHelper(private val context: Context) {
             cal.get(java.util.Calendar.DAY_OF_YEAR) == hoyCal.get(java.util.Calendar.DAY_OF_YEAR)
     }
 
-    private fun programarAlarmaGenerica(alarmManager: AlarmManager, pendingIntent: PendingIntent, trigger: Long) {
-        val puedeExacta = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarmManager.canScheduleExactAlarms() else true
+    private fun programarAlarmaGenerica(alarmManager: AlarmManager, pendingIntent: PendingIntent, trigger: Long, puedeExacta: Boolean) {
         try {
             if (puedeExacta) {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pendingIntent)
