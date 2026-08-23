@@ -795,8 +795,20 @@ fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista, Pair<Doub
 suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): String? = suspendCancellableCoroutine { cont ->
     try {
         val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+        val alturaImagen = image.height
         val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
             com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
+        )
+        // Palabras/frases típicas de encabezados, pasos (stepper) y botones de apps como
+        // AppSheet/CONTENCION que NO son el nombre del cliente. Se descartan aunque cumplan
+        // el resto de criterios (2-5 palabras, solo letras), porque si no ganan por ser más
+        // grandes/gruesas que el nombre real.
+        val palabrasUi = listOf(
+            "resumen del cliente", "expediente del cliente", "ver expediente", "ver otros lugares",
+            "prepárate", "preparate", "en ruta", "localiza", "contacta", "cobra",
+            "monto solicitado", "folio de solicitud", "torre de control", "temporizador",
+            "espera en el lugar", "seguimiento a esta solicitud", "continuar con tu ruta",
+            "originación", "originacion", "días de atraso", "dias de atraso", "último pago", "ultimo pago"
         )
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
@@ -805,11 +817,17 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
                 for (block in visionText.textBlocks) {
                     for (line in block.lines) {
                         val texto = line.text.trim()
+                        val box = line.boundingBox
+                        // Ignora todo lo que esté en el primer 25% superior de la imagen: ahí
+                        // suele estar la barra de estado, el título de la pantalla y el stepper
+                        // de pasos (Prepárate/En ruta/Localiza/...), nunca el nombre del cliente.
+                        val enZonaEncabezado = box != null && alturaImagen > 0 && box.top < alturaImagen * 0.25
+                        val esPalabraUi = palabrasUi.any { texto.contains(it, ignoreCase = true) }
                         val soloLetras = texto.replace(" ", "").isNotEmpty() &&
                             texto.replace(" ", "").all { it.isLetter() }
                         val palabras = texto.split(" ").filter { it.isNotBlank() }
-                        if (soloLetras && palabras.size in 2..5 && texto.length in 5..40) {
-                            val altura = line.boundingBox?.height() ?: 0
+                        if (soloLetras && !esPalabraUi && !enZonaEncabezado && palabras.size in 2..5 && texto.length in 5..40) {
+                            val altura = box?.height() ?: 0
                             if (altura > mejorAltura) { mejorAltura = altura; mejorLinea = texto }
                         }
                     }
