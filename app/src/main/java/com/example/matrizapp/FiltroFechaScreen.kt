@@ -2,8 +2,11 @@ package com.example.matrizapp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +24,7 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
     val allItems by viewModel.filteredList.collectAsState()
     val df = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
     var itemToView by remember { mutableStateOf<FiltroFechaEntity?>(null) }
+    var itemToEdit by remember { mutableStateOf<FiltroFechaEntity?>(null) }
     val context = LocalContext.current
 
     val items = remember(allItems, searchQuery) {
@@ -42,10 +46,23 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
         }
     }
 
+    // Igual que en Matriz: primero se abre la vista rápida (solo lectura + botones de
+    // contacto), y el botón "Editar" hasta abajo pasa al formulario de Estado/Hora.
     itemToView?.let { item ->
         FiltroFechaDetailDialog(
             item = item, df = df, driveHelper = viewModel.driveHelper,
             onDismiss = { itemToView = null },
+            onEditClick = {
+                itemToEdit = item
+                itemToView = null
+            }
+        )
+    }
+
+    itemToEdit?.let { item ->
+        FiltroFechaEditDialog(
+            item = item,
+            onDismiss = { itemToEdit = null },
             onGuardarEstadoYHora = { id, estado, hora ->
                 viewModel.guardarEstadoYHora(id, estado, hora) { mensaje ->
                     if (mensaje != null) {
@@ -87,10 +104,56 @@ fun FiltroItemCard(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: D
     }
 }
 
+/**
+ * Vista rápida de un registro de Filtro Fecha (solo lectura), igual que la ventana de
+ * acción rápida de AppSheet: info + botones de llamar/SMS/Maps arriba, botón de
+ * "Editar" hasta abajo para pasar a FiltroFechaEditDialog (Status y Hora).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FiltroFechaDetailDialog(
     item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: DriveHelper,
+    onDismiss: () -> Unit, onEditClick: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.nombre) },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 140.dp)
+                }
+                Text("Num TT: ${item.numTT}")
+                StatusBadge(estado = item.estado)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text("Fecha: ${df.format(Date(item.fecha))}")
+                if (!item.hora.isNullOrBlank()) Text("Hora: ${item.hora}")
+                if (!item.req.isNullOrBlank()) Text("Req: ${item.req}")
+                Text("Observaciones: ${item.observaciones ?: "Sin observaciones"}")
+                ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ref2 = item.ref2, ubicacion = item.ubicacion)
+            }
+        },
+        confirmButton = {
+            Button(onClick = onEditClick) {
+                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Editar")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+    )
+}
+
+/** Edición de Status y Hora de un registro de Filtro Fecha (lo único editable en esta hoja). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FiltroFechaEditDialog(
+    item: FiltroFechaEntity,
     onDismiss: () -> Unit, onGuardarEstadoYHora: (id: String, nuevoEstado: String, nuevaHora: String) -> Unit
 ) {
     val context = LocalContext.current
@@ -100,14 +163,9 @@ fun FiltroFechaDetailDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(item.nombre) },
+        title = { Text("Editar: ${item.nombre}") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 120.dp)
-                }
-                Text("Num TT: ${item.numTT}")
-
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ExposedDropdownMenuBox(expanded = estadoMenuExpanded, onExpandedChange = { estadoMenuExpanded = it }) {
                     OutlinedTextField(
                         value = estado, onValueChange = { estado = it }, label = { Text("Status") },
@@ -123,7 +181,6 @@ fun FiltroFechaDetailDialog(
                     }
                 }
 
-                Text("Fecha: ${df.format(Date(item.fecha))}")
                 OutlinedTextField(
                     value = hora, onValueChange = { hora = it }, label = { Text("Hora") },
                     readOnly = true,
@@ -140,16 +197,12 @@ fun FiltroFechaDetailDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("Observaciones: ${item.observaciones ?: "Sin observaciones"}")
-                ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(8.dp))
-                ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ref2 = item.ref2, ubicacion = item.ubicacion)
             }
         },
         confirmButton = {
             Button(onClick = { onGuardarEstadoYHora(item.id, estado, hora); onDismiss() }) { Text("Guardar") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
 }
 

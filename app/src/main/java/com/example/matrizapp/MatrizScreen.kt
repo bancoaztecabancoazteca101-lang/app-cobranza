@@ -3,6 +3,8 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,6 +16,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
@@ -21,6 +26,7 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
     val allItems by viewModel.matrizList.collectAsState()
     val deleteInProgress by viewModel.deleteInProgress.collectAsState()
     var itemToEdit by remember { mutableStateOf<MatrizEntity?>(null) }
+    var itemToView by remember { mutableStateOf<MatrizEntity?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<MatrizEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -49,7 +55,7 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
                     MatrizItemCard(
                         item = item,
                         driveHelper = viewModel.driveHelper,
-                        onCardClick = { itemToEdit = item },
+                        onCardClick = { itemToView = item },
                         onDeleteClick = { itemToDelete = item }
                     )
                 }
@@ -60,6 +66,21 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
         ) { Icon(Icons.Default.Add, contentDescription = "Nuevo registro") }
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+
+    // Al tocar un registro se abre primero la vista rápida (como en AppSheet): datos +
+    // botones de llamar/SMS/Maps, con el botón de editar hasta abajo. Editar de verdad
+    // (todos los campos) sigue viviendo en MatrizFullFormDialog, que se abre desde ahí.
+    itemToView?.let { item ->
+        MatrizDetailDialog(
+            item = item,
+            driveHelper = viewModel.driveHelper,
+            onDismiss = { itemToView = null },
+            onEditClick = {
+                itemToEdit = item
+                itemToView = null
+            }
+        )
     }
 
     itemToEdit?.let { item ->
@@ -119,6 +140,74 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
             }
         )
     }
+}
+
+/** Formatea el Req como precio: "199" -> "$199". Si no es numérico, regresa el valor tal cual. */
+private fun formatearMontoMatriz(req: String): String {
+    val limpio = req.replace("[^0-9.]".toRegex(), "")
+    val numero = limpio.toDoubleOrNull() ?: return req
+    val formateador = java.text.NumberFormat.getNumberInstance(Locale("es", "MX")).apply {
+        maximumFractionDigits = 0
+    }
+    return "$" + formateador.format(numero)
+}
+
+/**
+ * Vista rápida de un registro de Matriz (igual que la ventana de acción rápida de AppSheet):
+ * muestra toda la info de un vistazo con los botones de llamar/SMS/Maps arriba, y el botón
+ * de "Editar" hasta abajo para pasar al formulario completo solo cuando de verdad hace falta.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MatrizDetailDialog(
+    item: MatrizEntity,
+    driveHelper: DriveHelper,
+    onDismiss: () -> Unit,
+    onEditClick: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.nombre) },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 160.dp)
+                }
+                Text("ID: ${item.id}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                StatusBadge(estado = item.estado)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text("Sem: ${item.semana}  ·  Req: ${formatearMontoMatriz(item.requisito)}")
+                if (item.numTT.isNotBlank()) Text("Num TT: ${item.numTT}")
+                if (item.ref1.isNotBlank()) Text("Ref 1: ${item.ref1}")
+                if (item.ref2.isNotBlank()) Text("Ref 2: ${item.ref2}")
+                item.fecha?.let {
+                    Text("Fecha: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it))}")
+                }
+                if (!item.hora.isNullOrBlank()) Text("Hora: ${item.hora}")
+                if (!item.folioP.isNullOrBlank()) Text("CU: ${item.folioP}")
+                if (!item.ruta.isNullOrBlank()) Text("Ruta: ${item.ruta}")
+                ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
+                CalleLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
+                if (!item.observaciones.isNullOrBlank()) {
+                    Divider()
+                    Text("Observaciones: ${item.observaciones}")
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ref2 = item.ref2, ubicacion = item.ubicacion)
+            }
+        },
+        confirmButton = {
+            Button(onClick = onEditClick) {
+                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Editar")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
