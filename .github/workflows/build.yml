@@ -45,12 +45,18 @@ jobs:
         if: env.BUILD_FAILED == 'true'
         run: exit 1
 
+      # El APK ya queda respaldado de forma permanente en el GitHub Release "latest-debug"
+      # (paso de abajo), asi que este artifact de Actions es solo un respaldo de corto plazo
+      # del run individual. Sin retention-days se acumulaba para siempre y llenaba la cuota
+      # de almacenamiento de Actions, tumbando este mismo paso ("Artifact storage quota has
+      # been hit"). 1 dia es mas que suficiente para revisar un build puntual.
       - name: Upload APK
         uses: actions/upload-artifact@v4
         if: env.BUILD_FAILED != 'true'
         with:
           name: MatrizApp-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          retention-days: 1
 
       - name: Publish stable release with APK
         if: env.BUILD_FAILED != 'true'
