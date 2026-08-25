@@ -45,19 +45,11 @@ jobs:
         if: env.BUILD_FAILED == 'true'
         run: exit 1
 
-      # El Release de abajo es lo que de verdad importa (el link permanente de latest-debug).
-      # Este artifact de Actions es solo un respaldo de corto plazo del run individual, asi
-      # que se marca continue-on-error: si la cuota de Actions esta llena (tarda 6-12h en
-      # recalcularse tras borrar artifacts viejos) esto ya NO debe tumbar el Release.
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        if: env.BUILD_FAILED != 'true'
-        continue-on-error: true
-        with:
-          name: MatrizApp-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 1
-
+      # Ya NO se sube a Actions Artifacts: ese almacenamiento tiene una cuota compartida por
+      # cuenta que se llena rapido con builds tan seguidos (llegamos a acumular 107 builds /
+      # 2.2 GB y tumbo el paso siguiente con "Artifact storage quota has been hit"). El unico
+      # lugar donde el APK necesita vivir es el GitHub Release de abajo (latest-debug), que
+      # usa almacenamiento de Releases -- una cuota totalmente aparte que no se llena con esto.
       - name: Publish stable release with APK
         if: env.BUILD_FAILED != 'true'
         uses: softprops/action-gh-release@v2
