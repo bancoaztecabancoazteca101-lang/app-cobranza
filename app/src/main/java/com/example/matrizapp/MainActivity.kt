@@ -36,6 +36,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -104,7 +105,17 @@ class MainActivity : ComponentActivity() {
                 val filtrarVm: FiltrarViewModel = viewModel(factory = factory)
                 val controlVm: ControlViewModel = viewModel(factory = factory)
                 val sem6Vm: Sem6ViewModel = viewModel(factory = factory)
+                // searchInput es lo que el usuario teclea (se actualiza al instante, sin costo,
+                // porque no dispara el filtrado). searchQuery es la versión "debounced" que se
+                // pasa a las pantallas y sí dispara el filtrado de las listas; se actualiza ~180ms
+                // después de que el usuario deja de teclear, para que escribir se sienta fluido
+                // aunque la lista o la búsqueda por foto (OCR) hayan crecido.
+                var searchInput by remember { mutableStateOf("") }
                 var searchQuery by remember { mutableStateOf("") }
+                LaunchedEffect(searchInput) {
+                    delay(180)
+                    searchQuery = searchInput
+                }
                 var searchActive by remember { mutableStateOf(false) }
                 var buscandoPorFoto by remember { mutableStateOf(false) }
                 var mostrarSelectorFotoBusqueda by remember { mutableStateOf(false) }
@@ -151,6 +162,7 @@ class MainActivity : ComponentActivity() {
                             Toast.makeText(this@MainActivity, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
                         } else {
                             searchActive = true
+                            searchInput = nombre
                             searchQuery = nombre
                         }
                     }
@@ -194,7 +206,7 @@ class MainActivity : ComponentActivity() {
                 val lastSyncLabel = if (isRefreshing) "Sincronizando…" else "Lista"
                 val navBackStackEntryForDrawer by navController.currentBackStackEntryAsState()
                 val currentRouteForDrawer = navBackStackEntryForDrawer?.destination?.route ?: Screen.Matriz.route
-                LaunchedEffect(currentRouteForDrawer) { searchQuery = ""; searchActive = false }
+                LaunchedEffect(currentRouteForDrawer) { searchInput = ""; searchQuery = ""; searchActive = false }
                 AppNavigationDrawer(
                     currentRoute = currentRouteForDrawer,
                     lastSyncTime = lastSyncLabel,
@@ -216,8 +228,8 @@ class MainActivity : ComponentActivity() {
                                     val focusRequester = remember { FocusRequester() }
                                     LaunchedEffect(Unit) { focusRequester.requestFocus() }
                                     TextField(
-                                        value = searchQuery,
-                                        onValueChange = { searchQuery = it },
+                                        value = searchInput,
+                                        onValueChange = { searchInput = it },
                                         placeholder = { Text("Buscar en esta pantalla...") },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
@@ -234,7 +246,7 @@ class MainActivity : ComponentActivity() {
                             },
                             navigationIcon = {
                                 IconButton(onClick = {
-                                    if (searchActive) { searchActive = false; searchQuery = "" }
+                                    if (searchActive) { searchActive = false; searchInput = ""; searchQuery = "" }
                                     else coroutineScope.launch { drawerState.open() }
                                 }) {
                                     Icon(
@@ -252,8 +264,8 @@ class MainActivity : ComponentActivity() {
                                             Icon(Icons.Default.CameraAlt, contentDescription = "Buscar con foto")
                                         }
                                     }
-                                    if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { searchQuery = "" }) {
+                                    if (searchInput.isNotEmpty()) {
+                                        IconButton(onClick = { searchInput = ""; searchQuery = "" }) {
                                             Icon(Icons.Default.Close, contentDescription = "Limpiar búsqueda")
                                         }
                                     }
