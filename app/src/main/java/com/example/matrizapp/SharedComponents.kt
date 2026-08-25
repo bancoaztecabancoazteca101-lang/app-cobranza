@@ -105,6 +105,33 @@ fun ContactActionsRow(numTT: String?, ref1: String? = null, ref2: String? = null
 }
 
 /**
+ * Una fila "Etiqueta: número" con los botones de Llamar/SMS pegados a la derecha, igual
+ * que se ve en AppSheet (a diferencia de ContactActionsRow, que amontona todos los
+ * contactos en una sola fila horizontal al final). Se usa en las vistas rápidas de
+ * detalle de Matriz y Filtro Fecha, una fila por cada campo de contacto (NumTT, Ref1, Ref2).
+ */
+@Composable
+fun ContactFieldRow(label: String, numero: String) {
+    if (numero.isBlank()) return
+    val context = LocalContext.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("$label: $numero", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(modifier = Modifier.size(34.dp), onClick = {
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$numero")))
+            }) { Icon(Icons.Default.Phone, contentDescription = "Llamar $label", tint = Color(0xFF1976D2)) }
+            IconButton(modifier = Modifier.size(34.dp), onClick = {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("sms:$numero")))
+            }) { Icon(Icons.Default.Sms, contentDescription = "SMS $label", tint = Color(0xFF00897B)) }
+        }
+    }
+}
+
+/**
  * Resuelve una referencia de archivo (URI local, URL de Drive, o ruta relativa tipo
  * "Solicitud_Images/archivo.jpg" que guarda el pipeline de OCR) a un Uri local
  * mostrable/adjuntable (descargando a caché y exponiendo vía FileProvider si hace falta).
@@ -267,6 +294,7 @@ fun compartirAudioSolicitudPorWhatsApp(context: android.content.Context, audioUr
 
 @Composable
 fun StatusBadge(estado: String) {
+    if (estado.isBlank()) return
     val color = getStatusColor(estado)
     Surface(color = color.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, color.copy(alpha = 0.5f))) {
         Text(text = estado, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = color)

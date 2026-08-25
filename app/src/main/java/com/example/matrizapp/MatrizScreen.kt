@@ -180,9 +180,9 @@ fun MatrizDetailDialog(
                 StatusBadge(estado = item.estado)
                 Spacer(modifier = Modifier.height(2.dp))
                 Text("Sem: ${item.semana}  ·  Req: ${formatearMontoMatriz(item.requisito)}")
-                if (item.numTT.isNotBlank()) Text("Num TT: ${item.numTT}")
-                if (item.ref1.isNotBlank()) Text("Ref 1: ${item.ref1}")
-                if (item.ref2.isNotBlank()) Text("Ref 2: ${item.ref2}")
+                ContactFieldRow("Num TT", item.numTT)
+                ContactFieldRow("Ref 1", item.ref1)
+                ContactFieldRow("Ref 2", item.ref2)
                 item.fecha?.let {
                     Text("Fecha: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it))}")
                 }
@@ -190,13 +190,14 @@ fun MatrizDetailDialog(
                 if (!item.folioP.isNullOrBlank()) Text("CU: ${item.folioP}")
                 if (!item.ruta.isNullOrBlank()) Text("Ruta: ${item.ruta}")
                 ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
-                CalleLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
                 if (!item.observaciones.isNullOrBlank()) {
                     Divider()
                     Text("Observaciones: ${item.observaciones}")
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ref2 = item.ref2, ubicacion = item.ubicacion)
+                if (!item.ubicacion.isNullOrBlank() && item.ubicacion != "N/A") {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ContactActionsRow(numTT = null, ubicacion = item.ubicacion)
+                }
             }
         },
         confirmButton = {
