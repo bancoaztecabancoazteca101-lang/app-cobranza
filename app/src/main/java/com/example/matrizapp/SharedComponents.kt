@@ -362,6 +362,55 @@ fun MatrizFullFormDialog(
     var buscandoUbicacion by remember { mutableStateOf(esNuevo) }
     var activePhotoSlot by remember { mutableStateOf(1) }
 
+    // Leer el nombre desde una foto (OCR), igual que "Buscar con foto" en la lista, pero aquí
+    // el resultado llena el campo Nombre en vez de disparar una búsqueda.
+    val coroutineScope = rememberCoroutineScope()
+    var buscandoNombrePorFoto by remember { mutableStateOf(false) }
+    var mostrarSelectorFotoNombre by remember { mutableStateOf(false) }
+    var fotoNombreUri by remember { mutableStateOf<Uri?>(null) }
+
+    fun procesarFotoNombre(uri: Uri?) {
+        if (uri == null) return
+        buscandoNombrePorFoto = true
+        coroutineScope.launch {
+            val detectado = extraerNombreDeImagen(context, uri)
+            buscandoNombrePorFoto = false
+            if (detectado.isNullOrBlank()) {
+                Toast.makeText(context, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
+            } else {
+                nombre = detectado
+            }
+        }
+    }
+    val ocrNombreTakePictureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success -> if (success) procesarFotoNombre(fotoNombreUri) }
+    val ocrNombrePickImageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri -> procesarFotoNombre(uri) }
+    if (mostrarSelectorFotoNombre) {
+        AlertDialog(
+            onDismissRequest = { mostrarSelectorFotoNombre = false },
+            title = { Text("Leer nombre de una foto") },
+            text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para llenar el Nombre.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    mostrarSelectorFotoNombre = false
+                    val photoFile = java.io.File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "nombre_ocr_${System.currentTimeMillis()}.jpg")
+                    val uri = FileProvider.getUriForFile(context, "com.example.matrizapp.fileprovider", photoFile)
+                    fotoNombreUri = uri
+                    ocrNombreTakePictureLauncher.launch(uri)
+                }) { Text("Cámara") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    mostrarSelectorFotoNombre = false
+                    ocrNombrePickImageLauncher.launch("image/*")
+                }) { Text("Galería") }
+            }
+        )
+    }
+
     val takePictureLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
@@ -376,7 +425,19 @@ fun MatrizFullFormDialog(
                 modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(value = nombre, onValueChange = { nombre = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = nombre, onValueChange = { nombre = it }, label = { Text("Nombre") },
+                    trailingIcon = {
+                        if (buscandoNombrePorFoto) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            IconButton(onClick = { mostrarSelectorFotoNombre = true }) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = "Leer nombre de una foto")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 OutlinedTextField(
                     value = semana, onValueChange = { semana = it }, label = { Text("Sem") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
