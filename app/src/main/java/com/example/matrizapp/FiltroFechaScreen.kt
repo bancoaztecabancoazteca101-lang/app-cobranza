@@ -103,13 +103,24 @@ fun FiltroFechaDetailDialog(
     onDismiss: () -> Unit, onGuardarEstadoYHora: (id: String, nuevoEstado: String, nuevaHora: String) -> Unit
 ) {
     val context = LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var estado by remember(item.id) { mutableStateOf(item.estado) }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
     var hora by remember(item.id) { mutableStateOf(item.hora ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { SelectionContainer { Text(item.nombre) } },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(item.nombre, modifier = Modifier.weight(1f))
+                IconButton(onClick = {
+                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(item.nombre))
+                    android.widget.Toast.makeText(context, "Nombre copiado", android.widget.Toast.LENGTH_SHORT).show()
+                }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar nombre")
+                }
+            }
+        },
         text = {
             Column(
                 modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
