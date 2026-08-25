@@ -508,7 +508,8 @@ fun MatrizFullFormDialog(
                         activePhotoSlot = 1
                         val uri = viewModel!!.preparePhotoUri(context, 1)
                         takePictureLauncher.launch(uri)
-                    }
+                    },
+                    onDelete = if (item != null && viewModel != null && !item.imagenUrl.isNullOrBlank()) ({ viewModel.borrarImagen(item.id, 1) }) else null
                 )
                 Text("Imagen 2", style = MaterialTheme.typography.labelMedium)
                 ImagenCaptureBox(
@@ -519,7 +520,8 @@ fun MatrizFullFormDialog(
                         activePhotoSlot = 2
                         val uri = viewModel!!.preparePhotoUri(context, 2)
                         takePictureLauncher.launch(uri)
-                    }
+                    },
+                    onDelete = if (item != null && viewModel != null && !item.imagenUrl2.isNullOrBlank()) ({ viewModel.borrarImagen(item.id, 2) }) else null
                 )
                 if (esNuevo) {
                     Text("Guarda el registro primero para poder agregar fotos.", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
@@ -587,11 +589,12 @@ fun MatrizFullFormDialog(
 }
 
 @Composable
-fun ImagenCaptureBox(url: String?, enabled: Boolean, driveHelper: DriveHelper?, onClick: () -> Unit) {
+fun ImagenCaptureBox(url: String?, enabled: Boolean, driveHelper: DriveHelper?, onClick: () -> Unit, onDelete: (() -> Unit)? = null) {
     val context = LocalContext.current
     var uriResuelta by remember(url) { mutableStateOf<String?>(null) }
     var resolviendo by remember(url) { mutableStateOf(false) }
     var mostrarGrande by remember(url) { mutableStateOf(false) }
+    var confirmarBorrado by remember(url) { mutableStateOf(false) }
 
     LaunchedEffect(url) {
         uriResuelta = null
@@ -632,6 +635,19 @@ fun ImagenCaptureBox(url: String?, enabled: Boolean, driveHelper: DriveHelper?, 
                     ) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = "Tomar otra foto", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
+                    if (onDelete != null) {
+                        IconButton(
+                            onClick = { confirmarBorrado = true },
+                            enabled = enabled,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(4.dp)
+                                .size(28.dp)
+                                .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = "Borrar foto", tint = Color.White, modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
                 resolviendo -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 else -> Icon(
@@ -643,6 +659,19 @@ fun ImagenCaptureBox(url: String?, enabled: Boolean, driveHelper: DriveHelper?, 
     }
     if (mostrarGrande && uriResuelta != null) {
         ImageDetailDialog(url = uriResuelta!!, onDismiss = { mostrarGrande = false })
+    }
+    if (confirmarBorrado && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { confirmarBorrado = false },
+            title = { Text("¿Borrar esta foto?") },
+            text = { Text("Se quitará del registro. Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(onClick = { confirmarBorrado = false; onDelete() }) { Text("Borrar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmarBorrado = false }) { Text("Cancelar") }
+            }
+        )
     }
 }
 
