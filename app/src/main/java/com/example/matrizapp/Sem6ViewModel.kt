@@ -62,6 +62,39 @@ class Sem6ViewModel(
     private val _errorNotas = MutableStateFlow<String?>(null)
     val errorNotas: StateFlow<String?> = _errorNotas
 
+    // Semana que se está mostrando. Arranca en la actual; el usuario puede elegir una
+    // semana pasada desde el selector, y desde ahí se lee/escribe en esa hoja mientras
+    // no la vuelva a cambiar.
+    private val _semanaSeleccionada = MutableStateFlow(currentSem6SheetName())
+    val semanaSeleccionada: StateFlow<String> = _semanaSeleccionada
+
+    private val _semanasDisponibles = MutableStateFlow<List<String>>(emptyList())
+    val semanasDisponibles: StateFlow<List<String>> = _semanasDisponibles
+
+    /** Trae la lista de hojas "Cont-Sem-NN" que ya existen, para poblar el selector. */
+    fun cargarSemanasDisponibles() {
+        viewModelScope.launch {
+            try {
+                val lista = repository.listSem6SheetNames()
+                // Por si la semana actual aún no tiene hoja creada (p. ej. lunes muy
+                // temprano), la agregamos igual para que se pueda seleccionar de regreso.
+                _semanasDisponibles.value = (lista + currentSem6SheetName()).distinct()
+                    .sortedByDescending { it.substringAfterLast("-").trim().toIntOrNull() ?: -1 }
+            } catch (e: Exception) {
+                // Si falla, el selector simplemente no se llena; no afecta lo que ya está en pantalla.
+            }
+        }
+    }
+
+    /** Cambia la semana que se está viendo y recarga sus datos. */
+    fun seleccionarSemana(sheetName: String) {
+        if (sheetName == _semanaSeleccionada.value) return
+        _semanaSeleccionada.value = sheetName
+        _itemsRaw.value = emptyList()
+        _isFromCache.value = false
+        cargar()
+    }
+
     /** Guarda Se Contiene/Susceptible/Observaciones para un registro y actualiza la lista en
      * memoria de inmediato (optimista) para que el usuario vea el cambio sin esperar el refresh. */
     fun guardarNotas(id: String, seContiene: String, susceptible: String, observaciones: String, capital: String, onDone: (Boolean) -> Unit = {}) {
@@ -69,14 +102,14 @@ class Sem6ViewModel(
         _errorNotas.value = null
         viewModelScope.launch {
             try {
-                val ok = repository.updateSem6Notas(id, seContiene, susceptible, observaciones, capital)
+                val ok = repository.updateSem6Notas(id, seContiene, susceptible, observaciones, capital, sheetName = _semanaSeleccionada.value)
                 if (ok) {
                     _itemsRaw.value = _itemsRaw.value.map { item ->
                         if (item.id == id) item.copy(seContiene = seContiene, susceptible = susceptible, observaciones = observaciones, capital = capital) else item
                     }
                     cacheStore.save(_itemsRaw.value)
                 } else {
-                    _errorNotas.value = "No se encontró el registro en la hoja de esta semana"
+                    _errorNotas.value = "No se encontró el registro en ${_semanaSeleccionada.value.replace("Cont-Sem-", "Semana ")}"
                 }
                 onDone(ok)
             } catch (e: Exception) {
@@ -96,6 +129,7 @@ class Sem6ViewModel(
             _isFromCache.value = true
         }
         cargar()
+        cargarSemanasDisponibles()
     }
 
     fun cargar() {
@@ -104,11 +138,14 @@ class Sem6ViewModel(
         _error.value = null
         viewModelScope.launch {
             try {
-                val fresh = repository.fetchSem6Data()
+                val fresh = repository.fetchSem6Data(sheetName = _semanaSeleccionada.value)
                 _itemsRaw.value = fresh
                 _isFromCache.value = false
                 _lastUpdated.value = System.currentTimeMillis()
-                cacheStore.save(fresh)
+                // El cache local de "último dato conocido" solo tiene sentido para la semana
+                // actual (es lo que se muestra sin conexión al abrir la pantalla); una semana
+                // pasada se puede volver a pedir en vivo cuando haga falta.
+                if (_semanaSeleccionada.value == currentSem6SheetName()) cacheStore.save(fresh)
             } catch (e: Exception) {
                 // No se borra lo que ya había en pantalla (cache o carga anterior).
                 _error.value = e.message ?: "No se pudo actualizar"

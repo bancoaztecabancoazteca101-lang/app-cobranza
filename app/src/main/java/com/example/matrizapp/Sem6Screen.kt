@@ -1,5 +1,6 @@
 package com.example.matrizapp
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -7,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
@@ -29,6 +31,9 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     val error by viewModel.error.collectAsState()
     val lastUpdated by viewModel.lastUpdated.collectAsState()
     val isFromCache by viewModel.isFromCache.collectAsState()
+    val semanaSeleccionada by viewModel.semanaSeleccionada.collectAsState()
+    val semanasDisponibles by viewModel.semanasDisponibles.collectAsState()
+    var selectorSemanaExpanded by remember { mutableStateOf(false) }
     var itemToView by remember { mutableStateOf<Sem6Item?>(null) }
 
     val items = remember(allItems, searchQuery) {
@@ -49,12 +54,40 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = currentSem6SheetName().replace("Cont-Sem-", "Semana "),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = ClayPrimary
-                    )
+                    // Selector de semana: toca el nombre para elegir una semana pasada.
+                    // Solo se llenan aquí las que ya tienen hoja creada en el Sheet.
+                    Box {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { selectorSemanaExpanded = true }
+                        ) {
+                            Text(
+                                text = semanaSeleccionada.replace("Cont-Sem-", "Semana "),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ClayPrimary
+                            )
+                            Icon(
+                                Icons.Default.ArrowDropDown, contentDescription = "Elegir semana",
+                                tint = ClayPrimary, modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        DropdownMenu(expanded = selectorSemanaExpanded, onDismissRequest = { selectorSemanaExpanded = false }) {
+                            if (semanasDisponibles.isEmpty()) {
+                                DropdownMenuItem(text = { Text("Cargando semanas…") }, onClick = {}, enabled = false)
+                            }
+                            semanasDisponibles.forEach { sheetName ->
+                                val esActual = sheetName == currentSem6SheetName()
+                                DropdownMenuItem(
+                                    text = { Text(sheetName.replace("Cont-Sem-", "Semana ") + if (esActual) " (actual)" else "") },
+                                    onClick = {
+                                        viewModel.seleccionarSemana(sheetName)
+                                        selectorSemanaExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                     Text(
                         text = when {
                             isLoading -> "Actualizando…"
@@ -92,7 +125,8 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
 
         if (items.isEmpty() && !isLoading) {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
-                Text("Sin cuentas registradas esta semana", color = Color.Gray)
+                val etiqueta = semanaSeleccionada.replace("Cont-Sem-", "Semana ")
+                Text("Sin cuentas registradas en $etiqueta", color = Color.Gray)
             }
         } else {
             LazyColumn(

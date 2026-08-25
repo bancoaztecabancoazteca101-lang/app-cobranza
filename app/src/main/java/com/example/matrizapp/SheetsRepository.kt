@@ -94,9 +94,8 @@ class SheetsRepository(
      * corrida del trigger de Apps Script), regresa lista vacía en vez de fallar.
      * NumTT/Ubicacion (columnas K, L) son opcionales: si el script de Apps Script aún no las
      * manda, llegan vacías y simplemente no se muestran los botones de llamar/GPS. */
-    suspend fun fetchSem6Data(): List<Sem6Item> = withContext(Dispatchers.IO) {
-        val sheetNameGuess = currentSem6SheetName()
-        val realName = resolveSheetName(sheetNameGuess)
+    suspend fun fetchSem6Data(sheetName: String = currentSem6SheetName()): List<Sem6Item> = withContext(Dispatchers.IO) {
+        val realName = resolveSheetName(sheetName)
         val range = "'$realName'!A2:P"
         val rows = try {
             sheetsService.spreadsheets().values().get(Constants.SPREADSHEET_ID, range).execute().getValues()
@@ -130,14 +129,29 @@ class SheetsRepository(
         }
     }
 
+    /** Lista los nombres reales de todas las hojas "Cont-Sem-NN" que ya existen en el
+     * Spreadsheet (una por semana, las crea Apps Script), más reciente primero. Así el
+     * selector de semana en la app solo muestra semanas que de verdad tienen datos, sin
+     * necesidad de adivinar cuántas semanas atrás hay que ofrecer. */
+    suspend fun listSem6SheetNames(): List<String> = withContext(Dispatchers.IO) {
+        getRealSheetTitles().values
+            .filter { it.startsWith("Cont-Sem-", ignoreCase = true) }
+            .distinct()
+            .sortedByDescending { it.substringAfterLast("-").trim().toIntOrNull() ?: -1 }
+    }
+
     /** Guarda las notas editables de Semana 6 (Se Contiene, Susceptible, Observaciones, Capital)
-     * directo en Sheets: columnas M, N, O, P de la hoja "Cont-Sem-NN" de la semana actual. Se
+     * directo en Sheets: columnas M, N, O, P de la hoja "Cont-Sem-NN" indicada (por defecto la
+     * semana actual, pero se puede pasar una semana pasada si el usuario la está viendo). Se
      * escribe de inmediato (sin cola local) porque son pocos registros y el usuario espera
-     * confirmación en el momento. Devuelve false si no encontró el Id en la hoja (por ejemplo,
-     * si ya cambió de semana). */
-    suspend fun updateSem6Notas(id: String, seContiene: String, susceptible: String, observaciones: String, capital: String): Boolean =
+     * confirmación en el momento. Devuelve false si no encontró el Id en esa hoja.
+     */
+    suspend fun updateSem6Notas(
+        id: String, seContiene: String, susceptible: String, observaciones: String, capital: String,
+        sheetName: String = currentSem6SheetName()
+    ): Boolean =
         withContext(Dispatchers.IO) {
-            val realName = resolveSheetName(currentSem6SheetName())
+            val realName = resolveSheetName(sheetName)
             val idx = findRowIndexById(realName, id, "D")
             if (idx == -1) return@withContext false
             updateSheetCell(realName, "M", idx, seContiene)
