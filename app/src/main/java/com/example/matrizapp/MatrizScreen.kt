@@ -166,9 +166,21 @@ fun MatrizDetailDialog(
     onDismiss: () -> Unit,
     onEditClick: () -> Unit
 ) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { SelectionContainer { Text(item.nombre) } },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(item.nombre, modifier = Modifier.weight(1f))
+                IconButton(onClick = {
+                    clipboard.setText(androidx.compose.ui.text.AnnotatedString(item.nombre))
+                    Toast.makeText(context, "Nombre copiado", Toast.LENGTH_SHORT).show()
+                }) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar nombre")
+                }
+            }
+        },
         text = {
             Column(
                 modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
