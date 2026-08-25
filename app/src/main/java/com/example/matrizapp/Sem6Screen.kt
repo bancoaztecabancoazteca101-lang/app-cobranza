@@ -163,9 +163,12 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) 
     }
     ClayCard(onClick = onClick, containerColor = cardColor) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Row(modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.weight(1f).padding(end = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper)
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(item.nombre, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("Sem: ${item.sem}  ·  Req: ${formatearReq(item.req)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
@@ -177,6 +180,12 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) 
                     if (item.capital.isNotBlank()) {
                         Text("Capital: ${formatearReq(item.capital)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
+                    if (item.seContiene.isNotBlank()) {
+                        Text("Se Contiene: ${formatearReq(item.seContiene)}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                    if (item.susceptible.isNotBlank()) {
+                        Text("Status: ${item.susceptible}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
                     if (item.observaciones.isNotBlank()) {
                         Text("Obs: ${item.observaciones}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
@@ -187,12 +196,12 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) 
                 shape = MaterialTheme.shapes.small
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Visibility, contentDescription = null, tint = ClayPrimary, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("${item.visitas}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ClayPrimary)
+                    Icon(Icons.Default.Visibility, contentDescription = null, tint = ClayPrimary, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("${item.visitas}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = ClayPrimary)
                 }
             }
         }
