@@ -367,28 +367,40 @@ fun SolicitudFullFormDialog(
                     url = nuevaImagenUrl ?: item?.imageUrl,
                     enabled = true,
                     driveHelper = driveHelper,
-                    onClick = { slotActivo = 1; mostrarSelectorFoto = 1 }
+                    onClick = { slotActivo = 1; mostrarSelectorFoto = 1 },
+                    onDelete = if (!(nuevaImagenUrl ?: item?.imageUrl).isNullOrBlank()) ({
+                        if (esNuevo) nuevaImagenUrl = null else viewModel?.borrarImagen(item!!.id, 1)
+                    }) else null
                 )
                 Text("Imagen 2", style = MaterialTheme.typography.labelMedium)
                 ImagenCaptureBox(
                     url = nuevaImagenUrl2 ?: item?.imageUrl2,
                     enabled = true,
                     driveHelper = driveHelper,
-                    onClick = { slotActivo = 2; mostrarSelectorFoto = 2 }
+                    onClick = { slotActivo = 2; mostrarSelectorFoto = 2 },
+                    onDelete = if (!(nuevaImagenUrl2 ?: item?.imageUrl2).isNullOrBlank()) ({
+                        if (esNuevo) nuevaImagenUrl2 = null else viewModel?.borrarImagen(item!!.id, 2)
+                    }) else null
                 )
                 Text("Imagen 3", style = MaterialTheme.typography.labelMedium)
                 ImagenCaptureBox(
                     url = nuevaImagenUrl3 ?: item?.imageUrl3,
                     enabled = true,
                     driveHelper = driveHelper,
-                    onClick = { slotActivo = 3; mostrarSelectorFoto = 3 }
+                    onClick = { slotActivo = 3; mostrarSelectorFoto = 3 },
+                    onDelete = if (!(nuevaImagenUrl3 ?: item?.imageUrl3).isNullOrBlank()) ({
+                        if (esNuevo) nuevaImagenUrl3 = null else viewModel?.borrarImagen(item!!.id, 3)
+                    }) else null
                 )
                 Text("Imagen 4", style = MaterialTheme.typography.labelMedium)
                 ImagenCaptureBox(
                     url = nuevaImagenUrl4 ?: item?.imageUrl4,
                     enabled = true,
                     driveHelper = driveHelper,
-                    onClick = { slotActivo = 4; mostrarSelectorFoto = 4 }
+                    onClick = { slotActivo = 4; mostrarSelectorFoto = 4 },
+                    onDelete = if (!(nuevaImagenUrl4 ?: item?.imageUrl4).isNullOrBlank()) ({
+                        if (esNuevo) nuevaImagenUrl4 = null else viewModel?.borrarImagen(item!!.id, 4)
+                    }) else null
                 )
 
                 Text("Referencia 1", style = MaterialTheme.typography.labelMedium)
