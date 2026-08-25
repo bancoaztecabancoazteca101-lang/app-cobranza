@@ -87,6 +87,15 @@ class MatrizViewModel(
         _pendingPhotoUri.value = null
     }
 
+    /** Quita la foto del registro (deja el campo vacío) y sincroniza para que también se
+     * borre la referencia en el Sheet. */
+    fun borrarImagen(id: String, slot: Int) {
+        viewModelScope.launch {
+            if (slot == 2) matrizDao.updateImagen2Local(id, "") else matrizDao.updateImagenLocal(id, "")
+            triggerSync()
+        }
+    }
+
     fun guardarGestion(id: String, nuevoEstado: String, observaciones: String) {
         viewModelScope.launch {
             matrizDao.updateGestionLocal(id, nuevoEstado, observaciones)
