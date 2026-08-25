@@ -166,6 +166,20 @@ class SolicitudViewModel(
         _pendingPhotoUri.value = null
     }
 
+    /** Quita la foto del registro (deja el campo vacío) y sincroniza para que también se
+     * borre la referencia en el Sheet. */
+    fun borrarImagen(id: String, slot: Int) {
+        viewModelScope.launch {
+            when (slot) {
+                2 -> solicitudDao.updateImagen2Local(id, "")
+                3 -> solicitudDao.updateImagen3Local(id, "")
+                4 -> solicitudDao.updateImagen4Local(id, "")
+                else -> solicitudDao.updateImagenLocal(id, "")
+            }
+            triggerSync()
+        }
+    }
+
     /**
      * Llamar cuando la cámara (TakePicture) termina, para un registro NUEVO que aún no se
      * guarda. Solo confirma si sí se tomó la foto y regresa su Uri para pasarla a
