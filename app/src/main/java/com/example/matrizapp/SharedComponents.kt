@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -375,11 +377,31 @@ fun MatrizFullFormDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(value = nombre, onValueChange = { nombre = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = semana, onValueChange = { semana = it }, label = { Text("Sem") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = requisito, onValueChange = { requisito = it }, label = { Text("Req") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = numTT, onValueChange = { numTT = it }, label = { Text("Num TT") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = ref1, onValueChange = { ref1 = it }, label = { Text("Ref 1") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = ref2, onValueChange = { ref2 = it }, label = { Text("Ref 2") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = semana, onValueChange = { semana = it }, label = { Text("Sem") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = requisito, onValueChange = { requisito = it }, label = { Text("Req") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = numTT, onValueChange = { numTT = it }, label = { Text("Num TT") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = ref1, onValueChange = { ref1 = it }, label = { Text("Ref 1") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = ref2, onValueChange = { ref2 = it }, label = { Text("Ref 2") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 OutlinedTextField(value = observaciones, onValueChange = { observaciones = it }, label = { Text("Observaciones") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
 
                 ExposedDropdownMenuBox(expanded = estadoMenuExpanded, onExpandedChange = { estadoMenuExpanded = it }) {
