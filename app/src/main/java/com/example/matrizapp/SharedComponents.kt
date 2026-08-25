@@ -111,8 +111,8 @@ fun ContactActionsRow(numTT: String?, ref1: String? = null, ref2: String? = null
  * detalle de Matriz y Filtro Fecha, una fila por cada campo de contacto (NumTT, Ref1, Ref2).
  */
 @Composable
-fun ContactFieldRow(label: String, numero: String) {
-    if (numero.isBlank()) return
+fun ContactFieldRow(label: String, numero: String?) {
+    if (numero.isNullOrBlank()) return
     val context = LocalContext.current
     Row(
         modifier = Modifier.fillMaxWidth(),
