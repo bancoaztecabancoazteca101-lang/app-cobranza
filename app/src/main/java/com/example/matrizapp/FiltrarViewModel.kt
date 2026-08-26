@@ -21,14 +21,15 @@ import java.util.concurrent.TimeUnit
  *
  * Reglas (confirmadas con el usuario):
  * - Un registro de Matriz aparece aquí cuando su Status dice exactamente "Filtrar".
- * - "Cercanos por GPS" son otros registros de Matriz (cualquier status) a 30 metros o menos,
+ * - "Cercanos por GPS" son otros registros de Matriz (cualquier status) a 10 metros o menos,
  *   ordenados del más cercano al más lejano, máximo 7.
  */
-private const val RADIO_CERCANOS_METROS = 30.0
+private const val RADIO_CERCANOS_METROS = 10.0
 
 class FiltrarViewModel(
     private val matrizDao: MatrizDao,
-    private val workManager: WorkManager
+    private val workManager: WorkManager,
+    val driveHelper: DriveHelper
 ) : ViewModel() {
 
     val items: StateFlow<List<FiltrarEntity>> = matrizDao.getAllMatriz()
