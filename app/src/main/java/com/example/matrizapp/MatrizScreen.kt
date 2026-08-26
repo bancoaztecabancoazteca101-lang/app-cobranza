@@ -144,7 +144,7 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
 }
 
 /** Formatea el Req como precio: "199" -> "$199". Si no es numérico, regresa el valor tal cual. */
-private fun formatearMontoMatriz(req: String): String {
+fun formatearMontoMatriz(req: String): String {
     val limpio = req.replace("[^0-9.]".toRegex(), "")
     val numero = limpio.toDoubleOrNull() ?: return req
     val formateador = java.text.NumberFormat.getNumberInstance(Locale("es", "MX")).apply {
