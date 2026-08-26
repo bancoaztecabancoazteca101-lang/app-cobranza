@@ -22,7 +22,7 @@ fun ControlScreen(viewModel: ControlViewModel) {
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Requerido por semana", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Requerido por día", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         items.forEach { row -> ControlFilaCard(row) }
 
         Spacer(modifier = Modifier.height(8.dp))
