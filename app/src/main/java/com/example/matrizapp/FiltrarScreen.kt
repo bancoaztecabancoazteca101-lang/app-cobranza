@@ -13,14 +13,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
@@ -29,13 +26,11 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
             val q = searchQuery.trim()
             coincideBusqueda(item.nombre, q) ||
-                coincideBusqueda(item.numTT, q) ||
-                coincideBusqueda(item.observaciones, q) ||
-                coincideBusqueda(item.estado, q)
+                item.cercanos.any { coincideBusqueda(it.nombre, q) || coincideBusqueda(it.numTT, q) }
         }
     }
-    var itemToView by remember { mutableStateOf<FiltrarEntity?>(null) }
-    var itemToEdit by remember { mutableStateOf<FiltrarEntity?>(null) }
+    var itemToView by remember { mutableStateOf<FiltrarItem?>(null) }
+    var itemToEdit by remember { mutableStateOf<FiltrarItem?>(null) }
 
     if (items.isEmpty()) {
         Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
@@ -56,25 +51,21 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
     }
     itemToEdit?.let { item ->
         EditMatrizDialog(
-            item = MatrizEntity(
-                id = item.id, nombre = item.nombre, semana = item.semana, requisito = item.requerido,
-                numTT = item.numTT, ref1 = "", ref2 = "", observaciones = item.observaciones,
-                estado = item.estado, ubicacion = item.ubicacion, imagenUrl = item.imagen, imagenUrl2 = null,
-                fecha = item.fecha, hora = item.hora, ruta = null, folioP = null
-            ),
+            item = item.original,
             onDismiss = { itemToEdit = null },
             onConfirm = { id, estado, obs -> viewModel.guardarGestion(id, estado, obs); itemToEdit = null }
         )
     }
 }
 
-/** Vista rápida de detalle, igual patrón que Matriz y Filtro Fecha: foto, datos con botón de
- * acción (teléfono/sms) pegado al lado, Colonia/Calle resueltas por GPS, Cercanos por GPS y
- * acceso directo a Editar. */
+/** Vista rápida: del titular (Status = Filtrar) solo se muestra nombre, foto y dirección — es
+ * solo para identificarlo. Lo que de verdad importa aquí son los registros de Matriz encontrados
+ * a 10 m o menos, con sus datos de contacto completos (Num TT, Ref1, Ref2, dirección) y sus
+ * botones de acción, porque la idea de Filtrar es dar el contacto de alguien cercano al titular. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FiltrarDetailDialog(
-    item: FiltrarEntity,
+    item: FiltrarItem,
     driveHelper: DriveHelper,
     onDismiss: () -> Unit,
     onEditClick: () -> Unit
@@ -102,29 +93,27 @@ fun FiltrarDetailDialog(
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     PortadaThumbnail(rawImageUrl = item.imagen, driveHelper = driveHelper, size = 160.dp)
                 }
-                Text("ID: ${item.id}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                StatusBadge(estado = item.estado)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text("Sem: ${item.semana}  ·  Req: ${formatearMontoMatriz(item.requerido)}")
-                ContactFieldRow("Num TT", item.numTT)
-                item.fecha?.let {
-                    Text("Fecha: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it))}")
-                }
-                if (!item.hora.isNullOrBlank()) Text("Hora: ${item.hora}")
                 ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
                 CalleLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
-                if (!item.referencias.isNullOrBlank()) {
-                    Divider()
-                    Text("Cercanos por GPS (10 m):", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                    Text(item.referencias, style = MaterialTheme.typography.bodySmall)
-                }
-                if (!item.observaciones.isNullOrBlank()) {
-                    Divider()
-                    Text("Observaciones: ${item.observaciones}")
-                }
-                if (!item.ubicacion.isNullOrBlank() && item.ubicacion != "N/A") {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    ContactActionsRow(numTT = null, ubicacion = item.ubicacion)
+
+                Divider(modifier = Modifier.padding(top = 4.dp))
+                Text(
+                    if (item.cercanos.isEmpty()) "Registros cercanos (10 m): ninguno"
+                    else "Registros cercanos (10 m):",
+                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold
+                )
+                item.cercanos.forEachIndexed { index, cercano ->
+                    if (index > 0) Divider()
+                    Text(cercano.nombre, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    Text("${cercano.distanciaM} m de distancia", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    ContactFieldRow("Num TT", cercano.numTT)
+                    ContactFieldRow("Ref 1", cercano.ref1)
+                    ContactFieldRow("Ref 2", cercano.ref2)
+                    ColoniaLabel(ubicacion = cercano.ubicacion)
+                    CalleLabel(ubicacion = cercano.ubicacion)
+                    if (!cercano.ubicacion.isNullOrBlank() && cercano.ubicacion != "N/A") {
+                        ContactActionsRow(numTT = null, ubicacion = cercano.ubicacion)
+                    }
                 }
             }
         },
@@ -141,23 +130,21 @@ fun FiltrarDetailDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FiltrarItemCard(item: FiltrarEntity, onCardClick: () -> Unit, onEditClick: () -> Unit) {
+fun FiltrarItemCard(item: FiltrarItem, onCardClick: () -> Unit, onEditClick: () -> Unit) {
     Card(onClick = onCardClick, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(item.nombre, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 StatusBadge(item.estado)
             }
-            Text("Sem ${item.semana} · Req ${item.requerido} · TT: ${item.numTT}", style = MaterialTheme.typography.bodySmall)
-            item.ubicacion?.let { Text("Ubicación: $it", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
-            item.referencias?.let { refs ->
+            ColoniaLabel(ubicacion = item.ubicacion)
+            CalleLabel(ubicacion = item.ubicacion)
+            if (item.cercanos.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Text("Cercanos por GPS:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                Text(refs, style = MaterialTheme.typography.bodySmall)
-            }
-            item.observaciones?.let {
-                Spacer(Modifier.height(4.dp))
-                Text(it, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                item.cercanos.forEach { c ->
+                    Text("${c.nombre} (${c.distanciaM} m)", style = MaterialTheme.typography.bodySmall)
+                }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 IconButton(onClick = onEditClick) {
