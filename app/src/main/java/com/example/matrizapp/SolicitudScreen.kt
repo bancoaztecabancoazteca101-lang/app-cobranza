@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -340,6 +342,55 @@ fun SolicitudFullFormDialog(
         }
     }
 
+    // Leer el nombre desde una foto (OCR local, ML Kit), igual que en Matriz: el resultado
+    // llena el campo Nombre en vez de disparar una búsqueda.
+    val coroutineScope = rememberCoroutineScope()
+    var buscandoNombrePorFoto by remember { mutableStateOf(false) }
+    var mostrarSelectorFotoNombre by remember { mutableStateOf(false) }
+    var fotoNombreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
+    fun procesarFotoNombre(uri: android.net.Uri?) {
+        if (uri == null) return
+        buscandoNombrePorFoto = true
+        coroutineScope.launch {
+            val detectado = extraerNombreDeImagen(context, uri)
+            buscandoNombrePorFoto = false
+            if (detectado.isNullOrBlank()) {
+                Toast.makeText(context, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
+            } else {
+                nombre = detectado
+            }
+        }
+    }
+    val ocrNombreTakePictureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success -> if (success) procesarFotoNombre(fotoNombreUri) }
+    val ocrNombrePickImageLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri -> procesarFotoNombre(uri) }
+    if (mostrarSelectorFotoNombre) {
+        AlertDialog(
+            onDismissRequest = { mostrarSelectorFotoNombre = false },
+            title = { Text("Leer nombre de una foto") },
+            text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para llenar el Nombre.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    mostrarSelectorFotoNombre = false
+                    val photoFile = java.io.File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "nombre_ocr_${System.currentTimeMillis()}.jpg")
+                    val uri = FileProvider.getUriForFile(context, "com.example.matrizapp.fileprovider", photoFile)
+                    fotoNombreUri = uri
+                    ocrNombreTakePictureLauncher.launch(uri)
+                }) { Text("Cámara") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    mostrarSelectorFotoNombre = false
+                    ocrNombrePickImageLauncher.launch("image/*")
+                }) { Text("Galería") }
+            }
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (esNuevo) "Nueva solicitud" else "Solicitud: ${item!!.nombre}") },
@@ -348,7 +399,19 @@ fun SolicitudFullFormDialog(
                 modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(value = nombre, onValueChange = { nombre = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = nombre, onValueChange = { nombre = it }, label = { Text("Nombre") },
+                    trailingIcon = {
+                        if (buscandoNombrePorFoto) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            IconButton(onClick = { mostrarSelectorFotoNombre = true }) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = "Leer nombre de una foto")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 OutlinedTextField(value = numero, onValueChange = { numero = it }, label = { Text("Número") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = sucursal, onValueChange = { sucursal = it }, label = { Text("Sucursal") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
