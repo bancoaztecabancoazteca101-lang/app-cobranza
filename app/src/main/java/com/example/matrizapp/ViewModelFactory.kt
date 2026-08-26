@@ -22,7 +22,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
                 FiltrarViewModel(container.database.matrizDao(), container.workManager, container.driveHelper) as T
 
             modelClass.isAssignableFrom(ControlViewModel::class.java) ->
-                ControlViewModel(container.database.controlDao()) as T
+                ControlViewModel(container.database.controlDao(), container.database.matrizDao()) as T
 
             modelClass.isAssignableFrom(Sem6ViewModel::class.java) ->
                 Sem6ViewModel(container.repository, container.sem6CacheStore, container.driveHelper) as T
