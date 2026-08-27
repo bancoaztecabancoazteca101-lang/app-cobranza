@@ -111,6 +111,36 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
         if (permitidos == null) base else base.filter { it.id in permitidos }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Catálogo de nombres de Colonia distintos entre los candidatos actuales (rango de fecha +
+    // fuente), para mostrarlos en un desplegable en vez de que el usuario tenga que adivinar
+    // el nombre exacto. Se arma bajo demanda porque geocodificar cada registro tarda.
+    private val _coloniasDisponibles = MutableStateFlow<List<String>>(emptyList())
+    val coloniasDisponibles: StateFlow<List<String>> = _coloniasDisponibles
+    private val _coloniasCargando = MutableStateFlow(false)
+    val coloniasCargando: StateFlow<Boolean> = _coloniasCargando
+
+    fun cargarColoniasDisponibles(context: Context) {
+        viewModelScope.launch {
+            _coloniasCargando.value = true
+            val base = candidatos.value
+            for (c in base) {
+                val ub = c.ubicacion ?: continue
+                if (!coloniaCache.containsKey(ub)) {
+                    coloniaCache[ub] = resolverColonia(context, ub)
+                }
+            }
+            _coloniasDisponibles.value = base.mapNotNull { it.ubicacion?.let { ub -> coloniaCache[ub] } }
+                .filter { it.isNotBlank() }.distinct().sorted()
+            _coloniasCargando.value = false
+        }
+    }
+
+    /** Selección directa desde el desplegable: aplica el filtro de inmediato con el nombre exacto. */
+    fun seleccionarColoniaDelCatalogo(context: Context, nombre: String) {
+        _coloniaTexto.value = nombre
+        aplicarFiltroColonia(context)
+    }
+
     private val _enviando = MutableStateFlow(false)
     val enviando: StateFlow<Boolean> = _enviando
     private val _progreso = MutableStateFlow(0 to 0)

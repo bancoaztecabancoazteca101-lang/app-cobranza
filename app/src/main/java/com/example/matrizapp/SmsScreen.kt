@@ -32,6 +32,8 @@ fun SmsScreen(viewModel: SmsViewModel) {
     val fechaFin by viewModel.fechaFin.collectAsState()
     val coloniaTexto by viewModel.coloniaTexto.collectAsState()
     val coloniaCargando by viewModel.coloniaCargando.collectAsState()
+    val coloniasDisponibles by viewModel.coloniasDisponibles.collectAsState()
+    val coloniasCargando by viewModel.coloniasCargando.collectAsState()
     val fuente by viewModel.fuente.collectAsState()
     val plantillaTT by viewModel.plantillaTT.collectAsState()
     val plantillaRef by viewModel.plantillaRef.collectAsState()
@@ -49,6 +51,7 @@ fun SmsScreen(viewModel: SmsViewModel) {
     var mostrarConfirmacionEnvio by remember { mutableStateOf(false) }
     var mostrarConfirmacionProgramar by remember { mutableStateOf(false) }
     var mostrarOpciones by remember { mutableStateOf(false) }
+    var mostrarListaColonias by remember { mutableStateOf(false) }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultados ->
         permisosOk = resultados.values.all { it }
@@ -129,11 +132,36 @@ fun SmsScreen(viewModel: SmsViewModel) {
         Spacer(Modifier.height(8.dp))
         Text("Filtro por Colonia (opcional)", style = MaterialTheme.typography.labelLarge)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = coloniaTexto, onValueChange = { viewModel.setColoniaTexto(it) },
-                label = { Text("Nombre de colonia") }, singleLine = true,
-                modifier = Modifier.weight(1f).padding(end = 4.dp), enabled = !enviando && !coloniaCargando
-            )
+            Box(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
+                OutlinedTextField(
+                    value = coloniaTexto, onValueChange = { viewModel.setColoniaTexto(it) },
+                    label = { Text("Nombre de colonia (escribe o elige de la lista)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(), enabled = !enviando && !coloniaCargando,
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                if (coloniasDisponibles.isEmpty() && !coloniasCargando) viewModel.cargarColoniasDisponibles(context)
+                                mostrarListaColonias = true
+                            },
+                            enabled = !enviando && !coloniasCargando
+                        ) {
+                            if (coloniasCargando) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            else Icon(Icons.Default.ArrowDropDown, contentDescription = "Ver colonias disponibles")
+                        }
+                    }
+                )
+                DropdownMenu(expanded = mostrarListaColonias && coloniasDisponibles.isNotEmpty(), onDismissRequest = { mostrarListaColonias = false }) {
+                    coloniasDisponibles.forEach { nombre ->
+                        DropdownMenuItem(
+                            text = { Text(nombre) },
+                            onClick = {
+                                mostrarListaColonias = false
+                                viewModel.seleccionarColoniaDelCatalogo(context, nombre)
+                            }
+                        )
+                    }
+                }
+            }
             Button(onClick = { viewModel.aplicarFiltroColonia(context) }, enabled = !enviando && !coloniaCargando) {
                 if (coloniaCargando) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
                 else Text("Aplicar")
@@ -141,6 +169,9 @@ fun SmsScreen(viewModel: SmsViewModel) {
             if (coloniaTexto.isNotBlank()) {
                 TextButton(onClick = { viewModel.limpiarFiltroColonia() }, enabled = !enviando && !coloniaCargando) { Text("Quitar") }
             }
+        }
+        if (coloniasCargando) {
+            Text("Cargando lista de colonias del rango de fecha seleccionado…", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
         }
         if (coloniaCargando) {
             Text("Buscando colonia de cada registro (geocoding local, puede tardar unos segundos)…", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
