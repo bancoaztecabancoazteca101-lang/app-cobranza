@@ -63,7 +63,13 @@ object SmsHelper {
         }
     }
 
-    /** Reemplaza el placeholder %nombre% en la plantilla con el nombre real del contacto. */
-    fun armarMensaje(plantilla: String, nombre: String): String =
-        plantilla.replace("%nombre%", nombre.trim(), ignoreCase = true)
+    /** Reemplaza los placeholders de la plantilla: %nombre% (nombre del cliente/titular),
+     * %monto% (Req/importe de atraso, solo aplica a plantilla TT), %agente% y %contacto%
+     * (datos fijos del gestor, solo aplican a plantilla Referencia). */
+    fun armarMensaje(plantilla: String, nombre: String, monto: String = "", agente: String = "", contacto: String = ""): String =
+        plantilla
+            .replace("%nombre%", nombre.trim(), ignoreCase = true)
+            .replace("%monto%", monto.trim(), ignoreCase = true)
+            .replace("%agente%", agente.trim(), ignoreCase = true)
+            .replace("%contacto%", contacto.trim(), ignoreCase = true)
 }

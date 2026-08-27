@@ -28,7 +28,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
                 Sem6ViewModel(container.repository, container.sem6CacheStore, container.driveHelper) as T
 
             modelClass.isAssignableFrom(SmsViewModel::class.java) ->
-                SmsViewModel(container.database.filtroDao()) as T
+                SmsViewModel(container.database.filtroDao(), container.workManager) as T
 
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
