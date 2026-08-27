@@ -123,7 +123,7 @@ fun SmsScreen(viewModel: SmsViewModel) {
         if (enviando) {
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(
-                progress = { if (progreso.second == 0) 0f else progreso.first.toFloat() / progreso.second },
+                progress = if (progreso.second == 0) 0f else progreso.first.toFloat() / progreso.second,
                 modifier = Modifier.fillMaxWidth()
             )
         }
