@@ -5,8 +5,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
@@ -87,7 +87,7 @@ fun SmsScreen(viewModel: SmsViewModel) {
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Envío masivo de SMS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text("Fuente: Filtro Fecha (clientes de hoy) — $seleccionados de ${contactos.size} seleccionados", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
 
@@ -213,27 +213,25 @@ fun SmsScreen(viewModel: SmsViewModel) {
 
         Spacer(Modifier.height(12.dp))
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(contactos, key = { it.id }) { contacto ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Checkbox(checked = contacto.seleccionado, onCheckedChange = { viewModel.toggleSeleccionado(contacto.id) }, enabled = !enviando)
-                            Column {
-                                Text(contacto.nombre, fontWeight = FontWeight.Bold)
-                                Text(contacto.telefono, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                            }
+        contactos.forEach { contacto ->
+            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Checkbox(checked = contacto.seleccionado, onCheckedChange = { viewModel.toggleSeleccionado(contacto.id) }, enabled = !enviando)
+                        Column {
+                            Text(contacto.nombre, fontWeight = FontWeight.Bold)
+                            Text(contacto.telefono, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                         }
-                        when (contacto.estado) {
-                            EstadoEnvio.PENDIENTE -> {}
-                            EstadoEnvio.ENVIANDO -> CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            EstadoEnvio.ENVIADO -> Icon(Icons.Default.CheckCircle, contentDescription = "Enviado", tint = ClayGreenSuccess)
-                            EstadoEnvio.FALLIDO -> Icon(Icons.Default.Error, contentDescription = "Falló", tint = ClayMapsRed)
-                        }
+                    }
+                    when (contacto.estado) {
+                        EstadoEnvio.PENDIENTE -> {}
+                        EstadoEnvio.ENVIANDO -> CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        EstadoEnvio.ENVIADO -> Icon(Icons.Default.CheckCircle, contentDescription = "Enviado", tint = ClayGreenSuccess)
+                        EstadoEnvio.FALLIDO -> Icon(Icons.Default.Error, contentDescription = "Falló", tint = ClayMapsRed)
                     }
                 }
             }
