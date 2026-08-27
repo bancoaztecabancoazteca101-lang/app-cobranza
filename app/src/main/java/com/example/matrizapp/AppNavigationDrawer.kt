@@ -3,8 +3,10 @@ package com.example.matrizapp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -92,6 +94,8 @@ fun AppNavigationDrawer(
                 }
 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
+
+                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
 
                 Text(
                     text = "FLUJO DE TRABAJO",
@@ -220,6 +224,7 @@ fun AppNavigationDrawer(
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
+                }
             }
         },
         content = content
