@@ -208,6 +208,16 @@ fun AppNavigationDrawer(
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Call, contentDescription = null) },
+                    label = { Text("Llamadas") },
+                    selected = currentRoute == "llamadas",
+                    onClick = {
+                        onNavigate("llamadas")
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
             }

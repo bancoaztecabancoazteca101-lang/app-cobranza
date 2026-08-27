@@ -30,6 +30,9 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
             modelClass.isAssignableFrom(SmsViewModel::class.java) ->
                 SmsViewModel(container.database.matrizDao(), container.workManager) as T
 
+            modelClass.isAssignableFrom(CallViewModel::class.java) ->
+                CallViewModel(container.database.matrizDao(), container.workManager) as T
+
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
     }

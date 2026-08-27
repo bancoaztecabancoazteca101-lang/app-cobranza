@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
                 val controlVm: ControlViewModel = viewModel(factory = factory)
                 val sem6Vm: Sem6ViewModel = viewModel(factory = factory)
                 val smsVm: SmsViewModel = viewModel(factory = factory)
+                val callVm: CallViewModel = viewModel(factory = factory)
                 // searchInput es lo que el usuario teclea (se actualiza al instante, sin costo,
                 // porque no dispara el filtrado). searchQuery es la versión "debounced" que se
                 // pasa a las pantallas y sí dispara el filtrado de las listas; se actualiza ~180ms
@@ -321,6 +322,7 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
                         composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
                         composable(Screen.Sms.route) { SmsScreen(smsVm) }
+                        composable(Screen.Llamadas.route) { CallScreen(callVm) }
                     }
                 }
                 }
@@ -338,4 +340,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Ubi : Screen("ubi", "Ubi", Icons.Default.Map)
     object Sem6 : Screen("sem6", "Semana 6", Icons.Default.Visibility)
     object Sms : Screen("sms", "SMS", Icons.Default.Send)
+    object Llamadas : Screen("llamadas", "Llamadas", Icons.Default.Call)
 }
