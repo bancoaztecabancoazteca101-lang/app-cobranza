@@ -198,6 +198,16 @@ fun AppNavigationDrawer(
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Send, contentDescription = null) },
+                    label = { Text("SMS") },
+                    selected = currentRoute == "sms",
+                    onClick = {
+                        onNavigate("sms")
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
             }
