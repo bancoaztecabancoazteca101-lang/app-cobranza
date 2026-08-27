@@ -20,11 +20,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 @Composable
 fun SmsScreen(viewModel: SmsViewModel) {
     val context = LocalContext.current
     val contactos by viewModel.contactos.collectAsState()
+    val fechaInicio by viewModel.fechaInicio.collectAsState()
+    val fechaFin by viewModel.fechaFin.collectAsState()
+    val coloniaTexto by viewModel.coloniaTexto.collectAsState()
+    val coloniaCargando by viewModel.coloniaCargando.collectAsState()
     val fuente by viewModel.fuente.collectAsState()
     val plantillaTT by viewModel.plantillaTT.collectAsState()
     val plantillaRef by viewModel.plantillaRef.collectAsState()
@@ -87,9 +94,57 @@ fun SmsScreen(viewModel: SmsViewModel) {
         )
     }
 
+    val formatoFecha = remember { SimpleDateFormat("dd/MM/yyyy", Locale("es", "MX")) }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Envío masivo de SMS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Fuente: Filtro Fecha (clientes de hoy) — $seleccionados de ${contactos.size} seleccionados", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        Text("Fuente: Matriz — $seleccionados de ${contactos.size} seleccionados", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+
+        Spacer(Modifier.height(12.dp))
+        Text("Rango de fecha", style = MaterialTheme.typography.labelLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(
+                onClick = {
+                    val cal = Calendar.getInstance().apply { timeInMillis = fechaInicio }
+                    android.app.DatePickerDialog(context, { _, y, m, d ->
+                        val nueva = Calendar.getInstance().apply { set(y, m, d) }
+                        viewModel.setFechaInicio(nueva.timeInMillis)
+                    }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+                },
+                enabled = !enviando, modifier = Modifier.weight(1f).padding(end = 4.dp)
+            ) { Text(formatoFecha.format(fechaInicio)) }
+            Text("a", modifier = Modifier.padding(horizontal = 4.dp))
+            OutlinedButton(
+                onClick = {
+                    val cal = Calendar.getInstance().apply { timeInMillis = fechaFin }
+                    android.app.DatePickerDialog(context, { _, y, m, d ->
+                        val nueva = Calendar.getInstance().apply { set(y, m, d) }
+                        viewModel.setFechaFin(nueva.timeInMillis)
+                    }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+                },
+                enabled = !enviando, modifier = Modifier.weight(1f).padding(start = 4.dp)
+            ) { Text(formatoFecha.format(fechaFin)) }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Text("Filtro por Colonia (opcional)", style = MaterialTheme.typography.labelLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = coloniaTexto, onValueChange = { viewModel.setColoniaTexto(it) },
+                label = { Text("Nombre de colonia") }, singleLine = true,
+                modifier = Modifier.weight(1f).padding(end = 4.dp), enabled = !enviando && !coloniaCargando
+            )
+            Button(onClick = { viewModel.aplicarFiltroColonia(context) }, enabled = !enviando && !coloniaCargando) {
+                if (coloniaCargando) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                else Text("Aplicar")
+            }
+            if (coloniaTexto.isNotBlank()) {
+                TextButton(onClick = { viewModel.limpiarFiltroColonia() }, enabled = !enviando && !coloniaCargando) { Text("Quitar") }
+            }
+        }
+        if (coloniaCargando) {
+            Text("Buscando colonia de cada registro (geocoding local, puede tardar unos segundos)…", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        }
 
         Spacer(Modifier.height(12.dp))
 

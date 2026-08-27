@@ -31,18 +31,18 @@ class SmsRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Cor
         if (ids.isEmpty()) return Result.failure()
 
         val container = (applicationContext as MainApplication).container
-        // Vuelve a leer Filtro Fecha en el momento del envío (no datos guardados de cuando se
-        // programó), así cada ronda usa el teléfono/monto más reciente si algo cambió en el día.
-        val registros = container.database.filtroDao().getAll().first().filter { it.id in ids }
+        // Vuelve a leer Matriz en el momento del envío (no datos guardados de cuando se
+        // programó), así cada ronda usa el teléfono/monto más reciente si algo cambió.
+        val registros = container.database.matrizDao().getAllMatriz().first().filter { it.id in ids }
 
         for ((i, r) in registros.withIndex()) {
             val telefono = when (fuente) {
                 FuenteSms.TT -> r.numTT
-                FuenteSms.REF1 -> r.ref1 ?: ""
-                FuenteSms.REF2 -> r.ref2 ?: ""
+                FuenteSms.REF1 -> r.ref1
+                FuenteSms.REF2 -> r.ref2
             }
             if (telefono.isBlank()) continue
-            val mensaje = SmsHelper.armarMensaje(plantilla, r.nombre, r.req ?: "", agente, contacto)
+            val mensaje = SmsHelper.armarMensaje(plantilla, r.nombre, r.requisito, agente, contacto)
             SmsHelper.enviarSms(applicationContext, subId, telefono, mensaje)
             if (i < registros.lastIndex) delay(delaySegundos * 1000L)
         }
