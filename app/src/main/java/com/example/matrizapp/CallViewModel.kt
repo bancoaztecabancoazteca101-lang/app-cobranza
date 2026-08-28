@@ -68,6 +68,8 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
 
     private val _segundosEntreLlamadas = MutableStateFlow(5)
     val segundosEntreLlamadas: StateFlow<Int> = _segundosEntreLlamadas
+    private val _duracionMaximaSegundos = MutableStateFlow(45)
+    val duracionMaximaSegundos: StateFlow<Int> = _duracionMaximaSegundos
     private val _horaInicioBloque = MutableStateFlow(9)
     val horaInicioBloque: StateFlow<Int> = _horaInicioBloque
     private val _minutoInicioBloque = MutableStateFlow(0)
@@ -153,6 +155,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     fun setIncluirRef2(v: Boolean) { _incluirRef2.value = v }
     fun setSim(subscriptionId: Int?) { _subscriptionIdSeleccionado.value = subscriptionId }
     fun setSegundosEntreLlamadas(v: Int) { _segundosEntreLlamadas.value = v.coerceIn(1, 300) }
+    fun setDuracionMaximaSegundos(v: Int) { _duracionMaximaSegundos.value = v.coerceIn(5, 600) }
     fun setHoraInicioBloque(h: Int, m: Int) { _horaInicioBloque.value = h.coerceIn(0, 23); _minutoInicioBloque.value = m.coerceIn(0, 59) }
     fun setHorasEntreBloques(v: Int) { _horasEntreBloques.value = v.coerceIn(1, 12) }
     fun setRepeticionesBloque(v: Int) { _repeticionesBloque.value = v.coerceIn(1, 20) }
@@ -236,7 +239,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
                 _estados.value = estados.toMap()
                 CallHelper.realizarLlamada(context, subId, item.telefono)
                 delay(2000) // margen para que el sistema conecte la llamada antes de escuchar el estado
-                CallHelper.esperarFinDeLlamada(context, timeoutMs = 120_000)
+                CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = _duracionMaximaSegundos.value * 1000L)
                 if (_enviarSmsAlColgar.value) enviarSmsPostLlamada(context, item, subId)
                 estados[item.id] = EstadoLlamada.HECHA
                 _estados.value = estados.toMap()
@@ -263,6 +266,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
         CallRepeatWorker.programar(
             workManager = workManager, idsSeleccionados = lista.map { it.id },
             subscriptionId = _subscriptionIdSeleccionado.value, segundosEntreLlamadas = _segundosEntreLlamadas.value,
+            duracionMaximaSegundos = _duracionMaximaSegundos.value,
             iniciarEnMillis = inicioMillis, horasEntreBloques = _horasEntreBloques.value, repeticionesRestantes = _repeticionesBloque.value,
             enviarSmsAlColgar = _enviarSmsAlColgar.value, plantillaSmsTT = _plantillaSmsTT.value, plantillaSmsRef = _plantillaSmsRef.value,
             agenteSms = _agenteSms.value, contactoSms = _contactoSms.value

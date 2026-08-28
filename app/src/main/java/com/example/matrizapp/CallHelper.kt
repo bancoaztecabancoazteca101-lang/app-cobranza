@@ -73,6 +73,24 @@ object CallHelper {
     fun microfonoSilenciado(context: Context): Boolean =
         (context.getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMicrophoneMute
 
+    /** true si hay una llamada en curso ahora mismo (offhook o ringing). */
+    fun llamadaActiva(context: Context): Boolean {
+        val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        @Suppress("DEPRECATION")
+        return tm.callState != TelephonyManager.CALL_STATE_IDLE
+    }
+
+    /** Espera a que la llamada termine sola hasta duracionMaximaMs; si sigue activa al llegar
+     * a ese límite (nadie contestó, nadie colgó, línea de prueba, etc.), la cuelga a la fuerza
+     * con colgarLlamada() para que el flujo nunca se quede atorado esperando indefinidamente. */
+    suspend fun esperarFinOForzarColgar(context: Context, duracionMaximaMs: Long) {
+        esperarFinDeLlamada(context, timeoutMs = duracionMaximaMs)
+        if (llamadaActiva(context)) {
+            colgarLlamada(context)
+            kotlinx.coroutines.delay(500) // margen para que el sistema procese el colgado
+        }
+    }
+
     /** Suspende hasta que el teléfono vuelva a IDLE después de haber estado en una llamada
      * (offhook/ringing), o hasta timeoutMs como respaldo si la detección falla por algún motivo
      * (para nunca dejar el Worker colgado indefinidamente). */

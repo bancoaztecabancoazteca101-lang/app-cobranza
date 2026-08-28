@@ -41,6 +41,7 @@ fun CallScreen(viewModel: CallViewModel) {
     val coloniasCargando by viewModel.coloniasCargando.collectAsState()
     val subIdSeleccionado by viewModel.subscriptionIdSeleccionado.collectAsState()
     val segundosEntreLlamadas by viewModel.segundosEntreLlamadas.collectAsState()
+    val duracionMaximaSegundos by viewModel.duracionMaximaSegundos.collectAsState()
     val horaInicioBloque by viewModel.horaInicioBloque.collectAsState()
     val minutoInicioBloque by viewModel.minutoInicioBloque.collectAsState()
     val horasEntreBloques by viewModel.horasEntreBloques.collectAsState()
@@ -61,17 +62,20 @@ fun CallScreen(viewModel: CallViewModel) {
     var mostrarOpciones by remember { mutableStateOf(false) }
     var mostrarListaColonias by remember { mutableStateOf(false) }
     var silenciado by remember { mutableStateOf(false) }
+    var permisoColgarOk by remember { mutableStateOf(CallHelper.tienePermisoColgar(context)) }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultados ->
         permisosOk = resultados[Manifest.permission.CALL_PHONE] == true && resultados[Manifest.permission.READ_PHONE_STATE] == true
         if (permisosOk) lineas = SmsHelper.lineasActivas(context)
         else Toast.makeText(context, "Se necesitan permisos de llamadas y teléfono", Toast.LENGTH_LONG).show()
     }
-    val permColgarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val permColgarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        permisoColgarOk = CallHelper.tienePermisoColgar(context)
+    }
 
     LaunchedEffect(Unit) {
         if (!permisosOk) permLauncher.launch(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_PHONE_STATE))
-        if (!CallHelper.tienePermisoColgar(context) && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        if (!permisoColgarOk && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             permColgarLauncher.launch(Manifest.permission.ANSWER_PHONE_CALLS)
         }
     }
@@ -115,6 +119,20 @@ fun CallScreen(viewModel: CallViewModel) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Llamadas automáticas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text("Fuente: Matriz — $seleccionados de ${cola.size} en cola", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+
+        if (!permisoColgarOk) {
+            Spacer(Modifier.height(8.dp))
+            Card(colors = CardDefaults.cardColors(containerColor = ClayMapsRed.copy(alpha = 0.12f))) {
+                Column(Modifier.padding(12.dp)) {
+                    Text("Falta el permiso \"Responder llamadas\": la app no podrá colgar sola cuando se cumpla la duración máxima.", style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                            permColgarLauncher.launch(Manifest.permission.ANSWER_PHONE_CALLS)
+                        }
+                    }) { Text("Conceder permiso") }
+                }
+            }
+        }
 
         if (llamando) {
             Spacer(Modifier.height(12.dp))
@@ -231,6 +249,13 @@ fun CallScreen(viewModel: CallViewModel) {
                 onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setSegundosEntreLlamadas(v) } },
                 label = { Text("Segundos de pausa entre llamadas") }, modifier = Modifier.fillMaxWidth(), enabled = !llamando, singleLine = true
             )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = duracionMaximaSegundos.toString(),
+                onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setDuracionMaximaSegundos(v) } },
+                label = { Text("Duración máxima por llamada (segundos)") }, modifier = Modifier.fillMaxWidth(), enabled = !llamando, singleLine = true
+            )
+            Text("Si nadie contesta o nadie cuelga, la app cuelga sola al llegar a este tiempo (necesita el permiso \"Responder llamadas\").", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
 
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
