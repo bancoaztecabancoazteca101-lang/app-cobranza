@@ -1,9 +1,14 @@
 package com.example.matrizapp
 
 import android.Manifest
+import android.content.Intent
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -63,6 +68,7 @@ fun CallScreen(viewModel: CallViewModel) {
     var mostrarListaColonias by remember { mutableStateOf(false) }
     var silenciado by remember { mutableStateOf(false) }
     var permisoColgarOk by remember { mutableStateOf(CallHelper.tienePermisoColgar(context)) }
+    var servicioAccesibilidadOk by remember { mutableStateOf(CallAccessibilityService.servicioActivo()) }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultados ->
         permisosOk = resultados[Manifest.permission.CALL_PHONE] == true && resultados[Manifest.permission.READ_PHONE_STATE] == true
@@ -78,6 +84,19 @@ fun CallScreen(viewModel: CallViewModel) {
         if (!permisoColgarOk && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             permColgarLauncher.launch(Manifest.permission.ANSWER_PHONE_CALLS)
         }
+    }
+
+    // Activar el servicio de accesibilidad se hace en Ajustes del sistema, fuera de la app,
+    // así que revisamos su estado cada vez que la pantalla vuelve a primer plano.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                servicioAccesibilidadOk = CallAccessibilityService.servicioActivo()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     if (!permisosOk) {
@@ -134,6 +153,21 @@ fun CallScreen(viewModel: CallViewModel) {
             }
         }
 
+        if (!servicioAccesibilidadOk) {
+            Spacer(Modifier.height(8.dp))
+            Card(colors = CardDefaults.cardColors(containerColor = ClayMapsRed.copy(alpha = 0.12f))) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        "Activa el servicio de accesibilidad \"Matriz App\" para que la app pueda colgar la llamada aunque el sistema (MIUI/Redmi) bloquee el colgado directo.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    TextButton(onClick = {
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    }) { Text("Abrir ajustes de accesibilidad") }
+                }
+            }
+        }
+
         if (llamando) {
             Spacer(Modifier.height(12.dp))
             Card(colors = CardDefaults.cardColors(containerColor = ClaySmsTeal.copy(alpha = 0.15f))) {
@@ -143,7 +177,11 @@ fun CallScreen(viewModel: CallViewModel) {
                     Spacer(Modifier.height(8.dp))
                     Row {
                         Button(
-                            onClick = { if (!viewModel.colgarActual(context)) Toast.makeText(context, "No se pudo colgar: falta permiso o no compatible con este Android", Toast.LENGTH_LONG).show() },
+                            onClick = {
+                                viewModel.colgarActual(context) { ok ->
+                                    if (!ok) Toast.makeText(context, "No se pudo colgar: activa el permiso o el servicio de accesibilidad", Toast.LENGTH_LONG).show()
+                                }
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = ClayMapsRed), modifier = Modifier.padding(end = 8.dp)
                         ) { Icon(Icons.Default.CallEnd, contentDescription = null); Spacer(Modifier.width(4.dp)); Text("Colgar") }
                         Button(onClick = {

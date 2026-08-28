@@ -82,13 +82,35 @@ object CallHelper {
 
     /** Espera a que la llamada termine sola hasta duracionMaximaMs; si sigue activa al llegar
      * a ese límite (nadie contestó, nadie colgó, línea de prueba, etc.), la cuelga a la fuerza
-     * con colgarLlamada() para que el flujo nunca se quede atorado esperando indefinidamente. */
+     * con colgarLlamadaConFallback() para que el flujo nunca se quede atorado esperando
+     * indefinidamente. */
     suspend fun esperarFinOForzarColgar(context: Context, duracionMaximaMs: Long) {
         esperarFinDeLlamada(context, timeoutMs = duracionMaximaMs)
         if (llamadaActiva(context)) {
-            colgarLlamada(context)
-            kotlinx.coroutines.delay(500) // margen para que el sistema procese el colgado
+            colgarLlamadaConFallback(context)
         }
+    }
+
+    /** Intenta colgar con la API oficial (TelecomManager.endCall()); en fabricantes que la
+     * bloquean silenciosamente para apps que no son el marcador predeterminado (MIUI/Redmi es
+     * el caso conocido), recurre al CallAccessibilityService para simular el toque en el botón
+     * de colgar, igual que hace Tasker con AutoInput. Reintenta un par de veces porque la
+     * pantalla de llamada puede tardar un instante en estar lista para recibir el clic. */
+    suspend fun colgarLlamadaConFallback(context: Context): Boolean {
+        if (colgarLlamada(context)) {
+            kotlinx.coroutines.delay(500)
+            if (!llamadaActiva(context)) return true
+        }
+
+        if (!CallAccessibilityService.servicioActivo()) return false
+
+        repeat(3) { intento ->
+            if (!llamadaActiva(context)) return true
+            CallAccessibilityService.intentarColgar()
+            kotlinx.coroutines.delay(700)
+            if (!llamadaActiva(context)) return true
+        }
+        return !llamadaActiva(context)
     }
 
     /** Suspende hasta que el teléfono vuelva a IDLE después de haber estado en una llamada

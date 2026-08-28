@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Matriz App</string>
+    <string name="accessibility_service_description">Permite colgar llamadas automáticamente cuando se alcanza la duración máxima configurada, para los casos en que el sistema bloquea el colgado directo por API.</string>
 </resources>

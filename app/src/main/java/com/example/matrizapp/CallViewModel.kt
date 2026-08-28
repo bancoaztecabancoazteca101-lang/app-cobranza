@@ -253,7 +253,13 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
 
     fun detenerLlamadas() { _llamando.value = false }
 
-    fun colgarActual(context: Context): Boolean = CallHelper.colgarLlamada(context)
+    /** Cuelga la llamada en curso, usando el respaldo de accesibilidad si TelecomManager es
+     * bloqueado por el fabricante (ver CallHelper.colgarLlamadaConFallback). */
+    fun colgarActual(context: Context, onResultado: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            onResultado(CallHelper.colgarLlamadaConFallback(context))
+        }
+    }
     fun silenciar(context: Context, mute: Boolean) = CallHelper.silenciarMicrofono(context, mute)
     fun microfonoSilenciado(context: Context): Boolean = CallHelper.microfonoSilenciado(context)
 
