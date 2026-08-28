@@ -45,6 +45,11 @@ fun CallScreen(viewModel: CallViewModel) {
     val minutoInicioBloque by viewModel.minutoInicioBloque.collectAsState()
     val horasEntreBloques by viewModel.horasEntreBloques.collectAsState()
     val repeticionesBloque by viewModel.repeticionesBloque.collectAsState()
+    val enviarSmsAlColgar by viewModel.enviarSmsAlColgar.collectAsState()
+    val plantillaSmsTT by viewModel.plantillaSmsTT.collectAsState()
+    val plantillaSmsRef by viewModel.plantillaSmsRef.collectAsState()
+    val agenteSms by viewModel.agenteSms.collectAsState()
+    val contactoSms by viewModel.contactoSms.collectAsState()
     val llamando by viewModel.llamando.collectAsState()
     val progreso by viewModel.progreso.collectAsState()
     val itemActual by viewModel.itemActual.collectAsState()
@@ -226,6 +231,35 @@ fun CallScreen(viewModel: CallViewModel) {
                 onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setSegundosEntreLlamadas(v) } },
                 label = { Text("Segundos de pausa entre llamadas") }, modifier = Modifier.fillMaxWidth(), enabled = !llamando, singleLine = true
             )
+
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = enviarSmsAlColgar, onCheckedChange = { viewModel.setEnviarSmsAlColgar(it) }, enabled = !llamando)
+                Text("Al colgar, mandar SMS a ese mismo número (como en Tasker)")
+            }
+            if (enviarSmsAlColgar) {
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = plantillaSmsTT, onValueChange = { viewModel.setPlantillaSmsTT(it) },
+                    label = { Text("SMS para Titular (usa %nombre% y %monto%)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !llamando
+                )
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = plantillaSmsRef, onValueChange = { viewModel.setPlantillaSmsRef(it) },
+                    label = { Text("SMS para Referencia (usa %nombre%, %agente%, %contacto%)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !llamando
+                )
+                Spacer(Modifier.height(4.dp))
+                Row {
+                    OutlinedTextField(
+                        value = agenteSms, onValueChange = { viewModel.setAgenteSms(it) }, label = { Text("Nombre del gestor (%agente%)") },
+                        modifier = Modifier.weight(1f).padding(end = 4.dp), enabled = !llamando, singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = contactoSms, onValueChange = { viewModel.setContactoSms(it) }, label = { Text("Teléfono contacto (%contacto%)") },
+                        modifier = Modifier.weight(1f).padding(start = 4.dp), enabled = !llamando, singleLine = true
+                    )
+                }
+            }
 
             Spacer(Modifier.height(8.dp))
             Text("Bloques programados", style = MaterialTheme.typography.labelLarge)
