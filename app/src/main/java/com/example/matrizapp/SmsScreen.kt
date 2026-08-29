@@ -311,26 +311,32 @@ private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: andr
             )
         }
 
-        if (repeticionesProgramadasActivas) {
-            Spacer(Modifier.height(8.dp))
-            Card(colors = CardDefaults.cardColors(containerColor = Color.Red.copy(alpha = 0.12f))) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+        // Siempre visible (no solo cuando repeticionesProgramadasActivas es true) en los 3
+        // submenús (Titular/Ref1/Ref2) — el envío automático programado es uno solo compartido
+        // entre las tres fuentes, así que este botón detiene el que esté activo sin importar
+        // desde qué pestaña se abra.
+        Spacer(Modifier.height(8.dp))
+        Card(colors = CardDefaults.cardColors(containerColor = if (repeticionesProgramadasActivas) Color.Red.copy(alpha = 0.12f) else Color.LightGray.copy(alpha = 0.25f))) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(if (repeticionesProgramadasActivas) "Envíos programados activos" else "Sin envíos automáticos activos", fontWeight = FontWeight.Bold)
+                    Text(
+                        if (repeticionesProgramadasActivas) "Sigue mandando SMS automáticamente hasta que lo detengas o se agoten las repeticiones."
+                        else "No hay ninguna ronda de SMS programada en este momento (Titular, Ref1 o Ref2).",
+                        color = Color.Gray, style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Button(
+                    onClick = { viewModel.cancelarRepeticionesProgramadas() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Envíos programados activos", fontWeight = FontWeight.Bold)
-                        Text("Sigue mandando SMS automáticamente hasta que lo detengas o se agoten las repeticiones.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Button(
-                        onClick = { viewModel.cancelarRepeticionesProgramadas() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Detener")
-                    }
+                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Detener")
                 }
             }
         }
