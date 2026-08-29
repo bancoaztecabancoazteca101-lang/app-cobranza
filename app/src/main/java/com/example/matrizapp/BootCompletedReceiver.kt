@@ -20,6 +20,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 val helper = NotificacionesHelper(context.applicationContext)
                 helper.sincronizarAlarmasRetorno(db.filtroDao().getAll().first())
                 helper.sincronizarAlarmasRetornoMatriz(db.matrizDao().getAllMatriz().first())
+                // Bloques de llamadas automáticas: AlarmManager pierde todas sus alarmas al
+                // reiniciar, igual que las de Retorno — se vuelven a programar aquí mismo.
+                LlamadaAutomaticaScheduler(context.applicationContext, db.bloqueHorarioDao()).reprogramarTodos()
             } catch (e: Exception) {
                 // Si algo falla aquí no hay forma de avisarle al usuario (no hay UI); se
                 // reintentará solo la próxima vez que se abra la app y cambien los datos.

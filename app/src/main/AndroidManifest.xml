@@ -51,6 +51,14 @@
             android:exported="false" />
 
         <receiver
+            android:name=".LlamadaBloqueAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".ReprogramarLlamadaBloquesReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".BootCompletedReceiver"
             android:exported="true">
             <intent-filter>
