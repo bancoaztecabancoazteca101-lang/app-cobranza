@@ -5,11 +5,14 @@ import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 
 /** Corre un bloque de llamadas (marca, espera a que termine o la cuelga a la fuerza tras la
@@ -127,5 +130,12 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
         }
 
         fun cancelar(workManager: WorkManager) { workManager.cancelUniqueWork(WORK_NAME) }
+
+        /** true mientras quede algún bloque encolado o corriendo; permite mostrar en la UI si
+         * el flujo sigue activo y habilitar el botón de detener. */
+        fun estaProgramado(workManager: WorkManager): Flow<Boolean> =
+            workManager.getWorkInfosForUniqueWorkFlow(WORK_NAME).map { infos ->
+                infos.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
+            }
     }
 }

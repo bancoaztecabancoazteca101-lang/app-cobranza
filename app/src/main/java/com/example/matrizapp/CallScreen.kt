@@ -59,6 +59,7 @@ fun CallScreen(viewModel: CallViewModel) {
     val llamando by viewModel.llamando.collectAsState()
     val progreso by viewModel.progreso.collectAsState()
     val itemActual by viewModel.itemActual.collectAsState()
+    val bloquesProgramadosActivos by viewModel.bloquesProgramadosActivos.collectAsState()
 
     var permisosOk by remember { mutableStateOf(SmsHelper.tienePermisos(context) && CallHelper.tienePermisos(context)) }
     var lineas by remember { mutableStateOf(SmsHelper.lineasActivas(context)) }
@@ -376,6 +377,30 @@ fun CallScreen(viewModel: CallViewModel) {
         if (llamando) {
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(progress = if (progreso.second == 0) 0f else progreso.first.toFloat() / progreso.second, modifier = Modifier.fillMaxWidth())
+        }
+
+        if (bloquesProgramadosActivos) {
+            Spacer(Modifier.height(8.dp))
+            Card(colors = CardDefaults.cardColors(containerColor = ClayMapsRed.copy(alpha = 0.12f))) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Bloques programados activos", fontWeight = FontWeight.Bold)
+                        Text("Sigue llamando automáticamente hasta que lo detengas o se agoten las repeticiones.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(
+                        onClick = { viewModel.cancelarBloquesProgramados() },
+                        colors = ButtonDefaults.buttonColors(containerColor = ClayMapsRed)
+                    ) {
+                        Icon(Icons.Default.CallEnd, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Detener")
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(12.dp))

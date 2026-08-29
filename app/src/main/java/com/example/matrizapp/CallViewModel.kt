@@ -280,4 +280,9 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     }
 
     fun cancelarBloquesProgramados() { CallRepeatWorker.cancelar(workManager) }
+
+    /** true mientras haya bloques programados encolados o corriendo (sobrevive a cerrar la app;
+     * se actualiza solo vía WorkManager). Se usa para mostrar el botón "Detener bloques". */
+    val bloquesProgramadosActivos: StateFlow<Boolean> = CallRepeatWorker.estaProgramado(workManager)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Send
@@ -98,6 +99,7 @@ private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: andr
     val config by viewModel.configFlow(fuente).collectAsState()
     val enviando by viewModel.enviando.collectAsState()
     val progreso by viewModel.progreso.collectAsState()
+    val repeticionesProgramadasActivas by viewModel.repeticionesProgramadasActivas.collectAsState()
 
     var lineas by remember { mutableStateOf(SmsHelper.lineasActivas(context)) }
     var mostrarConfirmacionEnvio by remember { mutableStateOf(false) }
@@ -307,6 +309,30 @@ private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: andr
                 progress = if (progreso.second == 0) 0f else progreso.first.toFloat() / progreso.second,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+
+        if (repeticionesProgramadasActivas) {
+            Spacer(Modifier.height(8.dp))
+            Card(colors = CardDefaults.cardColors(containerColor = Color.Red.copy(alpha = 0.12f))) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Envíos programados activos", fontWeight = FontWeight.Bold)
+                        Text("Sigue mandando SMS automáticamente hasta que lo detengas o se agoten las repeticiones.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(
+                        onClick = { viewModel.cancelarRepeticionesProgramadas() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Detener")
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(12.dp))

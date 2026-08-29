@@ -5,11 +5,14 @@ import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 
 /** Envía una ronda de SMS a los contactos indicados y, si quedan repeticiones programadas para
@@ -100,5 +103,12 @@ class SmsRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Cor
         fun cancelar(workManager: WorkManager) {
             workManager.cancelUniqueWork(WORK_NAME)
         }
+
+        /** true mientras queden repeticiones encoladas o corriendo; permite mostrar en la UI si
+         * el envío automático sigue activo y habilitar el botón de detener. */
+        fun estaProgramado(workManager: WorkManager): Flow<Boolean> =
+            workManager.getWorkInfosForUniqueWorkFlow(WORK_NAME).map { infos ->
+                infos.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
+            }
     }
 }

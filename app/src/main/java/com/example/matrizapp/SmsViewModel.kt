@@ -261,4 +261,9 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
     }
 
     fun cancelarRepeticionesProgramadas() { SmsRepeatWorker.cancelar(workManager) }
+
+    /** true mientras haya repeticiones de SMS encoladas o corriendo (sobrevive a cerrar la app;
+     * se actualiza solo vía WorkManager). Se usa para mostrar el botón "Detener envíos". */
+    val repeticionesProgramadasActivas: StateFlow<Boolean> = SmsRepeatWorker.estaProgramado(workManager)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 }
