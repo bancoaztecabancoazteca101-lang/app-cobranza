@@ -179,7 +179,6 @@ private fun PermisoAlarmasBanner(onAutorizar: () -> Unit) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFF8A6D00))
-                Spacer(modifier = Modifier)
                 Text(
                     "  Falta autorizar alarmas exactas",
                     style = MaterialTheme.typography.titleSmall,
