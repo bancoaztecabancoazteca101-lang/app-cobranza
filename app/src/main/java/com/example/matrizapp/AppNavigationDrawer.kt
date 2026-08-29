@@ -222,6 +222,16 @@ fun AppNavigationDrawer(
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                    label = { Text("Bloques de horario") },
+                    selected = currentRoute == "bloques_llamada",
+                    onClick = {
+                        onNavigate("bloques_llamada")
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
                 }

@@ -26,4 +26,7 @@ class AppContainer(private val context: Context) {
         )
     }
     val workManager: WorkManager by lazy { WorkManager.getInstance(context) }
+    val llamadaAutomaticaScheduler: LlamadaAutomaticaScheduler by lazy {
+        LlamadaAutomaticaScheduler(context, database.bloqueHorarioDao())
+    }
 }

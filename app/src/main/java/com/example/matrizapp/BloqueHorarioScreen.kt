@@ -2,6 +2,12 @@
 
 package com.example.matrizapp
 
+import android.app.AlarmManager
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +21,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -37,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -44,13 +53,36 @@ import java.time.format.DateTimeFormatter
 private val AZUL_ACENTO = Color(0xFF1565C0)
 private val FORMATO_HORA = DateTimeFormatter.ofPattern("HH:mm")
 
+/** Desde Android 12 (API 31) el sistema exige que el usuario autorice manualmente las alarmas
+ * exactas — sin esto, los bloques quedarían configurados pero jamás se dispararían solos. */
+private fun tienePermisoAlarmasExactas(context: android.content.Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+    val alarmManager = context.getSystemService(android.content.Context.ALARM_SERVICE) as AlarmManager
+    return alarmManager.canScheduleExactAlarms()
+}
+
 @Composable
 fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
     val bloques by viewModel.bloques.collectAsState()
+    val context = LocalContext.current
 
     var mostrarDialogoNuevo by remember { mutableStateOf(false) }
     var bloqueEnEdicion by remember { mutableStateOf<BloqueHorarioEntity?>(null) }
     var bloqueAEliminar by remember { mutableStateOf<BloqueHorarioEntity?>(null) }
+    var permisoAlarmasOk by remember { mutableStateOf(tienePermisoAlarmasExactas(context)) }
+
+    // Revisa el permiso cada vez que la pantalla vuelve a primer plano (por si el usuario
+    // fue a Ajustes a autorizarlo y regresó).
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val lifecycleOwner = context as? androidx.lifecycle.LifecycleOwner
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                permisoAlarmasOk = tienePermisoAlarmasExactas(context)
+            }
+        }
+        lifecycleOwner?.lifecycle?.addObserver(observer)
+        onDispose { lifecycleOwner?.lifecycle?.removeObserver(observer) }
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -62,23 +94,35 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
             }
         }
     ) { padding ->
-        if (bloques.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("Sin bloques configurados. Agrega el primero con el botón +.")
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            if (!permisoAlarmasOk) {
+                PermisoAlarmasBanner(
+                    onAutorizar = {
+                        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                        context.startActivity(intent)
+                    }
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(bloques, key = { it.id }) { bloque ->
-                    BloqueCard(
-                        bloque = bloque,
-                        onToggleActivo = { viewModel.toggleActivo(bloque) },
-                        onEditar = { bloqueEnEdicion = bloque },
-                        onEliminar = { bloqueAEliminar = bloque }
-                    )
+            if (bloques.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Sin bloques configurados. Agrega el primero con el botón +.")
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(bloques, key = { it.id }) { bloque ->
+                        BloqueCard(
+                            bloque = bloque,
+                            onToggleActivo = { viewModel.toggleActivo(bloque) },
+                            onEditar = { bloqueEnEdicion = bloque },
+                            onEliminar = { bloqueAEliminar = bloque }
+                        )
+                    }
                 }
             }
         }
@@ -123,6 +167,33 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                 TextButton(onClick = { bloqueAEliminar = null }) { Text("Cancelar") }
             }
         )
+    }
+}
+
+@Composable
+private fun PermisoAlarmasBanner(onAutorizar: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD))
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFF8A6D00))
+                Spacer(modifier = Modifier)
+                Text(
+                    "  Falta autorizar alarmas exactas",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color(0xFF5C4600)
+                )
+            }
+            Text(
+                "Sin este permiso, los bloques quedan guardados pero no se van a disparar solos cada día.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF5C4600),
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+            )
+            Button(onClick = onAutorizar) { Text("Autorizar en Ajustes") }
+        }
     }
 }
 
