@@ -282,16 +282,14 @@ fun CallScreen(viewModel: CallViewModel) {
             }
 
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = segundosEntreLlamadas.toString(),
-                onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setSegundosEntreLlamadas(v) } },
-                label = { Text("Segundos de pausa entre llamadas") }, modifier = Modifier.fillMaxWidth(), enabled = !llamando, singleLine = true
+            CampoNumerico(
+                valor = segundosEntreLlamadas, onValorValido = { viewModel.setSegundosEntreLlamadas(it) },
+                etiqueta = "Segundos de pausa entre llamadas", modifier = Modifier.fillMaxWidth(), enabled = !llamando, minimo = 1, maximo = 600
             )
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = duracionMaximaSegundos.toString(),
-                onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setDuracionMaximaSegundos(v) } },
-                label = { Text("Duración máxima por llamada (segundos)") }, modifier = Modifier.fillMaxWidth(), enabled = !llamando, singleLine = true
+            CampoNumerico(
+                valor = duracionMaximaSegundos, onValorValido = { viewModel.setDuracionMaximaSegundos(it) },
+                etiqueta = "Duración máxima por llamada (segundos)", modifier = Modifier.fillMaxWidth(), enabled = !llamando, minimo = 5, maximo = 600
             )
             Text("Si nadie contesta o nadie cuelga, la app cuelga sola al llegar a este tiempo (necesita el permiso \"Responder llamadas\").", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
 
@@ -335,15 +333,13 @@ fun CallScreen(viewModel: CallViewModel) {
 
             Spacer(Modifier.height(8.dp))
             Row {
-                OutlinedTextField(
-                    value = horasEntreBloques.toString(),
-                    onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setHorasEntreBloques(v) } },
-                    label = { Text("Horas entre bloques") }, modifier = Modifier.weight(1f).padding(end = 4.dp), enabled = !llamando, singleLine = true
+                CampoNumerico(
+                    valor = horasEntreBloques, onValorValido = { viewModel.setHorasEntreBloques(it) },
+                    etiqueta = "Horas entre bloques", modifier = Modifier.weight(1f).padding(end = 4.dp), enabled = !llamando, minimo = 1, maximo = 72
                 )
-                OutlinedTextField(
-                    value = repeticionesBloque.toString(),
-                    onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setRepeticionesBloque(v) } },
-                    label = { Text("Repeticiones") }, modifier = Modifier.weight(1f).padding(start = 4.dp), enabled = !llamando, singleLine = true
+                CampoNumerico(
+                    valor = repeticionesBloque, onValorValido = { viewModel.setRepeticionesBloque(it) },
+                    etiqueta = "Repeticiones", modifier = Modifier.weight(1f).padding(start = 4.dp), enabled = !llamando, minimo = 1, maximo = 50
                 )
             }
             Text("Ej.: cada 1 hora, 9 repeticiones = 9 bloques de llamadas espaciados 1 h, empezando a la hora de inicio.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)

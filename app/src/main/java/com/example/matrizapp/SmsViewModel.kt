@@ -51,8 +51,23 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
 
     private val _plantillaTT = MutableStateFlow(PLANTILLA_TT_DEFAULT)
     val plantillaTT: StateFlow<String> = _plantillaTT
-    private val _plantillaRef = MutableStateFlow(PLANTILLA_REF_DEFAULT)
-    val plantillaRef: StateFlow<String> = _plantillaRef
+    private val _plantillaRef1 = MutableStateFlow(PLANTILLA_REF_DEFAULT)
+    val plantillaRef1: StateFlow<String> = _plantillaRef1
+    private val _plantillaRef2 = MutableStateFlow(PLANTILLA_REF_DEFAULT)
+    val plantillaRef2: StateFlow<String> = _plantillaRef2
+
+    fun plantillaFlow(f: FuenteSms): StateFlow<String> = when (f) {
+        FuenteSms.TT -> _plantillaTT
+        FuenteSms.REF1 -> _plantillaRef1
+        FuenteSms.REF2 -> _plantillaRef2
+    }
+    fun setPlantilla(f: FuenteSms, texto: String) {
+        when (f) {
+            FuenteSms.TT -> _plantillaTT.value = texto
+            FuenteSms.REF1 -> _plantillaRef1.value = texto
+            FuenteSms.REF2 -> _plantillaRef2.value = texto
+        }
+    }
 
     private val _agente = MutableStateFlow("")
     val agente: StateFlow<String> = _agente
@@ -62,12 +77,28 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
     private val _subscriptionIdSeleccionado = MutableStateFlow<Int?>(null)
     val subscriptionIdSeleccionado: StateFlow<Int?> = _subscriptionIdSeleccionado
 
-    private val _delaySegundos = MutableStateFlow(5)
-    val delaySegundos: StateFlow<Int> = _delaySegundos
-    private val _vecesPorDia = MutableStateFlow(1)
-    val vecesPorDia: StateFlow<Int> = _vecesPorDia
-    private val _horasEntreRepeticion = MutableStateFlow(3)
-    val horasEntreRepeticion: StateFlow<Int> = _horasEntreRepeticion
+    /** Cada fuente (Titular/Ref1/Ref2) tiene su propio tiempo entre SMS, veces al día y horas
+     * entre rondas — antes era un solo valor compartido para las tres, por eso al configurar
+     * una se te desconfiguraban las otras. */
+    data class ConfigEnvioSms(val delaySegundos: Int = 5, val vecesPorDia: Int = 1, val horasEntreRepeticion: Int = 3)
+
+    private val _configPorFuente: Map<FuenteSms, MutableStateFlow<ConfigEnvioSms>> =
+        FuenteSms.values().associateWith { MutableStateFlow(ConfigEnvioSms()) }
+
+    fun configFlow(f: FuenteSms): StateFlow<ConfigEnvioSms> = _configPorFuente.getValue(f)
+
+    fun setDelaySegundos(f: FuenteSms, v: Int) {
+        val flujo = _configPorFuente.getValue(f)
+        flujo.value = flujo.value.copy(delaySegundos = v.coerceIn(1, 300))
+    }
+    fun setVecesPorDia(f: FuenteSms, v: Int) {
+        val flujo = _configPorFuente.getValue(f)
+        flujo.value = flujo.value.copy(vecesPorDia = v.coerceIn(1, 9))
+    }
+    fun setHorasEntreRepeticion(f: FuenteSms, v: Int) {
+        val flujo = _configPorFuente.getValue(f)
+        flujo.value = flujo.value.copy(horasEntreRepeticion = v.coerceIn(1, 12))
+    }
 
     // Ids marcados manualmente como NO enviar, para no perder la selección al recombinar filtros.
     private val _excluidos = MutableStateFlow<Set<String>>(emptySet())
@@ -149,14 +180,9 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
     fun setFechaInicio(millis: Long) { _fechaInicio.value = inicioDeDia(millis); if (_fechaFin.value < _fechaInicio.value) _fechaFin.value = finDeDia(millis) }
     fun setFechaFin(millis: Long) { _fechaFin.value = finDeDia(millis); if (_fechaInicio.value > _fechaFin.value) _fechaInicio.value = inicioDeDia(millis) }
     fun setFuente(f: FuenteSms) { _fuente.value = f }
-    fun setPlantillaTT(texto: String) { _plantillaTT.value = texto }
-    fun setPlantillaRef(texto: String) { _plantillaRef.value = texto }
     fun setAgente(texto: String) { _agente.value = texto }
     fun setContactoGestor(texto: String) { _contacto.value = texto }
     fun setSim(subscriptionId: Int?) { _subscriptionIdSeleccionado.value = subscriptionId }
-    fun setDelaySegundos(v: Int) { _delaySegundos.value = v.coerceIn(1, 300) }
-    fun setVecesPorDia(v: Int) { _vecesPorDia.value = v.coerceIn(1, 9) }
-    fun setHorasEntreRepeticion(v: Int) { _horasEntreRepeticion.value = v.coerceIn(1, 12) }
 
     fun setColoniaTexto(texto: String) { _coloniaTexto.value = texto }
 
@@ -193,7 +219,7 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
     fun seleccionarTodos() { _excluidos.value = emptySet() }
     fun deseleccionarTodos() { _excluidos.value = contactos.value.map { it.id }.toSet() }
 
-    private fun plantillaActual(): String = if (_fuente.value == FuenteSms.TT) _plantillaTT.value else _plantillaRef.value
+    private fun plantillaActual(): String = plantillaFlow(_fuente.value).value
 
     fun enviarAhora(context: Context) {
         if (_enviando.value) return
@@ -206,7 +232,7 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
             val plantilla = plantillaActual()
             val agenteActual = _agente.value
             val contactoActual = _contacto.value
-            val delayMs = _delaySegundos.value * 1000L
+            val delayMs = configFlow(_fuente.value).value.delaySegundos * 1000L
             val estados = _estadosEnvio.value.toMutableMap()
             lista.forEachIndexed { i, contacto ->
                 estados[contacto.id] = EstadoEnvio.ENVIANDO
@@ -225,11 +251,12 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
     fun programarRepeticiones(context: Context) {
         val lista = contactos.value.filter { it.seleccionado }
         if (lista.isEmpty()) return
+        val config = configFlow(_fuente.value).value
         SmsRepeatWorker.programar(
             workManager = workManager, fuente = _fuente.value, idsSeleccionados = lista.map { it.id },
             plantilla = plantillaActual(), agente = _agente.value, contacto = _contacto.value,
-            subscriptionId = _subscriptionIdSeleccionado.value, delaySegundos = _delaySegundos.value,
-            repeticionesRestantes = _vecesPorDia.value, horasEntreRepeticion = _horasEntreRepeticion.value
+            subscriptionId = _subscriptionIdSeleccionado.value, delaySegundos = config.delaySegundos,
+            repeticionesRestantes = config.vecesPorDia, horasEntreRepeticion = config.horasEntreRepeticion
         )
     }
 

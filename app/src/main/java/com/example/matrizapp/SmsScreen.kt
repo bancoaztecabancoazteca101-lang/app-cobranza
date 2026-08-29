@@ -25,39 +25,22 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
+private fun nombreFuente(f: FuenteSms): String = when (f) {
+    FuenteSms.TT -> "Titular"
+    FuenteSms.REF1 -> "Ref 1"
+    FuenteSms.REF2 -> "Ref 2"
+}
+
 @Composable
 fun SmsScreen(viewModel: SmsViewModel) {
     val context = LocalContext.current
-    val contactos by viewModel.contactos.collectAsState()
-    val fechaInicio by viewModel.fechaInicio.collectAsState()
-    val fechaFin by viewModel.fechaFin.collectAsState()
-    val coloniaTexto by viewModel.coloniaTexto.collectAsState()
-    val coloniaCargando by viewModel.coloniaCargando.collectAsState()
-    val coloniasDisponibles by viewModel.coloniasDisponibles.collectAsState()
-    val coloniasCargando by viewModel.coloniasCargando.collectAsState()
     val fuente by viewModel.fuente.collectAsState()
-    val plantillaTT by viewModel.plantillaTT.collectAsState()
-    val plantillaRef by viewModel.plantillaRef.collectAsState()
-    val agente by viewModel.agente.collectAsState()
-    val contactoGestor by viewModel.contactoGestor.collectAsState()
-    val subIdSeleccionado by viewModel.subscriptionIdSeleccionado.collectAsState()
-    val delaySegundos by viewModel.delaySegundos.collectAsState()
-    val vecesPorDia by viewModel.vecesPorDia.collectAsState()
-    val horasEntreRepeticion by viewModel.horasEntreRepeticion.collectAsState()
-    val enviando by viewModel.enviando.collectAsState()
-    val progreso by viewModel.progreso.collectAsState()
 
     var permisosOk by remember { mutableStateOf(SmsHelper.tienePermisos(context)) }
-    var lineas by remember { mutableStateOf(SmsHelper.lineasActivas(context)) }
-    var mostrarConfirmacionEnvio by remember { mutableStateOf(false) }
-    var mostrarConfirmacionProgramar by remember { mutableStateOf(false) }
-    var mostrarOpciones by remember { mutableStateOf(false) }
-    var mostrarListaColonias by remember { mutableStateOf(false) }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultados ->
         permisosOk = resultados.values.all { it }
-        if (permisosOk) lineas = SmsHelper.lineasActivas(context)
-        else Toast.makeText(context, "Se necesitan permisos de SMS y teléfono para enviar", Toast.LENGTH_LONG).show()
+        if (!permisosOk) Toast.makeText(context, "Se necesitan permisos de SMS y teléfono para enviar", Toast.LENGTH_LONG).show()
     }
 
     LaunchedEffect(Unit) {
@@ -77,13 +60,59 @@ fun SmsScreen(viewModel: SmsViewModel) {
         return
     }
 
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            "Envío masivo de SMS",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        )
+
+        TabRow(selectedTabIndex = fuente.ordinal) {
+            FuenteSms.values().forEach { f ->
+                Tab(
+                    selected = fuente == f,
+                    onClick = { viewModel.setFuente(f) },
+                    text = { Text(nombreFuente(f)) }
+                )
+            }
+        }
+
+        SubMenuSms(viewModel = viewModel, fuente = fuente, context = context)
+    }
+}
+
+@Composable
+private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: android.content.Context) {
+    val contactos by viewModel.contactos.collectAsState()
+    val fechaInicio by viewModel.fechaInicio.collectAsState()
+    val fechaFin by viewModel.fechaFin.collectAsState()
+    val coloniaTexto by viewModel.coloniaTexto.collectAsState()
+    val coloniaCargando by viewModel.coloniaCargando.collectAsState()
+    val coloniasDisponibles by viewModel.coloniasDisponibles.collectAsState()
+    val coloniasCargando by viewModel.coloniasCargando.collectAsState()
+    val plantilla by viewModel.plantillaFlow(fuente).collectAsState()
+    val agente by viewModel.agente.collectAsState()
+    val contactoGestor by viewModel.contactoGestor.collectAsState()
+    val subIdSeleccionado by viewModel.subscriptionIdSeleccionado.collectAsState()
+    val config by viewModel.configFlow(fuente).collectAsState()
+    val enviando by viewModel.enviando.collectAsState()
+    val progreso by viewModel.progreso.collectAsState()
+
+    var lineas by remember { mutableStateOf(SmsHelper.lineasActivas(context)) }
+    var mostrarConfirmacionEnvio by remember { mutableStateOf(false) }
+    var mostrarConfirmacionProgramar by remember { mutableStateOf(false) }
+    var mostrarOpciones by remember { mutableStateOf(false) }
+    var mostrarListaColonias by remember { mutableStateOf(false) }
+
     val seleccionados = contactos.count { it.seleccionado }
+    val formatoFecha = remember { SimpleDateFormat("dd/MM/yyyy", Locale("es", "MX")) }
 
     if (mostrarConfirmacionEnvio) {
         AlertDialog(
             onDismissRequest = { mostrarConfirmacionEnvio = false },
-            title = { Text("Confirmar envío") },
-            text = { Text("Se enviará SMS ahora a $seleccionados contactos, uno por uno con $delaySegundos s de espacio entre cada uno. ¿Continuar?") },
+            title = { Text("Confirmar envío — ${nombreFuente(fuente)}") },
+            text = { Text("Se enviará SMS ahora a $seleccionados contactos, uno por uno con ${config.delaySegundos} s de espacio entre cada uno. ¿Continuar?") },
             confirmButton = { TextButton(onClick = { mostrarConfirmacionEnvio = false; viewModel.enviarAhora(context) }) { Text("Enviar") } },
             dismissButton = { TextButton(onClick = { mostrarConfirmacionEnvio = false }) { Text("Cancelar") } }
         )
@@ -91,17 +120,14 @@ fun SmsScreen(viewModel: SmsViewModel) {
     if (mostrarConfirmacionProgramar) {
         AlertDialog(
             onDismissRequest = { mostrarConfirmacionProgramar = false },
-            title = { Text("Confirmar programación") },
-            text = { Text("Se enviará a $seleccionados contactos, repitiendo $vecesPorDia veces con $horasEntreRepeticion h entre cada ronda (empezando ahora mismo). Esto sigue corriendo aunque cierres la app. ¿Continuar?") },
+            title = { Text("Confirmar programación — ${nombreFuente(fuente)}") },
+            text = { Text("Se enviará a $seleccionados contactos, repitiendo ${config.vecesPorDia} veces con ${config.horasEntreRepeticion} h entre cada ronda (empezando ahora mismo). Esto sigue corriendo aunque cierres la app. ¿Continuar?") },
             confirmButton = { TextButton(onClick = { mostrarConfirmacionProgramar = false; viewModel.programarRepeticiones(context) }) { Text("Programar") } },
             dismissButton = { TextButton(onClick = { mostrarConfirmacionProgramar = false }) { Text("Cancelar") } }
         )
     }
 
-    val formatoFecha = remember { SimpleDateFormat("dd/MM/yyyy", Locale("es", "MX")) }
-
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Envío masivo de SMS", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text("Fuente: Matriz — $seleccionados de ${contactos.size} seleccionados", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
 
         Spacer(Modifier.height(12.dp))
@@ -180,28 +206,16 @@ fun SmsScreen(viewModel: SmsViewModel) {
 
         Spacer(Modifier.height(12.dp))
 
-        Text("¿A quién le llega el SMS?", style = MaterialTheme.typography.labelLarge)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            FuenteSms.values().forEach { f ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 4.dp)) {
-                    RadioButton(selected = fuente == f, onClick = { viewModel.setFuente(f) }, enabled = !enviando)
-                    Text(when (f) { FuenteSms.TT -> "Titular"; FuenteSms.REF1 -> "Ref 1"; FuenteSms.REF2 -> "Ref 2" })
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
         if (fuente == FuenteSms.TT) {
             OutlinedTextField(
-                value = plantillaTT, onValueChange = { viewModel.setPlantillaTT(it) },
+                value = plantilla, onValueChange = { viewModel.setPlantilla(fuente, it) },
                 label = { Text("Mensaje Titular (usa %nombre% y %monto%)") },
                 modifier = Modifier.fillMaxWidth(), minLines = 3, enabled = !enviando
             )
         } else {
             OutlinedTextField(
-                value = plantillaRef, onValueChange = { viewModel.setPlantillaRef(it) },
-                label = { Text("Mensaje Referencia (usa %nombre%, %agente%, %contacto%)") },
+                value = plantilla, onValueChange = { viewModel.setPlantilla(fuente, it) },
+                label = { Text("Mensaje ${nombreFuente(fuente)} (usa %nombre%, %agente%, %contacto%)") },
                 modifier = Modifier.fillMaxWidth(), minLines = 3, enabled = !enviando
             )
             Spacer(Modifier.height(8.dp))
@@ -237,23 +251,20 @@ fun SmsScreen(viewModel: SmsViewModel) {
 
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = delaySegundos.toString(),
-                    onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setDelaySegundos(v) } },
-                    label = { Text("Segundos entre SMS") },
-                    modifier = Modifier.weight(1f).padding(end = 4.dp), enabled = !enviando, singleLine = true
+                CampoNumerico(
+                    valor = config.delaySegundos, onValorValido = { viewModel.setDelaySegundos(fuente, it) },
+                    etiqueta = "Segundos entre SMS", modifier = Modifier.weight(1f).padding(end = 4.dp),
+                    enabled = !enviando, minimo = 1, maximo = 300
                 )
-                OutlinedTextField(
-                    value = vecesPorDia.toString(),
-                    onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setVecesPorDia(v) } },
-                    label = { Text("Veces al día") },
-                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp), enabled = !enviando, singleLine = true
+                CampoNumerico(
+                    valor = config.vecesPorDia, onValorValido = { viewModel.setVecesPorDia(fuente, it) },
+                    etiqueta = "Veces al día", modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                    enabled = !enviando, minimo = 1, maximo = 9
                 )
-                OutlinedTextField(
-                    value = horasEntreRepeticion.toString(),
-                    onValueChange = { it.toIntOrNull()?.let { v -> viewModel.setHorasEntreRepeticion(v) } },
-                    label = { Text("Horas entre rondas") },
-                    modifier = Modifier.weight(1f).padding(start = 4.dp), enabled = !enviando || vecesPorDia <= 1, singleLine = true
+                CampoNumerico(
+                    valor = config.horasEntreRepeticion, onValorValido = { viewModel.setHorasEntreRepeticion(fuente, it) },
+                    etiqueta = "Horas entre rondas", modifier = Modifier.weight(1f).padding(start = 4.dp),
+                    enabled = !enviando || config.vecesPorDia <= 1, minimo = 1, maximo = 12
                 )
             }
             Text("\"Veces al día\" en 1 = solo esta ronda. Más de 1 programa rondas repetidas cada N horas, aunque cierres la app.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
@@ -276,7 +287,7 @@ fun SmsScreen(viewModel: SmsViewModel) {
                 Spacer(Modifier.width(6.dp))
                 Text(if (enviando) "${progreso.first}/${progreso.second}…" else "Enviar ahora ($seleccionados)")
             }
-            if (vecesPorDia > 1) {
+            if (config.vecesPorDia > 1) {
                 Button(
                     onClick = { mostrarConfirmacionProgramar = true },
                     enabled = !enviando && seleccionados > 0,
@@ -285,7 +296,7 @@ fun SmsScreen(viewModel: SmsViewModel) {
                 ) {
                     Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Programar x$vecesPorDia")
+                    Text("Programar x${config.vecesPorDia}")
                 }
             }
         }
