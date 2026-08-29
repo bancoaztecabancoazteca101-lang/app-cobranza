@@ -379,26 +379,31 @@ fun CallScreen(viewModel: CallViewModel) {
             LinearProgressIndicator(progress = if (progreso.second == 0) 0f else progreso.first.toFloat() / progreso.second, modifier = Modifier.fillMaxWidth())
         }
 
-        if (bloquesProgramadosActivos) {
-            Spacer(Modifier.height(8.dp))
-            Card(colors = CardDefaults.cardColors(containerColor = ClayMapsRed.copy(alpha = 0.12f))) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+        // Siempre visible (no solo cuando bloquesProgramadosActivos es true): así se puede
+        // detener el flujo automático de llamadas aunque la UI no haya detectado a tiempo que
+        // hay algo corriendo, o simplemente para tener el botón a la mano sin buscarlo.
+        Spacer(Modifier.height(8.dp))
+        Card(colors = CardDefaults.cardColors(containerColor = if (bloquesProgramadosActivos) ClayMapsRed.copy(alpha = 0.12f) else Color.LightGray.copy(alpha = 0.25f))) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(if (bloquesProgramadosActivos) "Bloques programados activos" else "Sin llamadas automáticas activas", fontWeight = FontWeight.Bold)
+                    Text(
+                        if (bloquesProgramadosActivos) "Sigue llamando automáticamente hasta que lo detengas o se agoten las repeticiones."
+                        else "No hay ningún bloque de llamadas programado en este momento.",
+                        color = Color.Gray, style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Button(
+                    onClick = { viewModel.cancelarBloquesProgramados() },
+                    colors = ButtonDefaults.buttonColors(containerColor = ClayMapsRed)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Bloques programados activos", fontWeight = FontWeight.Bold)
-                        Text("Sigue llamando automáticamente hasta que lo detengas o se agoten las repeticiones.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Button(
-                        onClick = { viewModel.cancelarBloquesProgramados() },
-                        colors = ButtonDefaults.buttonColors(containerColor = ClayMapsRed)
-                    ) {
-                        Icon(Icons.Default.CallEnd, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Detener")
-                    }
+                    Icon(Icons.Default.CallEnd, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Cancelar llamadas automáticas")
                 }
             }
         }
