@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -363,27 +364,35 @@ private fun SubMenuLlamadas(
             TextButton(onClick = { viewModel.deseleccionarTodos() }, enabled = !llamando) { Text("Deseleccionar todos") }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
         Row {
             Button(
                 onClick = { if (llamando) viewModel.detenerLlamadas() else mostrarConfirmacionLlamar = true },
                 enabled = seleccionados > 0 || llamando,
                 modifier = Modifier.weight(1f).padding(end = 4.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = if (llamando) ClayMapsRed else ClaySmsTeal)
             ) {
-                Icon(if (llamando) Icons.Default.CallEnd else Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(if (llamando) "Detener (${progreso.first}/${progreso.second})" else "Llamar ahora ($seleccionados)")
+                Icon(if (llamando) Icons.Default.CallEnd else Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    if (llamando) "${progreso.first}/${progreso.second}" else "Llamar ($seleccionados)",
+                    style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
             }
             Button(
                 onClick = { mostrarConfirmacionProgramar = true },
                 enabled = !llamando && seleccionados > 0,
                 modifier = Modifier.weight(1f).padding(start = 4.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ClayPrimary)
             ) {
-                Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Programar x${config.repeticionesBloque}")
+                Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "Programar x${config.repeticionesBloque}",
+                    style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
             }
         }
 
@@ -397,30 +406,14 @@ private fun SubMenuLlamadas(
         // tipos, así que este botón detiene el que esté activo sin importar desde qué pestaña
         // se abra.
         Spacer(Modifier.height(8.dp))
-        Card(colors = CardDefaults.cardColors(containerColor = if (bloquesProgramadosActivos) ClayMapsRed.copy(alpha = 0.12f) else Color.LightGray.copy(alpha = 0.25f))) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(if (bloquesProgramadosActivos) "Bloques programados activos" else "Sin llamadas automáticas activas", fontWeight = FontWeight.Bold)
-                    Text(
-                        if (bloquesProgramadosActivos) "Sigue llamando automáticamente hasta que lo detengas o se agoten las repeticiones."
-                        else "No hay ningún bloque de llamadas programado en este momento (Titular, Ref1 o Ref2).",
-                        color = Color.Gray, style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Button(
-                    onClick = { viewModel.cancelarBloquesProgramados() },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClayMapsRed)
-                ) {
-                    Icon(Icons.Default.CallEnd, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Cancelar llamadas automáticas")
-                }
-            }
-        }
+        EstadoAutomatizacionBanner(
+            activo = bloquesProgramadosActivos,
+            textoActivo = "Bloques programados activos",
+            textoInactivo = "Sin llamadas automáticas activas",
+            colorActivo = ClayMapsRed,
+            etiquetaDetener = "Cancelar",
+            onDetener = { viewModel.cancelarBloquesProgramados() }
+        )
 
         Spacer(Modifier.height(12.dp))
 

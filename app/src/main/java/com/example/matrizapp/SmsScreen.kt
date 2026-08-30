@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -283,22 +284,30 @@ private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: andr
                 onClick = { mostrarConfirmacionEnvio = true },
                 enabled = !enviando && seleccionados > 0,
                 modifier = Modifier.weight(1f).padding(end = 4.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ClaySmsTeal)
             ) {
-                Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(if (enviando) "${progreso.first}/${progreso.second}…" else "Enviar ahora ($seleccionados)")
+                Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    if (enviando) "${progreso.first}/${progreso.second}" else "Enviar ($seleccionados)",
+                    style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
             }
             if (config.vecesPorDia > 1) {
                 Button(
                     onClick = { mostrarConfirmacionProgramar = true },
                     enabled = !enviando && seleccionados > 0,
                     modifier = Modifier.weight(1f).padding(start = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ClayPrimary)
                 ) {
-                    Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Programar x${config.vecesPorDia}")
+                    Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Programar x${config.vecesPorDia}",
+                        style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -316,30 +325,14 @@ private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: andr
         // entre las tres fuentes, así que este botón detiene el que esté activo sin importar
         // desde qué pestaña se abra.
         Spacer(Modifier.height(8.dp))
-        Card(colors = CardDefaults.cardColors(containerColor = if (repeticionesProgramadasActivas) Color.Red.copy(alpha = 0.12f) else Color.LightGray.copy(alpha = 0.25f))) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(if (repeticionesProgramadasActivas) "Envíos programados activos" else "Sin envíos automáticos activos", fontWeight = FontWeight.Bold)
-                    Text(
-                        if (repeticionesProgramadasActivas) "Sigue mandando SMS automáticamente hasta que lo detengas o se agoten las repeticiones."
-                        else "No hay ninguna ronda de SMS programada en este momento (Titular, Ref1 o Ref2).",
-                        color = Color.Gray, style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Button(
-                    onClick = { viewModel.cancelarRepeticionesProgramadas() },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Detener")
-                }
-            }
-        }
+        EstadoAutomatizacionBanner(
+            activo = repeticionesProgramadasActivas,
+            textoActivo = "Envíos programados activos",
+            textoInactivo = "Sin envíos automáticos activos",
+            colorActivo = Color(0xFFC62828),
+            etiquetaDetener = "Detener",
+            onDetener = { viewModel.cancelarRepeticionesProgramadas() }
+        )
 
         Spacer(Modifier.height(12.dp))
 
