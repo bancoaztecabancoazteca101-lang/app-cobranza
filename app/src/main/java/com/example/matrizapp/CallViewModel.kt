@@ -67,6 +67,13 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     val subscriptionIdSeleccionado: StateFlow<Int?> = _subscriptionIdSeleccionado
     fun setSim(subscriptionId: Int?) { _subscriptionIdSeleccionado.value = subscriptionId }
 
+    /** Interruptor global (no por tipo, depende de la línea/compañía, no del contacto marcado):
+     *  antepone #31# para ocultar el número del titular. Solo confirmado funcional con Movistar
+     *  México — con otras compañías puede no marcar, por eso se puede prender/apagar. */
+    private val _ocultarNumero = MutableStateFlow(false)
+    val ocultarNumero: StateFlow<Boolean> = _ocultarNumero
+    fun setOcultarNumero(v: Boolean) { _ocultarNumero.value = v }
+
     /** Config de bloque propia por tipo — antes era un único valor compartido para los tres,
      * por eso ajustar la pausa/duración/horario de uno desconfiguraba a los otros dos. */
     data class ConfigLlamada(
@@ -249,7 +256,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
                 _itemActual.value = item
                 estados[item.id] = EstadoLlamada.LLAMANDO
                 _estados.value = estados.toMap()
-                CallHelper.realizarLlamada(context, subId, item.telefono)
+                CallHelper.realizarLlamada(context, subId, item.telefono, ocultarNumero = _ocultarNumero.value)
                 delay(2000) // margen para que el sistema conecte la llamada antes de escuchar el estado
                 CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaSegundos * 1000L)
                 if (enviarSms) enviarSmsPostLlamada(context, item, subId)
@@ -292,7 +299,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
             duracionMaximaSegundos = config.duracionMaximaSegundos,
             iniciarEnMillis = inicioMillis, horasEntreBloques = config.horasEntreBloques, repeticionesRestantes = config.repeticionesBloque,
             enviarSmsAlColgar = enviarSmsAlColgarFlow(tipoActual).value, plantillaSms = plantillaSmsFlow(tipoActual).value,
-            agenteSms = _agenteSms.value, contactoSms = _contactoSms.value
+            agenteSms = _agenteSms.value, contactoSms = _contactoSms.value, ocultarNumero = _ocultarNumero.value
         )
     }
 

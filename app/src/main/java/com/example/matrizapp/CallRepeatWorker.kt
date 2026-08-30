@@ -31,6 +31,7 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
         val horasEntreBloques = inputData.getInt(KEY_HORAS, 1)
         val repeticionesRestantes = inputData.getInt(KEY_REPETICIONES, 1)
         val enviarSmsAlColgar = inputData.getBoolean(KEY_ENVIAR_SMS, false)
+        val ocultarNumero = inputData.getBoolean(KEY_OCULTAR_NUMERO, false)
         val plantillaSms = inputData.getString(KEY_PLANTILLA) ?: ""
         val agenteSms = inputData.getString(KEY_AGENTE) ?: ""
         val contactoSms = inputData.getString(KEY_CONTACTO) ?: ""
@@ -51,7 +52,7 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
                 TipoLlamada.REF2 -> registro.ref2
             }
             if (telefono.isNullOrBlank()) continue
-            CallHelper.realizarLlamada(applicationContext, subId, telefono)
+            CallHelper.realizarLlamada(applicationContext, subId, telefono, ocultarNumero = ocultarNumero)
             delay(2000)
             // Espera a que termine sola; si sigue activa al llegar a la duración máxima
             // (nadie contestó ni colgó), la cuelga a la fuerza para no quedarse atorado.
@@ -69,7 +70,7 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
         if (repeticionesRestantes > 1) {
             val siguiente = OneTimeWorkRequestBuilder<CallRepeatWorker>()
                 .setInitialDelay(horasEntreBloques.toLong(), TimeUnit.HOURS)
-                .setInputData(construirInputData(tipo, ids.toList(), subId, segundosEntreLlamadas, duracionMaximaSegundos, horasEntreBloques, repeticionesRestantes - 1, enviarSmsAlColgar, plantillaSms, agenteSms, contactoSms))
+                .setInputData(construirInputData(tipo, ids.toList(), subId, segundosEntreLlamadas, duracionMaximaSegundos, horasEntreBloques, repeticionesRestantes - 1, enviarSmsAlColgar, plantillaSms, agenteSms, contactoSms, ocultarNumero))
                 .build()
             WorkManager.getInstance(applicationContext).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, siguiente)
         }
@@ -90,10 +91,11 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
         private const val KEY_PLANTILLA = "plantillaSms"
         private const val KEY_AGENTE = "agenteSms"
         private const val KEY_CONTACTO = "contactoSms"
+        private const val KEY_OCULTAR_NUMERO = "ocultarNumero"
 
         private fun construirInputData(
             tipo: TipoLlamada, ids: List<String>, subscriptionId: Int?, segundosEntreLlamadas: Int, duracionMaximaSegundos: Int, horasEntreBloques: Int, repeticionesRestantes: Int,
-            enviarSmsAlColgar: Boolean, plantillaSms: String, agenteSms: String, contactoSms: String
+            enviarSmsAlColgar: Boolean, plantillaSms: String, agenteSms: String, contactoSms: String, ocultarNumero: Boolean = false
         ): Data = workDataOf(
             KEY_TIPO to tipo.name,
             KEY_IDS to ids.joinToString(","),
@@ -105,7 +107,8 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
             KEY_ENVIAR_SMS to enviarSmsAlColgar,
             KEY_PLANTILLA to plantillaSms,
             KEY_AGENTE to agenteSms,
-            KEY_CONTACTO to contactoSms
+            KEY_CONTACTO to contactoSms,
+            KEY_OCULTAR_NUMERO to ocultarNumero
         )
 
         /** Encola el primer bloque para que arranque en iniciarEnMillis (ya calculado como la
@@ -114,12 +117,12 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
             workManager: WorkManager, tipo: TipoLlamada, idsSeleccionados: List<String>, subscriptionId: Int?,
             segundosEntreLlamadas: Int, duracionMaximaSegundos: Int, iniciarEnMillis: Long, horasEntreBloques: Int, repeticionesRestantes: Int,
             enviarSmsAlColgar: Boolean = false, plantillaSms: String = "",
-            agenteSms: String = "", contactoSms: String = ""
+            agenteSms: String = "", contactoSms: String = "", ocultarNumero: Boolean = false
         ) {
             val delayInicialMs = (iniciarEnMillis - System.currentTimeMillis()).coerceAtLeast(0)
             val solicitud = OneTimeWorkRequestBuilder<CallRepeatWorker>()
                 .setInitialDelay(delayInicialMs, TimeUnit.MILLISECONDS)
-                .setInputData(construirInputData(tipo, idsSeleccionados, subscriptionId, segundosEntreLlamadas, duracionMaximaSegundos, horasEntreBloques, repeticionesRestantes, enviarSmsAlColgar, plantillaSms, agenteSms, contactoSms))
+                .setInputData(construirInputData(tipo, idsSeleccionados, subscriptionId, segundosEntreLlamadas, duracionMaximaSegundos, horasEntreBloques, repeticionesRestantes, enviarSmsAlColgar, plantillaSms, agenteSms, contactoSms, ocultarNumero))
                 .build()
             workManager.enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, solicitud)
         }

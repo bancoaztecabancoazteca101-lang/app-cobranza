@@ -32,9 +32,14 @@ object CallHelper {
         return ContextCompat.checkSelfPermission(context, Manifest.permission.ANSWER_PHONE_CALLS) == PackageManager.PERMISSION_GRANTED
     }
 
-    /** Marca directo (ACTION_CALL, sin pasar por el marcador) en la línea indicada si es dual-SIM. */
-    fun realizarLlamada(context: Context, subscriptionId: Int?, numero: String) {
-        val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$numero")).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+    /** Marca directo (ACTION_CALL, sin pasar por el marcador) en la línea indicada si es dual-SIM.
+     *  ocultarNumero = true antepone #31# (oculta el número del titular vía CLIR temporal) —
+     *  solo funciona con compañías que soportan ese código de red (confirmado con Movistar México);
+     *  con otras compañías puede simplemente no marcar, por eso es un interruptor y no algo fijo. */
+    fun realizarLlamada(context: Context, subscriptionId: Int?, numero: String, ocultarNumero: Boolean = false) {
+        val numeroFinal = if (ocultarNumero) "#31#$numero" else numero
+        // Uri.fromParts (no Uri.parse) evita que el '#' se interprete como fragmento de la URI.
+        val intent = Intent(Intent.ACTION_CALL, Uri.fromParts("tel", numeroFinal, null)).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         if (subscriptionId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 val handle = obtenerPhoneAccountHandle(context, subscriptionId)

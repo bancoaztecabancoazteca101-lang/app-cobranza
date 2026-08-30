@@ -131,6 +131,7 @@ private fun SubMenuLlamadas(
     val coloniasDisponibles by viewModel.coloniasDisponibles.collectAsState()
     val coloniasCargando by viewModel.coloniasCargando.collectAsState()
     val subIdSeleccionado by viewModel.subscriptionIdSeleccionado.collectAsState()
+    val ocultarNumero by viewModel.ocultarNumero.collectAsState()
     val config by viewModel.configFlow(tipo).collectAsState()
     val enviarSmsAlColgar by viewModel.enviarSmsAlColgarFlow(tipo).collectAsState()
     val plantillaSms by viewModel.plantillaSmsFlow(tipo).collectAsState()
@@ -323,6 +324,18 @@ private fun SubMenuLlamadas(
                 }
             } else if (lineas.size == 1 && subIdSeleccionado == null) {
                 viewModel.setSim(lineas.first().subscriptionId)
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("Ocultar número al marcar", style = MaterialTheme.typography.bodyMedium)
+                    Text("Solo confirmado con Movistar — con otras compañías puede no marcar", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(
+                    checked = ocultarNumero, onCheckedChange = { viewModel.setOcultarNumero(it) }, enabled = !llamando,
+                    colors = SwitchDefaults.colors(checkedThumbColor = ClayPrimary, checkedTrackColor = ClayPrimary.copy(alpha = 0.5f))
+                )
             }
 
             Spacer(Modifier.height(8.dp))
