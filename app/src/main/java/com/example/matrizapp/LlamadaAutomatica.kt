@@ -250,6 +250,9 @@ class LlamadaAutomaticaWorker(
 
             procesarClienteLlamadaAutomatica(applicationContext, r, sem, subId, logDao)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = hoyMillis, bloqueIndex = bloqueActualIndex))
+        }
+        return Result.success()
+    }
 
     companion object {
         const val KEY_BLOQUE_ID = "bloque_id"
