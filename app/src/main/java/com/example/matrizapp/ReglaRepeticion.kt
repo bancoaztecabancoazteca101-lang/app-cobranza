@@ -67,78 +67,26 @@ object ReglaRepeticion {
     }
 }
 
-/** Antes había un solo mensaje fijo por semana (idéntico al script GAS). Como un cliente puede
- * recibir hasta 10 contactos en la misma semana (Sem 5), mandar siempre el mismo texto se ve
- * repetitivo/robótico — ahora hay varias variantes por semana y se rota entre ellas según
- * `variante` (normalmente el total de contactos previos al cliente, % tamaño de la lista). */
+/** Antes había 5 mensajes fijos en el código (uno por semana). Ahora las plantillas viven en
+ * Room (`PlantillaSmsEntity`, editables desde la pantalla "Plantillas de SMS") y aquí solo queda
+ * la lógica de rotación: hasta 6 variantes por semana/tipo, se rota según `variante` (el total de
+ * contactos previos al cliente, `ContactoLogDao.contarTotalContactos`) para no repetir el mismo
+ * texto en clientes con varios contactos en la semana (hasta 10 en Sem 5). Los defaults de
+ * `PlantillasSemillaSms` se insertan una sola vez al arrancar la app (AppContainer). */
 object MensajesCobranza {
 
-    fun paraTT(nombre: String, monto: String, sem: Int, variante: Int = 0): String {
+    suspend fun paraTT(dao: PlantillaSmsDao, nombre: String, monto: String, sem: Int, variante: Int = 0): String {
         val montoParte = if (monto.isNotBlank()) " por \$$monto" else ""
-        val plantillas = plantillasTT[sem] ?: plantillasTT.getValue(1)
+        val plantillas = dao.obtenerActivasPara("TT", sem)
+        if (plantillas.isEmpty()) return "Banco Azteca: $nombre, su cuenta presenta atraso$montoParte. Comuníquese hoy mismo."
         val idx = ((variante % plantillas.size) + plantillas.size) % plantillas.size
-        return plantillas[idx](nombre, montoParte)
+        return plantillas[idx].texto.replace("{nombre}", nombre).replace("{monto}", montoParte)
     }
 
-    fun paraReferencia(nombre: String, sem: Int, variante: Int = 0): String {
-        val plantillas = plantillasRef[sem] ?: plantillasRef.getValue(1)
+    suspend fun paraReferencia(dao: PlantillaSmsDao, nombre: String, sem: Int, variante: Int = 0): String {
+        val plantillas = dao.obtenerActivasPara("REF", sem)
+        if (plantillas.isEmpty()) return "Banco Azteca le informa que $nombre mantiene un adeudo pendiente. Le pedimos comunicarle que se contacte con nosotros."
         val idx = ((variante % plantillas.size) + plantillas.size) % plantillas.size
-        return plantillas[idx](nombre)
+        return plantillas[idx].texto.replace("{nombre}", nombre)
     }
-
-    private val plantillasTT: Map<Int, List<(String, String) -> String>> = mapOf(
-        1 to listOf(
-            { n, m -> "Hola $n, Banco Azteca le recuerda su pago pendiente$m. Le invitamos a regularizar su situación a la brevedad." },
-            { n, m -> "Banco Azteca: $n, tiene un pago pendiente$m con nosotros. Le pedimos ponerse al corriente lo antes posible." },
-            { n, m -> "Estimado(a) $n, le recordamos que su pago con Banco Azteca sigue pendiente$m. Quedamos atentos a su pronto pago." }
-        ),
-        2 to listOf(
-            { n, m -> "Hola $n, su pago con Banco Azteca sigue pendiente$m. Evite recargos, comuníquese hoy mismo." },
-            { n, m -> "Banco Azteca: $n, aún no recibimos su pago$m. Le sugerimos contactarnos hoy para evitar cargos adicionales." },
-            { n, m -> "$n, su cuenta con Banco Azteca continúa sin regularizar$m. Por favor comuníquese con nosotros a la brevedad." }
-        ),
-        3 to listOf(
-            { n, m -> "Banco Azteca: $n, su cuenta presenta atraso$m. Regularice su pago para evitar afectaciones en su historial crediticio." },
-            { n, m -> "$n, su adeudo con Banco Azteca sigue sin regularizarse$m. Le recordamos que esto puede afectar su historial crediticio." },
-            { n, m -> "Banco Azteca le informa que $n mantiene un atraso$m. Es importante que se comunique para evitar mayores afectaciones." }
-        ),
-        4 to listOf(
-            { n, m -> "Banco Azteca: $n, su adeudo$m continúa sin regularizar. De no atenderlo, podría afectarse su historial y generarse gestiones adicionales de cobro." },
-            { n, m -> "$n, no hemos recibido respuesta sobre su adeudo$m. Le pedimos comunicarse pronto para evitar gestiones de cobro adicionales." },
-            { n, m -> "Banco Azteca: su cuenta, $n, sigue vencida$m y sin respuesta de su parte. Regularícela para evitar consecuencias mayores." }
-        ),
-        5 to listOf(
-            { n, m -> "Banco Azteca: $n, su cuenta presenta atraso grave$m. Es indispensable que se comunique hoy mismo para evitar medidas de cobranza y visitas en su domicilio." },
-            { n, m -> "$n, su adeudo$m sigue sin resolverse y es urgente atenderlo. Contáctenos hoy mismo para evitar visitas de cobranza en su domicilio." },
-            { n, m -> "Banco Azteca: es indispensable que $n se comunique hoy$m. De lo contrario, procederemos con gestiones de cobranza, incluida visita domiciliaria." }
-        )
-    )
-
-    private val plantillasRef: Map<Int, List<(String) -> String>> = mapOf(
-        1 to listOf(
-            { n -> "Banco Azteca le informa que $n mantiene un pago pendiente. Le solicitamos, por favor, comunicarle que se ponga en contacto con nosotros." },
-            { n -> "Le hablamos de Banco Azteca: $n tiene un pago pendiente con nosotros. Le pedimos su apoyo para que se comunique a la brevedad." },
-            { n -> "Banco Azteca: le pedimos comunicarle a $n que tiene un pago pendiente y que se ponga en contacto con nosotros." }
-        ),
-        2 to listOf(
-            { n -> "Banco Azteca le informa que $n mantiene un pago pendiente sin regularizar. Le pedimos comunicarle que se contacte con nosotros a la brevedad." },
-            { n -> "Le escribimos de Banco Azteca: $n aún no regulariza su pago. Agradecemos su apoyo para pedirle que nos contacte pronto." },
-            { n -> "Banco Azteca: $n sigue sin regularizar su pago pendiente. Le solicitamos su apoyo para que se comunique con nosotros." }
-        ),
-        3 to listOf(
-            { n -> "Banco Azteca: $n mantiene un adeudo pendiente de regularización. Le solicitamos comunicarle la importancia de contactarnos pronto." },
-            { n -> "Le hablamos de Banco Azteca: el adeudo de $n sigue sin regularizarse. Le pedimos comunicarle que nos contacte cuanto antes." },
-            { n -> "Banco Azteca: es importante que $n regularice su adeudo. Le pedimos su apoyo para comunicarle que se ponga en contacto con nosotros." }
-        ),
-        4 to listOf(
-            { n -> "Banco Azteca: $n mantiene un adeudo vencido y no ha respondido a nuestras gestiones de cobro. Le solicitamos comunicarle la urgencia de regularizar su situación." },
-            { n -> "Le escribimos de Banco Azteca: no hemos tenido respuesta de $n sobre su adeudo vencido. Le pedimos comunicarle que es urgente que nos contacte." },
-            { n -> "Banco Azteca: el adeudo de $n sigue vencido y sin respuesta. Le solicitamos su apoyo para comunicarle la urgencia de regularizarlo." }
-        ),
-        5 to listOf(
-            { n -> "Banco Azteca: $n mantiene un adeudo grave sin resolver. Le solicitamos, por favor, comunicarle con urgencia que se contacte con nosotros para evitar visitas en su domicilio." },
-            { n -> "Le hablamos de Banco Azteca: el caso de $n es urgente. Le pedimos comunicarle que se contacte con nosotros hoy mismo para evitar visitas de cobranza." },
-            { n -> "Banco Azteca: es indispensable que $n se comunique hoy. Le solicitamos su apoyo para evitarle una visita domiciliaria de cobranza." }
-        )
-    )
 }

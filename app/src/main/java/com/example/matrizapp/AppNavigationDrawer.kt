@@ -232,6 +232,16 @@ fun AppNavigationDrawer(
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Message, contentDescription = null) },
+                    label = { Text("Plantillas de SMS") },
+                    selected = currentRoute == "plantillas_sms",
+                    onClick = {
+                        onNavigate("plantillas_sms")
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
                 }

@@ -36,6 +36,9 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
             modelClass.isAssignableFrom(BloqueHorarioViewModel::class.java) ->
                 BloqueHorarioViewModel(container.database.bloqueHorarioDao(), container.llamadaAutomaticaScheduler, container.context) as T
 
+            modelClass.isAssignableFrom(PlantillaSmsViewModel::class.java) ->
+                PlantillaSmsViewModel(container.database.plantillaSmsDao()) as T
+
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
     }

@@ -3,6 +3,10 @@ import android.content.Context
 import androidx.work.WorkManager
 import com.google.api.services.drive.Drive
 import com.google.api.services.sheets.v4.Sheets
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class AppContainer(val context: Context) {
     val database: AppDatabase by lazy { AppDatabase.getDatabase(context) }
@@ -28,5 +32,17 @@ class AppContainer(val context: Context) {
     val workManager: WorkManager by lazy { WorkManager.getInstance(context) }
     val llamadaAutomaticaScheduler: LlamadaAutomaticaScheduler by lazy {
         LlamadaAutomaticaScheduler(context, database.bloqueHorarioDao())
+    }
+
+    init {
+        // Siembra las 60 plantillas por defecto (5 semanas x 2 tipos x 6 variantes) solo la
+        // primera vez que la tabla está vacía — instalaciones nuevas y las que se actualizan
+        // desde una versión sin esta tabla quedan igual cubiertas.
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            val dao = database.plantillaSmsDao()
+            if (dao.contar() == 0) {
+                dao.insertarTodas(PlantillasSemillaSms.defaults())
+            }
+        }
     }
 }
