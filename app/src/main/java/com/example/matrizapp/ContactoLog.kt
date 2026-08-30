@@ -32,6 +32,12 @@ interface ContactoLogDao {
     @Query("SELECT COUNT(*) FROM contacto_log_table WHERE clienteId = :clienteId AND fechaDia = :fechaDia")
     suspend fun contarContactosEnDia(clienteId: String, fechaDia: Long): Int
 
+    /** Total histórico de contactos a este cliente (todas las fechas) — se usa como índice de
+     * rotación de plantillas de SMS, así cada contacto sucesivo usa una variante distinta y no
+     * se manda el mismo texto exacto una y otra vez en la semana. */
+    @Query("SELECT COUNT(*) FROM contacto_log_table WHERE clienteId = :clienteId")
+    suspend fun contarTotalContactos(clienteId: String): Int
+
     /** Borra logs de hace más de N días para que la tabla no crezca indefinidamente — el
      * catchup solo necesita mirar "ayer", no hace falta conservar historial completo. */
     @Query("DELETE FROM contacto_log_table WHERE fechaDia < :antesDe")

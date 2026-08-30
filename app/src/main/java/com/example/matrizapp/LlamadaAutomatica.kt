@@ -195,15 +195,16 @@ class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
 // ============================================================
 private const val DURACION_MAX_LLAMADA_MS = 45_000L // mismo default que CallViewModel
 
-private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, subId: Int?) {
+private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, subId: Int?, logDao: ContactoLogDao) {
+    val variante = logDao.contarTotalContactos(r.id)
     if (r.numTT.isNotBlank()) {
         CallHelper.realizarLlamada(context, subId, r.numTT)
         delay(2_000)
         CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = DURACION_MAX_LLAMADA_MS)
-        SmsHelper.enviarSms(context, subId, r.numTT, MensajesCobranza.paraTT(r.nombre, r.requisito, sem))
+        SmsHelper.enviarSms(context, subId, r.numTT, MensajesCobranza.paraTT(r.nombre, r.requisito, sem, variante))
     }
     listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }).forEach { tel ->
-        SmsHelper.enviarSms(context, subId, tel, MensajesCobranza.paraReferencia(r.nombre, sem))
+        SmsHelper.enviarSms(context, subId, tel, MensajesCobranza.paraReferencia(r.nombre, sem, variante))
     }
 }
 
@@ -247,11 +248,8 @@ class LlamadaAutomaticaWorker(
             val bloqueAltaIndex = ReglaRepeticion.calcularBloqueDeAlta(fechaAlta, bloquesActivos)
             if (!ReglaRepeticion.debeContactarseEnBloque(sem, bloqueActualIndex, bloqueAltaIndex)) continue
 
-            procesarClienteLlamadaAutomatica(applicationContext, r, sem, subId)
+            procesarClienteLlamadaAutomatica(applicationContext, r, sem, subId, logDao)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = hoyMillis, bloqueIndex = bloqueActualIndex))
-        }
-        return Result.success()
-    }
 
     companion object {
         const val KEY_BLOQUE_ID = "bloque_id"
@@ -286,7 +284,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
             val deficit = ReglaRepeticion.calcularDeficit(sem, contactosAyer)
             if (deficit <= 0) continue
 
-            procesarClienteLlamadaAutomatica(applicationContext, r, sem, subId)
+            procesarClienteLlamadaAutomatica(applicationContext, r, sem, subId, logDao)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = ayerMillis, bloqueIndex = -1))
         }
 
