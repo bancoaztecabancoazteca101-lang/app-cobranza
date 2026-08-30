@@ -31,50 +31,24 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
+private fun nombreTipoLlamada(t: TipoLlamada): String = when (t) {
+    TipoLlamada.TT -> "Titular"
+    TipoLlamada.REF1 -> "Ref 1"
+    TipoLlamada.REF2 -> "Ref 2"
+}
+
 @Composable
 fun CallScreen(viewModel: CallViewModel) {
     val context = LocalContext.current
-    val cola by viewModel.cola.collectAsState()
-    val fechaInicio by viewModel.fechaInicio.collectAsState()
-    val fechaFin by viewModel.fechaFin.collectAsState()
-    val incluirTT by viewModel.incluirTT.collectAsState()
-    val incluirRef1 by viewModel.incluirRef1.collectAsState()
-    val incluirRef2 by viewModel.incluirRef2.collectAsState()
-    val coloniaTexto by viewModel.coloniaTexto.collectAsState()
-    val coloniaCargando by viewModel.coloniaCargando.collectAsState()
-    val coloniasDisponibles by viewModel.coloniasDisponibles.collectAsState()
-    val coloniasCargando by viewModel.coloniasCargando.collectAsState()
-    val subIdSeleccionado by viewModel.subscriptionIdSeleccionado.collectAsState()
-    val segundosEntreLlamadas by viewModel.segundosEntreLlamadas.collectAsState()
-    val duracionMaximaSegundos by viewModel.duracionMaximaSegundos.collectAsState()
-    val horaInicioBloque by viewModel.horaInicioBloque.collectAsState()
-    val minutoInicioBloque by viewModel.minutoInicioBloque.collectAsState()
-    val horasEntreBloques by viewModel.horasEntreBloques.collectAsState()
-    val repeticionesBloque by viewModel.repeticionesBloque.collectAsState()
-    val enviarSmsAlColgar by viewModel.enviarSmsAlColgar.collectAsState()
-    val plantillaSmsTT by viewModel.plantillaSmsTT.collectAsState()
-    val plantillaSmsRef by viewModel.plantillaSmsRef.collectAsState()
-    val agenteSms by viewModel.agenteSms.collectAsState()
-    val contactoSms by viewModel.contactoSms.collectAsState()
-    val llamando by viewModel.llamando.collectAsState()
-    val progreso by viewModel.progreso.collectAsState()
-    val itemActual by viewModel.itemActual.collectAsState()
-    val bloquesProgramadosActivos by viewModel.bloquesProgramadosActivos.collectAsState()
+    val tipo by viewModel.tipo.collectAsState()
 
     var permisosOk by remember { mutableStateOf(SmsHelper.tienePermisos(context) && CallHelper.tienePermisos(context)) }
-    var lineas by remember { mutableStateOf(SmsHelper.lineasActivas(context)) }
-    var mostrarConfirmacionLlamar by remember { mutableStateOf(false) }
-    var mostrarConfirmacionProgramar by remember { mutableStateOf(false) }
-    var mostrarOpciones by remember { mutableStateOf(false) }
-    var mostrarListaColonias by remember { mutableStateOf(false) }
-    var silenciado by remember { mutableStateOf(false) }
     var permisoColgarOk by remember { mutableStateOf(CallHelper.tienePermisoColgar(context)) }
     var servicioAccesibilidadOk by remember { mutableStateOf(CallAccessibilityService.servicioActivo()) }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { resultados ->
         permisosOk = resultados[Manifest.permission.CALL_PHONE] == true && resultados[Manifest.permission.READ_PHONE_STATE] == true
-        if (permisosOk) lineas = SmsHelper.lineasActivas(context)
-        else Toast.makeText(context, "Se necesitan permisos de llamadas y teléfono", Toast.LENGTH_LONG).show()
+        if (!permisosOk) Toast.makeText(context, "Se necesitan permisos de llamadas y teléfono", Toast.LENGTH_LONG).show()
     }
     val permColgarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         permisoColgarOk = CallHelper.tienePermisoColgar(context)
@@ -113,31 +87,90 @@ fun CallScreen(viewModel: CallViewModel) {
         return
     }
 
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            "Llamadas automáticas",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        )
+
+        TabRow(selectedTabIndex = tipo.ordinal) {
+            TipoLlamada.values().forEach { t ->
+                Tab(
+                    selected = tipo == t,
+                    onClick = { viewModel.setTipo(t) },
+                    text = { Text(nombreTipoLlamada(t)) }
+                )
+            }
+        }
+
+        SubMenuLlamadas(
+            viewModel = viewModel, tipo = tipo, context = context,
+            permisoColgarOk = permisoColgarOk, servicioAccesibilidadOk = servicioAccesibilidadOk,
+            onSolicitarPermisoColgar = {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    permColgarLauncher.launch(Manifest.permission.ANSWER_PHONE_CALLS)
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun SubMenuLlamadas(
+    viewModel: CallViewModel, tipo: TipoLlamada, context: android.content.Context,
+    permisoColgarOk: Boolean, servicioAccesibilidadOk: Boolean, onSolicitarPermisoColgar: () -> Unit
+) {
+    val cola by viewModel.cola.collectAsState()
+    val fechaInicio by viewModel.fechaInicio.collectAsState()
+    val fechaFin by viewModel.fechaFin.collectAsState()
+    val coloniaTexto by viewModel.coloniaTexto.collectAsState()
+    val coloniaCargando by viewModel.coloniaCargando.collectAsState()
+    val coloniasDisponibles by viewModel.coloniasDisponibles.collectAsState()
+    val coloniasCargando by viewModel.coloniasCargando.collectAsState()
+    val subIdSeleccionado by viewModel.subscriptionIdSeleccionado.collectAsState()
+    val config by viewModel.configFlow(tipo).collectAsState()
+    val enviarSmsAlColgar by viewModel.enviarSmsAlColgarFlow(tipo).collectAsState()
+    val plantillaSms by viewModel.plantillaSmsFlow(tipo).collectAsState()
+    val agenteSms by viewModel.agenteSms.collectAsState()
+    val contactoSms by viewModel.contactoSms.collectAsState()
+    val llamando by viewModel.llamando.collectAsState()
+    val progreso by viewModel.progreso.collectAsState()
+    val itemActual by viewModel.itemActual.collectAsState()
+    val bloquesProgramadosActivos by viewModel.bloquesProgramadosActivos.collectAsState()
+
+    var lineas by remember { mutableStateOf(SmsHelper.lineasActivas(context)) }
+    var mostrarConfirmacionLlamar by remember { mutableStateOf(false) }
+    var mostrarConfirmacionProgramar by remember { mutableStateOf(false) }
+    var mostrarOpciones by remember { mutableStateOf(false) }
+    var mostrarListaColonias by remember { mutableStateOf(false) }
+    var silenciado by remember { mutableStateOf(false) }
+
     val seleccionados = cola.count { it.seleccionado }
     val formatoFecha = remember { SimpleDateFormat("dd/MM/yyyy", Locale("es", "MX")) }
 
     if (mostrarConfirmacionLlamar) {
         AlertDialog(
             onDismissRequest = { mostrarConfirmacionLlamar = false },
-            title = { Text("Confirmar llamadas") },
-            text = { Text("Se marcará a $seleccionados números, uno por uno, esperando a que termine cada llamada y $segundosEntreLlamadas s de pausa entre cada una. ¿Continuar?") },
+            title = { Text("Confirmar llamadas — ${nombreTipoLlamada(tipo)}") },
+            text = { Text("Se marcará a $seleccionados números, uno por uno, esperando a que termine cada llamada y ${config.segundosEntreLlamadas} s de pausa entre cada una. ¿Continuar?") },
             confirmButton = { TextButton(onClick = { mostrarConfirmacionLlamar = false; viewModel.llamarAhora(context) }) { Text("Llamar") } },
             dismissButton = { TextButton(onClick = { mostrarConfirmacionLlamar = false }) { Text("Cancelar") } }
         )
     }
     if (mostrarConfirmacionProgramar) {
-        val horaTxt = "%02d:%02d".format(horaInicioBloque, minutoInicioBloque)
+        val horaTxt = "%02d:%02d".format(config.horaInicioBloque, config.minutoInicioBloque)
         AlertDialog(
             onDismissRequest = { mostrarConfirmacionProgramar = false },
-            title = { Text("Confirmar programación") },
-            text = { Text("Se marcará a $seleccionados números empezando a las $horaTxt, repitiendo $repeticionesBloque veces cada $horasEntreBloques h. Sigue corriendo aunque cierres la app. ¿Continuar?") },
+            title = { Text("Confirmar programación — ${nombreTipoLlamada(tipo)}") },
+            text = { Text("Se marcará a $seleccionados números empezando a las $horaTxt, repitiendo ${config.repeticionesBloque} veces cada ${config.horasEntreBloques} h. Sigue corriendo aunque cierres la app. ¿Continuar?") },
             confirmButton = { TextButton(onClick = { mostrarConfirmacionProgramar = false; viewModel.programarBloques(context) }) { Text("Programar") } },
             dismissButton = { TextButton(onClick = { mostrarConfirmacionProgramar = false }) { Text("Cancelar") } }
         )
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Llamadas automáticas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text("Fuente: Matriz — $seleccionados de ${cola.size} en cola", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
 
         if (!permisoColgarOk) {
@@ -145,11 +178,7 @@ fun CallScreen(viewModel: CallViewModel) {
             Card(colors = CardDefaults.cardColors(containerColor = ClayMapsRed.copy(alpha = 0.12f))) {
                 Column(Modifier.padding(12.dp)) {
                     Text("Falta el permiso \"Responder llamadas\": la app no podrá colgar sola cuando se cumpla la duración máxima.", style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = {
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                            permColgarLauncher.launch(Manifest.permission.ANSWER_PHONE_CALLS)
-                        }
-                    }) { Text("Conceder permiso") }
+                    TextButton(onClick = onSolicitarPermisoColgar) { Text("Conceder permiso") }
                 }
             }
         }
@@ -162,9 +191,7 @@ fun CallScreen(viewModel: CallViewModel) {
                         "Activa el servicio de accesibilidad \"Matriz App\" para que la app pueda colgar la llamada aunque el sistema (MIUI/Redmi) bloquee el colgado directo.",
                         style = MaterialTheme.typography.bodySmall
                     )
-                    TextButton(onClick = {
-                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    }) { Text("Abrir ajustes de accesibilidad") }
+                    TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) { Text("Abrir ajustes de accesibilidad") }
                 }
             }
         }
@@ -173,7 +200,7 @@ fun CallScreen(viewModel: CallViewModel) {
             Spacer(Modifier.height(12.dp))
             Card(colors = CardDefaults.cardColors(containerColor = ClaySmsTeal.copy(alpha = 0.15f))) {
                 Column(Modifier.padding(12.dp)) {
-                    Text("Llamando ahora: ${itemActual?.nombre ?: ""} (${itemActual?.tipo ?: ""})", fontWeight = FontWeight.Bold)
+                    Text("Llamando ahora: ${itemActual?.nombre ?: ""} (${nombreTipoLlamada(tipo)})", fontWeight = FontWeight.Bold)
                     Text(itemActual?.telefono ?: "", color = Color.Gray)
                     Spacer(Modifier.height(8.dp))
                     Row {
@@ -222,16 +249,6 @@ fun CallScreen(viewModel: CallViewModel) {
         }
 
         Spacer(Modifier.height(8.dp))
-        Text("¿A quién llamar? (en ese orden por cliente)", style = MaterialTheme.typography.labelLarge)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = incluirTT, onCheckedChange = { viewModel.setIncluirTT(it) }, enabled = !llamando); Text("Titular")
-            Spacer(Modifier.width(8.dp))
-            Checkbox(checked = incluirRef1, onCheckedChange = { viewModel.setIncluirRef1(it) }, enabled = !llamando); Text("Ref 1")
-            Spacer(Modifier.width(8.dp))
-            Checkbox(checked = incluirRef2, onCheckedChange = { viewModel.setIncluirRef2(it) }, enabled = !llamando); Text("Ref 2")
-        }
-
-        Spacer(Modifier.height(8.dp))
         Text("Filtro por Colonia (opcional)", style = MaterialTheme.typography.labelLarge)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
@@ -265,6 +282,31 @@ fun CallScreen(viewModel: CallViewModel) {
         }
 
         Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = enviarSmsAlColgar, onCheckedChange = { viewModel.setEnviarSmsAlColgar(tipo, it) }, enabled = !llamando)
+            Text("Al colgar, mandar SMS a ese mismo número (como en Tasker)")
+        }
+        if (enviarSmsAlColgar) {
+            Spacer(Modifier.height(4.dp))
+            OutlinedTextField(
+                value = plantillaSms, onValueChange = { viewModel.setPlantillaSms(tipo, it) },
+                label = { Text("SMS para ${nombreTipoLlamada(tipo)} (usa %nombre%, %monto%, %agente%, %contacto%)") },
+                modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !llamando
+            )
+            Spacer(Modifier.height(4.dp))
+            Row {
+                OutlinedTextField(
+                    value = agenteSms, onValueChange = { viewModel.setAgenteSms(it) }, label = { Text("Nombre del gestor (%agente%)") },
+                    modifier = Modifier.weight(1f).padding(end = 4.dp), enabled = !llamando, singleLine = true
+                )
+                OutlinedTextField(
+                    value = contactoSms, onValueChange = { viewModel.setContactoSms(it) }, label = { Text("Teléfono contacto (%contacto%)") },
+                    modifier = Modifier.weight(1f).padding(start = 4.dp), enabled = !llamando, singleLine = true
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
         TextButton(onClick = { mostrarOpciones = !mostrarOpciones }) {
             Text(if (mostrarOpciones) "Ocultar opciones de llamada" else "Más opciones (línea, pausa, bloques)")
         }
@@ -284,62 +326,33 @@ fun CallScreen(viewModel: CallViewModel) {
 
             Spacer(Modifier.height(8.dp))
             CampoNumerico(
-                valor = segundosEntreLlamadas, onValorValido = { viewModel.setSegundosEntreLlamadas(it) },
+                valor = config.segundosEntreLlamadas, onValorValido = { viewModel.setSegundosEntreLlamadas(tipo, it) },
                 etiqueta = "Segundos de pausa entre llamadas", modifier = Modifier.fillMaxWidth(), enabled = !llamando, minimo = 1, maximo = 600
             )
             Spacer(Modifier.height(8.dp))
             CampoNumerico(
-                valor = duracionMaximaSegundos, onValorValido = { viewModel.setDuracionMaximaSegundos(it) },
+                valor = config.duracionMaximaSegundos, onValorValido = { viewModel.setDuracionMaximaSegundos(tipo, it) },
                 etiqueta = "Duración máxima por llamada (segundos)", modifier = Modifier.fillMaxWidth(), enabled = !llamando, minimo = 5, maximo = 600
             )
             Text("Si nadie contesta o nadie cuelga, la app cuelga sola al llegar a este tiempo (necesita el permiso \"Responder llamadas\").", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
 
             Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = enviarSmsAlColgar, onCheckedChange = { viewModel.setEnviarSmsAlColgar(it) }, enabled = !llamando)
-                Text("Al colgar, mandar SMS a ese mismo número (como en Tasker)")
-            }
-            if (enviarSmsAlColgar) {
-                Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = plantillaSmsTT, onValueChange = { viewModel.setPlantillaSmsTT(it) },
-                    label = { Text("SMS para Titular (usa %nombre% y %monto%)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !llamando
-                )
-                Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = plantillaSmsRef, onValueChange = { viewModel.setPlantillaSmsRef(it) },
-                    label = { Text("SMS para Referencia (usa %nombre%, %agente%, %contacto%)") }, modifier = Modifier.fillMaxWidth(), minLines = 2, enabled = !llamando
-                )
-                Spacer(Modifier.height(4.dp))
-                Row {
-                    OutlinedTextField(
-                        value = agenteSms, onValueChange = { viewModel.setAgenteSms(it) }, label = { Text("Nombre del gestor (%agente%)") },
-                        modifier = Modifier.weight(1f).padding(end = 4.dp), enabled = !llamando, singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = contactoSms, onValueChange = { viewModel.setContactoSms(it) }, label = { Text("Teléfono contacto (%contacto%)") },
-                        modifier = Modifier.weight(1f).padding(start = 4.dp), enabled = !llamando, singleLine = true
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
             Text("Bloques programados", style = MaterialTheme.typography.labelLarge)
             OutlinedButton(
                 onClick = {
-                    android.app.TimePickerDialog(context, { _, h, m -> viewModel.setHoraInicioBloque(h, m) }, horaInicioBloque, minutoInicioBloque, true).show()
+                    android.app.TimePickerDialog(context, { _, h, m -> viewModel.setHoraInicioBloque(tipo, h, m) }, config.horaInicioBloque, config.minutoInicioBloque, true).show()
                 },
                 enabled = !llamando
-            ) { Text("Hora de inicio: %02d:%02d".format(horaInicioBloque, minutoInicioBloque)) }
+            ) { Text("Hora de inicio: %02d:%02d".format(config.horaInicioBloque, config.minutoInicioBloque)) }
 
             Spacer(Modifier.height(8.dp))
             Row {
                 CampoNumerico(
-                    valor = horasEntreBloques, onValorValido = { viewModel.setHorasEntreBloques(it) },
+                    valor = config.horasEntreBloques, onValorValido = { viewModel.setHorasEntreBloques(tipo, it) },
                     etiqueta = "Horas entre bloques", modifier = Modifier.weight(1f).padding(end = 4.dp), enabled = !llamando, minimo = 1, maximo = 72
                 )
                 CampoNumerico(
-                    valor = repeticionesBloque, onValorValido = { viewModel.setRepeticionesBloque(it) },
+                    valor = config.repeticionesBloque, onValorValido = { viewModel.setRepeticionesBloque(tipo, it) },
                     etiqueta = "Repeticiones", modifier = Modifier.weight(1f).padding(start = 4.dp), enabled = !llamando, minimo = 1, maximo = 50
                 )
             }
@@ -370,7 +383,7 @@ fun CallScreen(viewModel: CallViewModel) {
             ) {
                 Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Programar x$repeticionesBloque")
+                Text("Programar x${config.repeticionesBloque}")
             }
         }
 
@@ -379,9 +392,10 @@ fun CallScreen(viewModel: CallViewModel) {
             LinearProgressIndicator(progress = if (progreso.second == 0) 0f else progreso.first.toFloat() / progreso.second, modifier = Modifier.fillMaxWidth())
         }
 
-        // Siempre visible (no solo cuando bloquesProgramadosActivos es true): así se puede
-        // detener el flujo automático de llamadas aunque la UI no haya detectado a tiempo que
-        // hay algo corriendo, o simplemente para tener el botón a la mano sin buscarlo.
+        // Siempre visible (no solo cuando bloquesProgramadosActivos es true) en los 3 submenús
+        // (Titular/Ref1/Ref2) — el bloque programado es uno solo compartido entre los tres
+        // tipos, así que este botón detiene el que esté activo sin importar desde qué pestaña
+        // se abra.
         Spacer(Modifier.height(8.dp))
         Card(colors = CardDefaults.cardColors(containerColor = if (bloquesProgramadosActivos) ClayMapsRed.copy(alpha = 0.12f) else Color.LightGray.copy(alpha = 0.25f))) {
             Row(
@@ -393,7 +407,7 @@ fun CallScreen(viewModel: CallViewModel) {
                     Text(if (bloquesProgramadosActivos) "Bloques programados activos" else "Sin llamadas automáticas activas", fontWeight = FontWeight.Bold)
                     Text(
                         if (bloquesProgramadosActivos) "Sigue llamando automáticamente hasta que lo detengas o se agoten las repeticiones."
-                        else "No hay ningún bloque de llamadas programado en este momento.",
+                        else "No hay ningún bloque de llamadas programado en este momento (Titular, Ref1 o Ref2).",
                         color = Color.Gray, style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -419,7 +433,7 @@ fun CallScreen(viewModel: CallViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                         Checkbox(checked = item.seleccionado, onCheckedChange = { viewModel.toggleSeleccionado(item.id) }, enabled = !llamando)
                         Column {
-                            Text("${item.nombre} (${item.tipo})", fontWeight = FontWeight.Bold)
+                            Text(item.nombre, fontWeight = FontWeight.Bold)
                             Text(item.telefono, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                         }
                     }

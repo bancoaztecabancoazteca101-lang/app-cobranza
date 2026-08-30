@@ -15,13 +15,15 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 
-/** Corre un bloque de llamadas (marca, espera a que termine o la cuelga a la fuerza tras la
- * duración máxima, manda SMS si aplica, pausa, siguiente) y si quedan repeticiones se vuelve a
+/** Corre un bloque de llamadas de un solo tipo (Titular, Ref1 o Ref2 — igual que SmsRepeatWorker
+ * corre una sola fuente por ronda), marca, espera a que termine o la cuelga a la fuerza tras la
+ * duración máxima, manda SMS si aplica, pausa, siguiente, y si quedan repeticiones se vuelve a
  * encolar con el intervalo de horas configurado. Vía WorkManager para sobrevivir a que la app
- * se cierre, igual que SmsRepeatWorker. */
+ * se cierre. */
 class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
+        val tipo = TipoLlamada.valueOf(inputData.getString(KEY_TIPO) ?: TipoLlamada.TT.name)
         val ids = (inputData.getString(KEY_IDS) ?: "").split(",").filter { it.isNotBlank() }.toSet()
         val subId = inputData.getInt(KEY_SUBID, -1).let { if (it == -1) null else it }
         val segundosEntreLlamadas = inputData.getInt(KEY_SEGUNDOS, 5)
@@ -29,8 +31,7 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
         val horasEntreBloques = inputData.getInt(KEY_HORAS, 1)
         val repeticionesRestantes = inputData.getInt(KEY_REPETICIONES, 1)
         val enviarSmsAlColgar = inputData.getBoolean(KEY_ENVIAR_SMS, false)
-        val plantillaSmsTT = inputData.getString(KEY_PLANTILLA_TT) ?: ""
-        val plantillaSmsRef = inputData.getString(KEY_PLANTILLA_REF) ?: ""
+        val plantillaSms = inputData.getString(KEY_PLANTILLA) ?: ""
         val agenteSms = inputData.getString(KEY_AGENTE) ?: ""
         val contactoSms = inputData.getString(KEY_CONTACTO) ?: ""
 
@@ -38,19 +39,16 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
 
         val container = (applicationContext as MainApplication).container
         // Vuelve a leer Matriz en el momento de marcar (no datos guardados de cuando se
-        // programó), y reconstruye la cola TT/Ref1/Ref2 en el mismo orden.
+        // programó), y reconstruye la cola en el mismo orden de ids.
         val registros = container.database.matrizDao().getAllMatriz().first()
         val porId = registros.associateBy { it.id }
 
-        for ((i, itemId) in ids.withIndex()) {
-            val contactoId = itemId.substringBeforeLast("_")
-            val tipo = itemId.substringAfterLast("_")
+        for ((i, contactoId) in ids.withIndex()) {
             val registro = porId[contactoId] ?: continue
             val telefono = when (tipo) {
-                "TT" -> registro.numTT
-                "REF1" -> registro.ref1
-                "REF2" -> registro.ref2
-                else -> null
+                TipoLlamada.TT -> registro.numTT
+                TipoLlamada.REF1 -> registro.ref1
+                TipoLlamada.REF2 -> registro.ref2
             }
             if (telefono.isNullOrBlank()) continue
             CallHelper.realizarLlamada(applicationContext, subId, telefono)
@@ -60,12 +58,9 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
             CallHelper.esperarFinOForzarColgar(applicationContext, duracionMaximaMs = duracionMaximaSegundos * 1000L)
 
             // Flujo tipo Tasker: en cuanto cuelga, manda el SMS a ese mismo número.
-            if (enviarSmsAlColgar) {
-                val plantilla = if (tipo == "TT") plantillaSmsTT else plantillaSmsRef
-                if (plantilla.isNotBlank()) {
-                    val mensaje = SmsHelper.armarMensaje(plantilla, registro.nombre, registro.requisito, agenteSms, contactoSms)
-                    SmsHelper.enviarSms(applicationContext, subId, telefono, mensaje)
-                }
+            if (enviarSmsAlColgar && plantillaSms.isNotBlank()) {
+                val mensaje = SmsHelper.armarMensaje(plantillaSms, registro.nombre, registro.requisito, agenteSms, contactoSms)
+                SmsHelper.enviarSms(applicationContext, subId, telefono, mensaje)
             }
 
             if (i < ids.size - 1) delay(segundosEntreLlamadas * 1000L)
@@ -74,7 +69,7 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
         if (repeticionesRestantes > 1) {
             val siguiente = OneTimeWorkRequestBuilder<CallRepeatWorker>()
                 .setInitialDelay(horasEntreBloques.toLong(), TimeUnit.HOURS)
-                .setInputData(construirInputData(ids.toList(), subId, segundosEntreLlamadas, duracionMaximaSegundos, horasEntreBloques, repeticionesRestantes - 1, enviarSmsAlColgar, plantillaSmsTT, plantillaSmsRef, agenteSms, contactoSms))
+                .setInputData(construirInputData(tipo, ids.toList(), subId, segundosEntreLlamadas, duracionMaximaSegundos, horasEntreBloques, repeticionesRestantes - 1, enviarSmsAlColgar, plantillaSms, agenteSms, contactoSms))
                 .build()
             WorkManager.getInstance(applicationContext).enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, siguiente)
         }
@@ -84,6 +79,7 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
 
     companion object {
         private const val WORK_NAME = "call_repeat_bloques"
+        private const val KEY_TIPO = "tipo"
         private const val KEY_IDS = "ids"
         private const val KEY_SUBID = "subId"
         private const val KEY_SEGUNDOS = "segundosEntreLlamadas"
@@ -91,15 +87,15 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
         private const val KEY_HORAS = "horasEntreBloques"
         private const val KEY_REPETICIONES = "repeticionesRestantes"
         private const val KEY_ENVIAR_SMS = "enviarSmsAlColgar"
-        private const val KEY_PLANTILLA_TT = "plantillaSmsTT"
-        private const val KEY_PLANTILLA_REF = "plantillaSmsRef"
+        private const val KEY_PLANTILLA = "plantillaSms"
         private const val KEY_AGENTE = "agenteSms"
         private const val KEY_CONTACTO = "contactoSms"
 
         private fun construirInputData(
-            ids: List<String>, subscriptionId: Int?, segundosEntreLlamadas: Int, duracionMaximaSegundos: Int, horasEntreBloques: Int, repeticionesRestantes: Int,
-            enviarSmsAlColgar: Boolean, plantillaSmsTT: String, plantillaSmsRef: String, agenteSms: String, contactoSms: String
+            tipo: TipoLlamada, ids: List<String>, subscriptionId: Int?, segundosEntreLlamadas: Int, duracionMaximaSegundos: Int, horasEntreBloques: Int, repeticionesRestantes: Int,
+            enviarSmsAlColgar: Boolean, plantillaSms: String, agenteSms: String, contactoSms: String
         ): Data = workDataOf(
+            KEY_TIPO to tipo.name,
             KEY_IDS to ids.joinToString(","),
             KEY_SUBID to (subscriptionId ?: -1),
             KEY_SEGUNDOS to segundosEntreLlamadas,
@@ -107,8 +103,7 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
             KEY_HORAS to horasEntreBloques,
             KEY_REPETICIONES to repeticionesRestantes,
             KEY_ENVIAR_SMS to enviarSmsAlColgar,
-            KEY_PLANTILLA_TT to plantillaSmsTT,
-            KEY_PLANTILLA_REF to plantillaSmsRef,
+            KEY_PLANTILLA to plantillaSms,
             KEY_AGENTE to agenteSms,
             KEY_CONTACTO to contactoSms
         )
@@ -116,15 +111,15 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
         /** Encola el primer bloque para que arranque en iniciarEnMillis (ya calculado como la
          * próxima ocurrencia de la hora elegida); las rondas siguientes se autoprograman desde doWork(). */
         fun programar(
-            workManager: WorkManager, idsSeleccionados: List<String>, subscriptionId: Int?,
+            workManager: WorkManager, tipo: TipoLlamada, idsSeleccionados: List<String>, subscriptionId: Int?,
             segundosEntreLlamadas: Int, duracionMaximaSegundos: Int, iniciarEnMillis: Long, horasEntreBloques: Int, repeticionesRestantes: Int,
-            enviarSmsAlColgar: Boolean = false, plantillaSmsTT: String = "", plantillaSmsRef: String = "",
+            enviarSmsAlColgar: Boolean = false, plantillaSms: String = "",
             agenteSms: String = "", contactoSms: String = ""
         ) {
             val delayInicialMs = (iniciarEnMillis - System.currentTimeMillis()).coerceAtLeast(0)
             val solicitud = OneTimeWorkRequestBuilder<CallRepeatWorker>()
                 .setInitialDelay(delayInicialMs, TimeUnit.MILLISECONDS)
-                .setInputData(construirInputData(idsSeleccionados, subscriptionId, segundosEntreLlamadas, duracionMaximaSegundos, horasEntreBloques, repeticionesRestantes, enviarSmsAlColgar, plantillaSmsTT, plantillaSmsRef, agenteSms, contactoSms))
+                .setInputData(construirInputData(tipo, idsSeleccionados, subscriptionId, segundosEntreLlamadas, duracionMaximaSegundos, horasEntreBloques, repeticionesRestantes, enviarSmsAlColgar, plantillaSms, agenteSms, contactoSms))
                 .build()
             workManager.enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, solicitud)
         }

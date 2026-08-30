@@ -17,7 +17,7 @@ enum class EstadoLlamada { PENDIENTE, LLAMANDO, HECHA }
 enum class TipoLlamada { TT, REF1, REF2 }
 
 data class LlamadaItem(
-    val id: String, val contactoId: String, val nombre: String, val tipo: TipoLlamada, val telefono: String,
+    val id: String, val nombre: String, val tipo: TipoLlamada, val telefono: String,
     val monto: String, val ubicacion: String?, val seleccionado: Boolean = true, val estado: EstadoLlamada = EstadoLlamada.PENDIENTE
 )
 
@@ -56,41 +56,74 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     private val _fechaFin = MutableStateFlow(finDeDiaC(hoy))
     val fechaFin: StateFlow<Long> = _fechaFin
 
-    private val _incluirTT = MutableStateFlow(true)
-    val incluirTT: StateFlow<Boolean> = _incluirTT
-    private val _incluirRef1 = MutableStateFlow(true)
-    val incluirRef1: StateFlow<Boolean> = _incluirRef1
-    private val _incluirRef2 = MutableStateFlow(true)
-    val incluirRef2: StateFlow<Boolean> = _incluirRef2
+    // Submenú por tipo (Titular / Ref1 / Ref2), igual que SmsViewModel con FuenteSms: cada tipo
+    // tiene su propia cola, configuración de bloque y plantilla — antes era un solo checkbox por
+    // tipo mezclando los tres en una sola cola con un solo bloque de configuración compartido.
+    private val _tipo = MutableStateFlow(TipoLlamada.TT)
+    val tipo: StateFlow<TipoLlamada> = _tipo
+    fun setTipo(t: TipoLlamada) { _tipo.value = t }
 
     private val _subscriptionIdSeleccionado = MutableStateFlow<Int?>(null)
     val subscriptionIdSeleccionado: StateFlow<Int?> = _subscriptionIdSeleccionado
+    fun setSim(subscriptionId: Int?) { _subscriptionIdSeleccionado.value = subscriptionId }
 
-    private val _segundosEntreLlamadas = MutableStateFlow(5)
-    val segundosEntreLlamadas: StateFlow<Int> = _segundosEntreLlamadas
-    private val _duracionMaximaSegundos = MutableStateFlow(45)
-    val duracionMaximaSegundos: StateFlow<Int> = _duracionMaximaSegundos
-    private val _horaInicioBloque = MutableStateFlow(9)
-    val horaInicioBloque: StateFlow<Int> = _horaInicioBloque
-    private val _minutoInicioBloque = MutableStateFlow(0)
-    val minutoInicioBloque: StateFlow<Int> = _minutoInicioBloque
-    private val _horasEntreBloques = MutableStateFlow(1)
-    val horasEntreBloques: StateFlow<Int> = _horasEntreBloques
-    private val _repeticionesBloque = MutableStateFlow(9)
-    val repeticionesBloque: StateFlow<Int> = _repeticionesBloque
+    /** Config de bloque propia por tipo — antes era un único valor compartido para los tres,
+     * por eso ajustar la pausa/duración/horario de uno desconfiguraba a los otros dos. */
+    data class ConfigLlamada(
+        val segundosEntreLlamadas: Int = 5,
+        val duracionMaximaSegundos: Int = 45,
+        val horaInicioBloque: Int = 9,
+        val minutoInicioBloque: Int = 0,
+        val horasEntreBloques: Int = 1,
+        val repeticionesBloque: Int = 9
+    )
 
-    // Flujo tipo Tasker: al colgar cada llamada, mandar un SMS a ese mismo número.
-    private val _enviarSmsAlColgar = MutableStateFlow(false)
-    val enviarSmsAlColgar: StateFlow<Boolean> = _enviarSmsAlColgar
-    private val _plantillaSmsTT = MutableStateFlow(PLANTILLA_SMS_TT_DEFAULT)
-    val plantillaSmsTT: StateFlow<String> = _plantillaSmsTT
-    private val _plantillaSmsRef = MutableStateFlow(PLANTILLA_SMS_REF_DEFAULT)
-    val plantillaSmsRef: StateFlow<String> = _plantillaSmsRef
+    private val _configPorTipo: Map<TipoLlamada, MutableStateFlow<ConfigLlamada>> =
+        TipoLlamada.values().associateWith { MutableStateFlow(ConfigLlamada()) }
+
+    fun configFlow(t: TipoLlamada): StateFlow<ConfigLlamada> = _configPorTipo.getValue(t)
+
+    fun setSegundosEntreLlamadas(t: TipoLlamada, v: Int) {
+        val flujo = _configPorTipo.getValue(t); flujo.value = flujo.value.copy(segundosEntreLlamadas = v.coerceIn(1, 300))
+    }
+    fun setDuracionMaximaSegundos(t: TipoLlamada, v: Int) {
+        val flujo = _configPorTipo.getValue(t); flujo.value = flujo.value.copy(duracionMaximaSegundos = v.coerceIn(5, 600))
+    }
+    fun setHoraInicioBloque(t: TipoLlamada, h: Int, m: Int) {
+        val flujo = _configPorTipo.getValue(t); flujo.value = flujo.value.copy(horaInicioBloque = h.coerceIn(0, 23), minutoInicioBloque = m.coerceIn(0, 59))
+    }
+    fun setHorasEntreBloques(t: TipoLlamada, v: Int) {
+        val flujo = _configPorTipo.getValue(t); flujo.value = flujo.value.copy(horasEntreBloques = v.coerceIn(1, 12))
+    }
+    fun setRepeticionesBloque(t: TipoLlamada, v: Int) {
+        val flujo = _configPorTipo.getValue(t); flujo.value = flujo.value.copy(repeticionesBloque = v.coerceIn(1, 20))
+    }
+
+    // Flujo tipo Tasker: al colgar, mandar SMS a ese mismo número. Toggle y plantilla propios
+    // por tipo (Titular arranca con la plantilla de cobranza directa; Ref1/Ref2 con la de
+    // referencia, igual que antes, pero ahora cada uno se edita sin afectar a los otros).
+    private val _enviarSmsAlColgarPorTipo: Map<TipoLlamada, MutableStateFlow<Boolean>> =
+        TipoLlamada.values().associateWith { MutableStateFlow(false) }
+    fun enviarSmsAlColgarFlow(t: TipoLlamada): StateFlow<Boolean> = _enviarSmsAlColgarPorTipo.getValue(t)
+    fun setEnviarSmsAlColgar(t: TipoLlamada, v: Boolean) { _enviarSmsAlColgarPorTipo.getValue(t).value = v }
+
+    private val _plantillaSmsPorTipo: Map<TipoLlamada, MutableStateFlow<String>> = mapOf(
+        TipoLlamada.TT to MutableStateFlow(PLANTILLA_SMS_TT_DEFAULT),
+        TipoLlamada.REF1 to MutableStateFlow(PLANTILLA_SMS_REF_DEFAULT),
+        TipoLlamada.REF2 to MutableStateFlow(PLANTILLA_SMS_REF_DEFAULT)
+    )
+    fun plantillaSmsFlow(t: TipoLlamada): StateFlow<String> = _plantillaSmsPorTipo.getValue(t)
+    fun setPlantillaSms(t: TipoLlamada, texto: String) { _plantillaSmsPorTipo.getValue(t).value = texto }
+
     private val _agenteSms = MutableStateFlow("")
     val agenteSms: StateFlow<String> = _agenteSms
     private val _contactoSms = MutableStateFlow("")
     val contactoSms: StateFlow<String> = _contactoSms
+    fun setAgenteSms(texto: String) { _agenteSms.value = texto }
+    fun setContactoSms(texto: String) { _contactoSms.value = texto }
 
+    // Selección/estado por id de registro directo (ya no hace falta el sufijo _TT/_REF1/_REF2:
+    // cada submenú solo ve su propio tipo, igual que SmsViewModel).
     private val _excluidos = MutableStateFlow<Set<String>>(emptySet())
     private val _estados = MutableStateFlow<Map<String, EstadoLlamada>>(emptyMap())
 
@@ -105,40 +138,30 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     val coloniasCargando: StateFlow<Boolean> = _coloniasCargando
     private val coloniaCache = HashMap<String, String?>()
 
-    // Cola de llamadas: por cada registro en el rango de fecha, hasta 3 items (TT, Ref1, Ref2)
-    // en ese orden, solo los que tengan teléfono y estén incluidos.
+    // Candidatos según fecha + tipo + selección, antes del filtro de colonia.
     private val candidatos: StateFlow<List<LlamadaItem>> = combine(
-        registrosTodos, _fechaInicio, _fechaFin, _incluirTT, _incluirRef1, _incluirRef2, _excluidos, _estados
+        registrosTodos, _fechaInicio, _fechaFin, _tipo, _excluidos, _estados
     ) { valores ->
         @Suppress("UNCHECKED_CAST") val registros = valores[0] as List<MatrizEntity>
         val ini = valores[1] as Long
         val fin = valores[2] as Long
-        val incTT = valores[3] as Boolean
-        val incR1 = valores[4] as Boolean
-        val incR2 = valores[5] as Boolean
-        val excluidos = valores[6] as Set<String>
-        @Suppress("UNCHECKED_CAST") val estados = valores[7] as Map<String, EstadoLlamada>
+        val tipoActual = valores[3] as TipoLlamada
+        val excluidos = valores[4] as Set<String>
+        @Suppress("UNCHECKED_CAST") val estados = valores[5] as Map<String, EstadoLlamada>
 
-        val lista = mutableListOf<LlamadaItem>()
-        registros.filter { it.fecha in ini..fin }.forEach { r ->
-            if (incTT && r.numTT.isNotBlank()) {
-                val id = "${r.id}_TT"
-                lista += LlamadaItem(id, r.id, r.nombre, TipoLlamada.TT, r.numTT, r.requisito, r.ubicacion, id !in excluidos, estados[id] ?: EstadoLlamada.PENDIENTE)
+        registros.filter { it.fecha in ini..fin }.mapNotNull { r ->
+            val telefono = when (tipoActual) {
+                TipoLlamada.TT -> r.numTT
+                TipoLlamada.REF1 -> r.ref1
+                TipoLlamada.REF2 -> r.ref2
             }
-            if (incR1 && !r.ref1.isNullOrBlank()) {
-                val id = "${r.id}_REF1"
-                lista += LlamadaItem(id, r.id, r.nombre, TipoLlamada.REF1, r.ref1, r.requisito, r.ubicacion, id !in excluidos, estados[id] ?: EstadoLlamada.PENDIENTE)
-            }
-            if (incR2 && !r.ref2.isNullOrBlank()) {
-                val id = "${r.id}_REF2"
-                lista += LlamadaItem(id, r.id, r.nombre, TipoLlamada.REF2, r.ref2, r.requisito, r.ubicacion, id !in excluidos, estados[id] ?: EstadoLlamada.PENDIENTE)
-            }
+            if (telefono.isNullOrBlank()) return@mapNotNull null
+            LlamadaItem(r.id, r.nombre, tipoActual, telefono, r.requisito, r.ubicacion, r.id !in excluidos, estados[r.id] ?: EstadoLlamada.PENDIENTE)
         }
-        lista
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val cola: StateFlow<List<LlamadaItem>> = combine(candidatos, _coloniaIdsPermitidos) { base, permitidos ->
-        if (permitidos == null) base else base.filter { it.contactoId in permitidos }
+        if (permitidos == null) base else base.filter { it.id in permitidos }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _llamando = MutableStateFlow(false)
@@ -150,24 +173,10 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
 
     fun setFechaInicio(millis: Long) { _fechaInicio.value = inicioDeDiaC(millis); if (_fechaFin.value < _fechaInicio.value) _fechaFin.value = finDeDiaC(millis) }
     fun setFechaFin(millis: Long) { _fechaFin.value = finDeDiaC(millis); if (_fechaInicio.value > _fechaFin.value) _fechaInicio.value = inicioDeDiaC(millis) }
-    fun setIncluirTT(v: Boolean) { _incluirTT.value = v }
-    fun setIncluirRef1(v: Boolean) { _incluirRef1.value = v }
-    fun setIncluirRef2(v: Boolean) { _incluirRef2.value = v }
-    fun setSim(subscriptionId: Int?) { _subscriptionIdSeleccionado.value = subscriptionId }
-    fun setSegundosEntreLlamadas(v: Int) { _segundosEntreLlamadas.value = v.coerceIn(1, 300) }
-    fun setDuracionMaximaSegundos(v: Int) { _duracionMaximaSegundos.value = v.coerceIn(5, 600) }
-    fun setHoraInicioBloque(h: Int, m: Int) { _horaInicioBloque.value = h.coerceIn(0, 23); _minutoInicioBloque.value = m.coerceIn(0, 59) }
-    fun setHorasEntreBloques(v: Int) { _horasEntreBloques.value = v.coerceIn(1, 12) }
-    fun setRepeticionesBloque(v: Int) { _repeticionesBloque.value = v.coerceIn(1, 20) }
-
-    fun setEnviarSmsAlColgar(v: Boolean) { _enviarSmsAlColgar.value = v }
-    fun setPlantillaSmsTT(texto: String) { _plantillaSmsTT.value = texto }
-    fun setPlantillaSmsRef(texto: String) { _plantillaSmsRef.value = texto }
-    fun setAgenteSms(texto: String) { _agenteSms.value = texto }
-    fun setContactoSms(texto: String) { _contactoSms.value = texto }
 
     private fun enviarSmsPostLlamada(context: Context, item: LlamadaItem, subId: Int?) {
-        val plantilla = if (item.tipo == TipoLlamada.TT) _plantillaSmsTT.value else _plantillaSmsRef.value
+        val plantilla = plantillaSmsFlow(item.tipo).value
+        if (plantilla.isBlank()) return
         val mensaje = SmsHelper.armarMensaje(plantilla, item.nombre, item.monto, _agenteSms.value, _contactoSms.value)
         SmsHelper.enviarSms(context, subId, item.telefono, mensaje)
     }
@@ -179,13 +188,13 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
         if (texto.isBlank()) { _coloniaIdsPermitidos.value = null; return }
         viewModelScope.launch {
             _coloniaCargando.value = true
-            val base = candidatos.value.distinctBy { it.contactoId }
+            val base = candidatos.value
             for (c in base) {
                 val ub = c.ubicacion ?: continue
                 if (!coloniaCache.containsKey(ub)) coloniaCache[ub] = resolverColonia(context, ub)
             }
             val ids = base.filter { c -> c.ubicacion?.let { coloniaCache[it] }?.contains(texto, ignoreCase = true) == true }
-                .map { it.contactoId }.toSet()
+                .map { it.id }.toSet()
             _coloniaIdsPermitidos.value = ids
             _coloniaCargando.value = false
         }
@@ -194,7 +203,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     fun cargarColoniasDisponibles(context: Context) {
         viewModelScope.launch {
             _coloniasCargando.value = true
-            val base = candidatos.value.distinctBy { it.contactoId }
+            val base = candidatos.value
             for (c in base) {
                 val ub = c.ubicacion ?: continue
                 if (!coloniaCache.containsKey(ub)) coloniaCache[ub] = resolverColonia(context, ub)
@@ -220,17 +229,20 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     fun seleccionarTodos() { _excluidos.value = emptySet() }
     fun deseleccionarTodos() { _excluidos.value = cola.value.map { it.id }.toSet() }
 
-    /** Llama ahora mismo a la cola seleccionada, en primer plano (mientras la pantalla esté
-     * abierta), esperando a que cada llamada termine antes de marcar la siguiente. */
+    /** Llama ahora mismo a la cola seleccionada del tipo activo, en primer plano (mientras la
+     * pantalla esté abierta), esperando a que cada llamada termine antes de marcar la siguiente. */
     fun llamarAhora(context: Context) {
         if (_llamando.value) return
         val lista = cola.value.filter { it.seleccionado }
         if (lista.isEmpty()) return
+        val tipoActual = _tipo.value
+        val config = configFlow(tipoActual).value
+        val enviarSms = enviarSmsAlColgarFlow(tipoActual).value
         _llamando.value = true
         _progreso.value = 0 to lista.size
         viewModelScope.launch {
             val subId = _subscriptionIdSeleccionado.value
-            val esperaExtraMs = _segundosEntreLlamadas.value * 1000L
+            val esperaExtraMs = config.segundosEntreLlamadas * 1000L
             val estados = _estados.value.toMutableMap()
             for ((i, item) in lista.withIndex()) {
                 if (!_llamando.value) break // se canceló desde la pantalla
@@ -239,8 +251,8 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
                 _estados.value = estados.toMap()
                 CallHelper.realizarLlamada(context, subId, item.telefono)
                 delay(2000) // margen para que el sistema conecte la llamada antes de escuchar el estado
-                CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = _duracionMaximaSegundos.value * 1000L)
-                if (_enviarSmsAlColgar.value) enviarSmsPostLlamada(context, item, subId)
+                CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaSegundos * 1000L)
+                if (enviarSms) enviarSmsPostLlamada(context, item, subId)
                 estados[item.id] = EstadoLlamada.HECHA
                 _estados.value = estados.toMap()
                 _progreso.value = (i + 1) to lista.size
@@ -263,18 +275,23 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     fun silenciar(context: Context, mute: Boolean) = CallHelper.silenciarMicrofono(context, mute)
     fun microfonoSilenciado(context: Context): Boolean = CallHelper.microfonoSilenciado(context)
 
-    /** Programa el primer bloque para la próxima ocurrencia de la hora elegida (hoy si no ha
-     * pasado, mañana si ya pasó), repitiéndose cada N horas, M veces — vía WorkManager. */
+    /** Programa el primer bloque del tipo activo para la próxima ocurrencia de la hora elegida
+     * (hoy si no ha pasado, mañana si ya pasó), repitiéndose cada N horas, M veces — vía
+     * WorkManager. Un único bloque programado a la vez entre los tres tipos (un teléfono no
+     * puede marcar dos números a la vez), igual que SmsRepeatWorker comparte una sola ronda
+     * programada entre las tres fuentes de SMS. */
     fun programarBloques(context: Context) {
         val lista = cola.value.filter { it.seleccionado }
         if (lista.isEmpty()) return
-        val inicioMillis = proximaOcurrencia(_horaInicioBloque.value, _minutoInicioBloque.value)
+        val tipoActual = _tipo.value
+        val config = configFlow(tipoActual).value
+        val inicioMillis = proximaOcurrencia(config.horaInicioBloque, config.minutoInicioBloque)
         CallRepeatWorker.programar(
-            workManager = workManager, idsSeleccionados = lista.map { it.id },
-            subscriptionId = _subscriptionIdSeleccionado.value, segundosEntreLlamadas = _segundosEntreLlamadas.value,
-            duracionMaximaSegundos = _duracionMaximaSegundos.value,
-            iniciarEnMillis = inicioMillis, horasEntreBloques = _horasEntreBloques.value, repeticionesRestantes = _repeticionesBloque.value,
-            enviarSmsAlColgar = _enviarSmsAlColgar.value, plantillaSmsTT = _plantillaSmsTT.value, plantillaSmsRef = _plantillaSmsRef.value,
+            workManager = workManager, tipo = tipoActual, idsSeleccionados = lista.map { it.id },
+            subscriptionId = _subscriptionIdSeleccionado.value, segundosEntreLlamadas = config.segundosEntreLlamadas,
+            duracionMaximaSegundos = config.duracionMaximaSegundos,
+            iniciarEnMillis = inicioMillis, horasEntreBloques = config.horasEntreBloques, repeticionesRestantes = config.repeticionesBloque,
+            enviarSmsAlColgar = enviarSmsAlColgarFlow(tipoActual).value, plantillaSms = plantillaSmsFlow(tipoActual).value,
             agenteSms = _agenteSms.value, contactoSms = _contactoSms.value
         )
     }
@@ -282,7 +299,10 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     fun cancelarBloquesProgramados() { CallRepeatWorker.cancelar(workManager) }
 
     /** true mientras haya bloques programados encolados o corriendo (sobrevive a cerrar la app;
-     * se actualiza solo vía WorkManager). Se usa para mostrar el botón "Detener bloques". */
+     * se actualiza solo vía WorkManager). Se usa para mostrar el botón "Detener bloques" en los
+     * 3 submenús (Titular/Ref1/Ref2) — el bloque programado es uno solo compartido entre los
+     * tres tipos, así que este botón detiene el que esté activo sin importar desde qué pestaña
+     * se abra, igual que el botón equivalente de SmsScreen. */
     val bloquesProgramadosActivos: StateFlow<Boolean> = CallRepeatWorker.estaProgramado(workManager)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 }
