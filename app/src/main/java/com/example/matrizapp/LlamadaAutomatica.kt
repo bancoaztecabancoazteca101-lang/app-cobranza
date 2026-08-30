@@ -12,13 +12,15 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
 // ============================================================
 // SCHEDULER — una alarma exacta por bloque activo, se reprograma
 // sola cada medianoche. Mismo patrón que RetornoAlarmReceiver/
-// BootCompletedReceiver ya usan en la app.
+// BootCompletedReceiver ya usan en la app. También programa las
+// dos alarmas fijas de catchup (8:15/9:15).
 // ============================================================
 class LlamadaAutomaticaScheduler(
     private val context: Context,
@@ -31,6 +33,7 @@ class LlamadaAutomaticaScheduler(
         for (idPosible in 1..MAX_ID_ESPERADO) cancelarBloque(idPosible)
         bloques.forEach { programarBloque(it) }
         programarReprogramacionMedianoche()
+        programarCatchup()
     }
 
     private fun programarBloque(bloque: BloqueHorarioEntity) {
@@ -69,11 +72,36 @@ class LlamadaAutomaticaScheduler(
         alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
     }
 
+    /** Las dos corridas fijas de catchup: recalculan el déficit de AYER (meta de la semana
+     * menos lo realmente contactado) y reintentan solo a quien le sigue faltando — cubre tanto
+     * fallas puntuales (batería/señal durante el día) como el caso estructural de clientes con
+     * alta tardía + semana alta cuyos offsets se pasan del último bloque del día. */
+    private fun programarCatchup() {
+        programarAlarmaCatchup(hora = 8, minuto = 15, requestCode = REQUEST_CODE_CATCHUP_815)
+        programarAlarmaCatchup(hora = 9, minuto = 15, requestCode = REQUEST_CODE_CATCHUP_915)
+    }
+
+    private fun programarAlarmaCatchup(hora: Int, minuto: Int, requestCode: Int) {
+        val ahora = LocalDateTime.now()
+        var disparo = ahora.toLocalDate().atTime(hora, minuto)
+        if (disparo.isBefore(ahora)) disparo = disparo.plusDays(1)
+
+        val millis = disparo.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val intent = Intent(context, CatchupLlamadaAlarmReceiver::class.java)
+        val pending = PendingIntent.getBroadcast(
+            context, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+    }
+
     private fun requestCodeParaBloque(id: Long): Int = (REQUEST_CODE_BASE + id).toInt()
 
     companion object {
         private const val REQUEST_CODE_BASE = 6_000
         private const val REQUEST_CODE_MEDIANOCHE = 6_999
+        private const val REQUEST_CODE_CATCHUP_815 = 6_997
+        private const val REQUEST_CODE_CATCHUP_915 = 6_998
         private const val MAX_ID_ESPERADO = 500L
     }
 }
@@ -108,12 +136,39 @@ class ReprogramarLlamadaBloquesWorker(context: Context, params: WorkerParameters
     }
 }
 
+class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<CatchupLlamadaWorker>().build())
+    }
+}
+
+// ============================================================
+// Lógica de contacto compartida entre el worker de bloque normal
+// y el de catchup — llama al titular (+ SMS) y manda SMS a las
+// referencias, reusando CallHelper/SmsHelper.
+// ============================================================
+private const val DURACION_MAX_LLAMADA_MS = 45_000L // mismo default que CallViewModel
+
+private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, subId: Int?) {
+    if (r.numTT.isNotBlank()) {
+        CallHelper.realizarLlamada(context, subId, r.numTT)
+        delay(2_000)
+        CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = DURACION_MAX_LLAMADA_MS)
+        SmsHelper.enviarSms(context, subId, r.numTT, MensajesCobranza.paraTT(r.nombre, r.requisito, sem))
+    }
+    listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }).forEach { tel ->
+        SmsHelper.enviarSms(context, subId, tel, MensajesCobranza.paraReferencia(r.nombre, sem))
+    }
+}
+
+private fun inicioDeDiaMillis(fecha: LocalDate): Long =
+    fecha.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
 // ============================================================
 // WORKER PRINCIPAL — decide automáticamente a quién le toca este
-// bloque (según ReglaRepeticion) y ejecuta llamada+SMS reusando
-// CallHelper/SmsHelper, exactamente como ya hace CallRepeatWorker,
-// solo que la selección es automática por semana de atraso en vez
-// de una lista de IDs elegida a mano.
+// bloque (según ReglaRepeticion) y ejecuta llamada+SMS. Registra
+// cada contacto en ContactoLogEntity para que el catchup pueda
+// saber, al día siguiente, quién se quedó corto de su meta.
 // ============================================================
 class LlamadaAutomaticaWorker(
     context: Context,
@@ -127,6 +182,7 @@ class LlamadaAutomaticaWorker(
         val container = (applicationContext as MainApplication).container
         val bloqueDao = container.database.bloqueHorarioDao()
         val matrizDao = container.database.matrizDao()
+        val logDao = container.database.contactoLogDao()
 
         val bloquesActivos = bloqueDao.obtenerBloquesActivos()
         val bloqueActualIndex = bloquesActivos.indexOfFirst { it.id == bloqueId }
@@ -134,6 +190,7 @@ class LlamadaAutomaticaWorker(
 
         val registros = matrizDao.getAllMatriz().first()
         val subId: Int? = null // línea default; si se necesita fijar SIM, se agrega config a BloqueHorarioEntity
+        val hoyMillis = inicioDeDiaMillis(LocalDate.now())
 
         for (r in registros) {
             if (r.estado.equals("Pagado", ignoreCase = true)) continue
@@ -144,25 +201,51 @@ class LlamadaAutomaticaWorker(
             val bloqueAltaIndex = ReglaRepeticion.calcularBloqueDeAlta(fechaAlta, bloquesActivos)
             if (!ReglaRepeticion.debeContactarseEnBloque(sem, bloqueActualIndex, bloqueAltaIndex)) continue
 
-            procesarCliente(r, sem, subId)
+            procesarClienteLlamadaAutomatica(applicationContext, r, sem, subId)
+            logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = hoyMillis, bloqueIndex = bloqueActualIndex))
         }
         return Result.success()
     }
 
-    private suspend fun procesarCliente(r: MatrizEntity, sem: Int, subId: Int?) {
-        if (r.numTT.isNotBlank()) {
-            CallHelper.realizarLlamada(applicationContext, subId, r.numTT)
-            delay(2_000)
-            CallHelper.esperarFinOForzarColgar(applicationContext, duracionMaximaMs = DURACION_MAX_LLAMADA_MS)
-            SmsHelper.enviarSms(applicationContext, subId, r.numTT, MensajesCobranza.paraTT(r.nombre, r.requisito, sem))
-        }
-        listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }).forEach { tel ->
-            SmsHelper.enviarSms(applicationContext, subId, tel, MensajesCobranza.paraReferencia(r.nombre, sem))
-        }
-    }
-
     companion object {
         const val KEY_BLOQUE_ID = "bloque_id"
-        private const val DURACION_MAX_LLAMADA_MS = 45_000L // mismo default que CallViewModel
+    }
+}
+
+// ============================================================
+// WORKER DE CATCHUP — corre a las 8:15 y a las 9:15. Para cada
+// cliente activo, compara cuántas veces se le contactó AYER
+// (ContactoLogEntity) contra la meta de su semana de atraso
+// (ReglaRepeticion.metaContactos) y, si quedó corto, lo contacta
+// ahora — acreditando el contacto hacia "ayer", así la segunda
+// corrida (9:15) ve lo que ya cubrió la primera y no duplica.
+// ============================================================
+class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result {
+        val container = (applicationContext as MainApplication).container
+        val matrizDao = container.database.matrizDao()
+        val logDao = container.database.contactoLogDao()
+
+        val registros = matrizDao.getAllMatriz().first()
+        val subId: Int? = null
+        val ayerMillis = inicioDeDiaMillis(LocalDate.now().minusDays(1))
+
+        for (r in registros) {
+            if (r.estado.equals("Pagado", ignoreCase = true)) continue
+            val sem = r.semana.trim().toIntOrNull() ?: continue
+            if (sem !in 1..5) continue
+
+            val contactosAyer = logDao.contarContactosEnDia(r.id, ayerMillis)
+            val deficit = ReglaRepeticion.calcularDeficit(sem, contactosAyer)
+            if (deficit <= 0) continue
+
+            procesarClienteLlamadaAutomatica(applicationContext, r, sem, subId)
+            logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = ayerMillis, bloqueIndex = -1))
+        }
+
+        // Limpieza: el catchup solo mira "ayer", no hace falta conservar más de una semana.
+        logDao.limpiarAnteriores(inicioDeDiaMillis(LocalDate.now().minusDays(7)))
+        return Result.success()
     }
 }
