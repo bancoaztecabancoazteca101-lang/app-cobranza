@@ -64,6 +64,7 @@ private fun tienePermisoAlarmasExactas(context: android.content.Context): Boolea
 @Composable
 fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
     val bloques by viewModel.bloques.collectAsState()
+    val automatizacionActiva by viewModel.automatizacionActiva.collectAsState()
     val context = LocalContext.current
 
     var mostrarDialogoNuevo by remember { mutableStateOf(false) }
@@ -95,6 +96,10 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            InterruptorGeneralCard(
+                activa = automatizacionActiva,
+                onCambiar = { viewModel.setAutomatizacionActiva(it) }
+            )
             if (!permisoAlarmasOk) {
                 PermisoAlarmasBanner(
                     onAutorizar = {
@@ -167,6 +172,36 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                 TextButton(onClick = { bloqueAEliminar = null }) { Text("Cancelar") }
             }
         )
+    }
+}
+
+@Composable
+private fun InterruptorGeneralCard(activa: Boolean, onCambiar: (Boolean) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(12.dp),
+        colors = CardDefaults.cardColors(containerColor = if (activa) Color(0xFFE3F2FD) else Color(0xFFF5F5F5))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Automatización de llamadas y SMS",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (activa) AZUL_ACENTO else Color.Gray
+                )
+                Text(
+                    if (activa) "Activa — se dispara sola cada día en los bloques de abajo"
+                    else "Apagada — los bloques quedan guardados pero no van a marcar solos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Switch(checked = activa, onCheckedChange = onCambiar)
+        }
     }
 }
 

@@ -4,7 +4,7 @@ import androidx.work.WorkManager
 import com.google.api.services.drive.Drive
 import com.google.api.services.sheets.v4.Sheets
 
-class AppContainer(private val context: Context) {
+class AppContainer(val context: Context) {
     val database: AppDatabase by lazy { AppDatabase.getDatabase(context) }
     val sheetsService: Sheets by lazy { GoogleSheetsServiceProvider.getService(context) }
     val driveService: Drive by lazy { GoogleSheetsServiceProvider.getDriveService(context) }

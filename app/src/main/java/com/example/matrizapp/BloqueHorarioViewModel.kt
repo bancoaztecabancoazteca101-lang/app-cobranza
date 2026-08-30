@@ -1,7 +1,9 @@
 package com.example.matrizapp
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -12,11 +14,24 @@ import java.time.LocalTime
  * tener que rastrear manualmente qué cambió. */
 class BloqueHorarioViewModel(
     private val dao: BloqueHorarioDao,
-    private val scheduler: LlamadaAutomaticaScheduler
+    private val scheduler: LlamadaAutomaticaScheduler,
+    private val context: Context
 ) : ViewModel() {
 
     val bloques: StateFlow<List<BloqueHorarioEntity>> = dao.observarBloques()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Interruptor general de toda la automatización (llamadas + SMS por bloque). Se guarda en
+     * SharedPreferences (no Room) porque BootCompletedReceiver y los Workers lo leen sin
+     * depender de que este ViewModel esté vivo. */
+    private val _automatizacionActiva = MutableStateFlow(AutomatizacionPrefs.activa(context))
+    val automatizacionActiva: StateFlow<Boolean> = _automatizacionActiva
+
+    fun setAutomatizacionActiva(activa: Boolean) = viewModelScope.launch {
+        AutomatizacionPrefs.setActiva(context, activa)
+        _automatizacionActiva.value = activa
+        scheduler.reprogramarTodos()
+    }
 
     fun agregarBloque(hora: LocalTime) = viewModelScope.launch {
         dao.insertar(BloqueHorarioEntity.fromLocalTime(hora))

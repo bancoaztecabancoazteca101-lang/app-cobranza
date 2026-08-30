@@ -22,15 +22,46 @@ import java.time.ZoneId
 // BootCompletedReceiver ya usan en la app. También programa las
 // dos alarmas fijas de catchup (8:15/9:15).
 // ============================================================
+// ============================================================
+// INTERRUPTOR GENERAL — SharedPreferences (no Room) porque lo lee
+// BootCompletedReceiver y los Workers sin depender de un ViewModel
+// vivo. Apagado por defecto: instalaciones existentes no arrancan
+// a llamar solas hasta que el usuario lo prenda a propósito.
+// ============================================================
+object AutomatizacionPrefs {
+    private const val PREFS_NAME = "automatizacion_prefs"
+    private const val KEY_ACTIVA = "activa"
+
+    fun activa(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_ACTIVA, false)
+
+    fun setActiva(context: Context, valor: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_ACTIVA, valor).apply()
+    }
+}
+
+// ============================================================
+// SCHEDULER — una alarma exacta por bloque activo, se reprograma
+// sola cada medianoche. Mismo patrón que RetornoAlarmReceiver/
+// BootCompletedReceiver ya usan en la app. También programa las
+// dos alarmas fijas de catchup (8:15/9:15).
+// ============================================================
 class LlamadaAutomaticaScheduler(
     private val context: Context,
     private val dao: BloqueHorarioDao
 ) {
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
+    /** Con el interruptor general apagado, cancela cualquier alarma que hubiera quedado
+     * (de cuando estaba prendido) y no programa nada nuevo — los bloques quedan guardados
+     * en la lista, listos para cuando se vuelva a prender. */
     suspend fun reprogramarTodos() {
-        val bloques = dao.obtenerBloquesActivos()
         for (idPosible in 1..MAX_ID_ESPERADO) cancelarBloque(idPosible)
+        cancelarReprogramacionMedianoche()
+        cancelarCatchup()
+        if (!AutomatizacionPrefs.activa(context)) return
+
+        val bloques = dao.obtenerBloquesActivos()
         bloques.forEach { programarBloque(it) }
         programarReprogramacionMedianoche()
         programarCatchup()
@@ -64,12 +95,19 @@ class LlamadaAutomaticaScheduler(
     private fun programarReprogramacionMedianoche() {
         val medianoche = LocalDateTime.now().toLocalDate().plusDays(1).atStartOfDay()
         val millis = medianoche.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pendingMedianoche())
+    }
+
+    private fun cancelarReprogramacionMedianoche() {
+        alarmManager.cancel(pendingMedianoche())
+    }
+
+    private fun pendingMedianoche(): PendingIntent {
         val intent = Intent(context, ReprogramarLlamadaBloquesReceiver::class.java)
-        val pending = PendingIntent.getBroadcast(
+        return PendingIntent.getBroadcast(
             context, REQUEST_CODE_MEDIANOCHE, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
     }
 
     /** Las dos corridas fijas de catchup: recalculan el déficit de AYER (meta de la semana
@@ -81,18 +119,26 @@ class LlamadaAutomaticaScheduler(
         programarAlarmaCatchup(hora = 9, minuto = 15, requestCode = REQUEST_CODE_CATCHUP_915)
     }
 
+    private fun cancelarCatchup() {
+        alarmManager.cancel(pendingCatchup(REQUEST_CODE_CATCHUP_815))
+        alarmManager.cancel(pendingCatchup(REQUEST_CODE_CATCHUP_915))
+    }
+
+    private fun pendingCatchup(requestCode: Int): PendingIntent {
+        val intent = Intent(context, CatchupLlamadaAlarmReceiver::class.java)
+        return PendingIntent.getBroadcast(
+            context, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     private fun programarAlarmaCatchup(hora: Int, minuto: Int, requestCode: Int) {
         val ahora = LocalDateTime.now()
         var disparo = ahora.toLocalDate().atTime(hora, minuto)
         if (disparo.isBefore(ahora)) disparo = disparo.plusDays(1)
 
         val millis = disparo.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val intent = Intent(context, CatchupLlamadaAlarmReceiver::class.java)
-        val pending = PendingIntent.getBroadcast(
-            context, requestCode, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pending)
+        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pendingCatchup(requestCode))
     }
 
     private fun requestCodeParaBloque(id: Long): Int = (REQUEST_CODE_BASE + id).toInt()
