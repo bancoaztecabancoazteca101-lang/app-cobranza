@@ -253,6 +253,16 @@ private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: andr
             }
 
             Spacer(Modifier.height(8.dp))
+            Text("Bloques programados", style = MaterialTheme.typography.labelLarge)
+            OutlinedButton(
+                onClick = {
+                    android.app.TimePickerDialog(context, { _, h, m -> viewModel.setHoraInicioBloque(fuente, h, m) }, config.horaInicioBloque, config.minutoInicioBloque, true).show()
+                },
+                enabled = !enviando
+            ) { Text("Hora de inicio: %02d:%02d".format(config.horaInicioBloque, config.minutoInicioBloque)) }
+            Text("Solo aplica a \"Programar\" — \"Enviar ahora\" siempre manda de inmediato sin importar esta hora.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CampoNumerico(
                     valor = config.delaySegundos, onValorValido = { viewModel.setDelaySegundos(fuente, it) },
@@ -270,7 +280,7 @@ private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: andr
                     enabled = !enviando || config.vecesPorDia <= 1, minimo = 1, maximo = 12
                 )
             }
-            Text("\"Veces al día\" en 1 = solo esta ronda. Más de 1 programa rondas repetidas cada N horas, aunque cierres la app.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+            Text("\"Veces al día\" en 1 = solo esta ronda, empezando a la hora de inicio. Más de 1 programa rondas repetidas cada N horas, aunque cierres la app.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
 
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = { viewModel.seleccionarTodos() }, enabled = !enviando) { Text("Seleccionar todos") }

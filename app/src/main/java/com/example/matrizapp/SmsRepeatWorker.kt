@@ -88,13 +88,16 @@ class SmsRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Cor
             KEY_HORAS to horasEntreRepeticion
         )
 
-        /** Encola la primera ronda de inmediato; las siguientes se autoprograman desde doWork(). */
+        /** Encola la primera ronda para que arranque en iniciarEnMillis (ya calculado como la
+         * próxima ocurrencia de la hora elegida); las rondas siguientes se autoprograman desde doWork(). */
         fun programar(
             workManager: WorkManager, fuente: FuenteSms, idsSeleccionados: List<String>, plantilla: String,
-            agente: String, contacto: String, subscriptionId: Int?, delaySegundos: Int,
+            agente: String, contacto: String, subscriptionId: Int?, delaySegundos: Int, iniciarEnMillis: Long,
             repeticionesRestantes: Int, horasEntreRepeticion: Int
         ) {
+            val delayInicialMs = (iniciarEnMillis - System.currentTimeMillis()).coerceAtLeast(0)
             val solicitud = OneTimeWorkRequestBuilder<SmsRepeatWorker>()
+                .setInitialDelay(delayInicialMs, TimeUnit.MILLISECONDS)
                 .setInputData(construirInputData(fuente, idsSeleccionados, plantilla, agente, contacto, subscriptionId, delaySegundos, repeticionesRestantes, horasEntreRepeticion))
                 .build()
             workManager.enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.REPLACE, solicitud)

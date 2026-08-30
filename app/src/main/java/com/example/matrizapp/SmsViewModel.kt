@@ -35,6 +35,16 @@ private fun finDeDia(millis: Long): Long = Calendar.getInstance().apply {
     set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
 }.timeInMillis
 
+/** Próxima ocurrencia de la hora:minuto indicada — hoy si aún no pasa, mañana si ya pasó. */
+private fun proximaOcurrencia(hora: Int, minuto: Int): Long {
+    val ahora = Calendar.getInstance()
+    val objetivo = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, hora); set(Calendar.MINUTE, minuto); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }
+    if (objetivo.timeInMillis <= ahora.timeInMillis) objetivo.add(Calendar.DAY_OF_YEAR, 1)
+    return objetivo.timeInMillis
+}
+
 class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: WorkManager) : ViewModel() {
 
     private val registrosTodos: StateFlow<List<MatrizEntity>> = matrizDao.getAllMatriz()
@@ -77,10 +87,15 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
     private val _subscriptionIdSeleccionado = MutableStateFlow<Int?>(null)
     val subscriptionIdSeleccionado: StateFlow<Int?> = _subscriptionIdSeleccionado
 
-    /** Cada fuente (Titular/Ref1/Ref2) tiene su propio tiempo entre SMS, veces al día y horas
-     * entre rondas — antes era un solo valor compartido para las tres, por eso al configurar
-     * una se te desconfiguraban las otras. */
-    data class ConfigEnvioSms(val delaySegundos: Int = 5, val vecesPorDia: Int = 1, val horasEntreRepeticion: Int = 3)
+    /** Cada fuente (Titular/Ref1/Ref2) tiene su propio tiempo entre SMS, veces al día, horas
+     * entre rondas y hora de inicio — antes era un solo valor compartido para las tres, por eso
+     * al configurar una se te desconfiguraban las otras. La hora de inicio se agregó para que
+     * "Programar" pueda dejar la primera ronda lista para más tarde (hoy o mañana), en vez de
+     * dispararla de inmediato al tocar el botón — igual que ya funciona en Llamadas. */
+    data class ConfigEnvioSms(
+        val delaySegundos: Int = 5, val vecesPorDia: Int = 1, val horasEntreRepeticion: Int = 3,
+        val horaInicioBloque: Int = 9, val minutoInicioBloque: Int = 0
+    )
 
     private val _configPorFuente: Map<FuenteSms, MutableStateFlow<ConfigEnvioSms>> =
         FuenteSms.values().associateWith { MutableStateFlow(ConfigEnvioSms()) }
@@ -98,6 +113,10 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
     fun setHorasEntreRepeticion(f: FuenteSms, v: Int) {
         val flujo = _configPorFuente.getValue(f)
         flujo.value = flujo.value.copy(horasEntreRepeticion = v.coerceIn(1, 12))
+    }
+    fun setHoraInicioBloque(f: FuenteSms, h: Int, m: Int) {
+        val flujo = _configPorFuente.getValue(f)
+        flujo.value = flujo.value.copy(horaInicioBloque = h.coerceIn(0, 23), minutoInicioBloque = m.coerceIn(0, 59))
     }
 
     // Ids marcados manualmente como NO enviar, para no perder la selección al recombinar filtros.
@@ -252,11 +271,12 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
         val lista = contactos.value.filter { it.seleccionado }
         if (lista.isEmpty()) return
         val config = configFlow(_fuente.value).value
+        val inicioMillis = proximaOcurrencia(config.horaInicioBloque, config.minutoInicioBloque)
         SmsRepeatWorker.programar(
             workManager = workManager, fuente = _fuente.value, idsSeleccionados = lista.map { it.id },
             plantilla = plantillaActual(), agente = _agente.value, contacto = _contacto.value,
             subscriptionId = _subscriptionIdSeleccionado.value, delaySegundos = config.delaySegundos,
-            repeticionesRestantes = config.vecesPorDia, horasEntreRepeticion = config.horasEntreRepeticion
+            iniciarEnMillis = inicioMillis, repeticionesRestantes = config.vecesPorDia, horasEntreRepeticion = config.horasEntreRepeticion
         )
     }
 
