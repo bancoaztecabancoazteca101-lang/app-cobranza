@@ -80,13 +80,13 @@ object MensajesCobranza {
         val plantillas = dao.obtenerActivasPara("TT", sem)
         if (plantillas.isEmpty()) return "Banco Azteca: $nombre, su cuenta presenta atraso$montoParte. Comuníquese hoy mismo."
         val idx = ((variante % plantillas.size) + plantillas.size) % plantillas.size
-        return plantillas[idx].texto.replace("{nombre}", nombre).replace("{monto}", montoParte)
+        return plantillas[idx].texto.replace("%nombre%", nombre, ignoreCase = true).replace("%monto%", montoParte, ignoreCase = true)
     }
 
     suspend fun paraReferencia(dao: PlantillaSmsDao, nombre: String, sem: Int, variante: Int = 0): String {
         val plantillas = dao.obtenerActivasPara("REF", sem)
         if (plantillas.isEmpty()) return "Banco Azteca le informa que $nombre mantiene un adeudo pendiente. Le pedimos comunicarle que se contacte con nosotros."
         val idx = ((variante % plantillas.size) + plantillas.size) % plantillas.size
-        return plantillas[idx].texto.replace("{nombre}", nombre)
+        return plantillas[idx].texto.replace("%nombre%", nombre, ignoreCase = true)
     }
 }

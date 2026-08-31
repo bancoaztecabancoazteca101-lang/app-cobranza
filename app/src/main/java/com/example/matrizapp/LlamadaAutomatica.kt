@@ -217,6 +217,8 @@ class LlamadaAutomaticaWorker(
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        if (!AutomatizacionPrefs.activa(applicationContext)) return Result.success() // se apagó el interruptor general mientras este worker esperaba encolado
+
         val bloqueId = inputData.getLong(KEY_BLOQUE_ID, -1)
         if (bloqueId < 0) return Result.failure()
 
@@ -265,6 +267,8 @@ class LlamadaAutomaticaWorker(
 class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        if (!AutomatizacionPrefs.activa(applicationContext)) return Result.success()
+
         val container = (applicationContext as MainApplication).container
         val matrizDao = container.database.matrizDao()
         val logDao = container.database.contactoLogDao()

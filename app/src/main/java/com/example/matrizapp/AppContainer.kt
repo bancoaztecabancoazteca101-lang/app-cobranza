@@ -43,6 +43,7 @@ class AppContainer(val context: Context) {
             if (dao.contar() == 0) {
                 dao.insertarTodas(PlantillasSemillaSms.defaults())
             }
+            dao.migrarPlaceholdersLegado()
         }
     }
 }

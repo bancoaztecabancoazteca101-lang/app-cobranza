@@ -59,6 +59,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".CatchupLlamadaAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".BootCompletedReceiver"
             android:exported="true">
             <intent-filter>

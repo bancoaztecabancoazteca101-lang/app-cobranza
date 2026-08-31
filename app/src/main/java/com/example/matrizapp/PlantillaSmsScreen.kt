@@ -1,5 +1,6 @@
 package com.example.matrizapp
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,14 +47,14 @@ fun PlantillaSmsScreen(viewModel: PlantillaSmsViewModel) {
     Scaffold { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(selected = tipoSeleccionado == "TT", onClick = { tipoSeleccionado = "TT" }, label = { Text("Titular (TT)") })
                 FilterChip(selected = tipoSeleccionado == "REF", onClick = { tipoSeleccionado = "REF" }, label = { Text("Referencias") })
             }
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 for (s in 1..5) {
@@ -60,8 +62,8 @@ fun PlantillaSmsScreen(viewModel: PlantillaSmsViewModel) {
                 }
             }
             Text(
-                if (tipoSeleccionado == "TT") "Usa {nombre} y {monto} — se rellenan solos al enviar el SMS"
-                else "Usa {nombre} — se rellena solo al enviar el SMS",
+                if (tipoSeleccionado == "TT") "Usa %nombre% y %monto% — se rellenan solos al enviar el SMS"
+                else "Usa %nombre% — se rellena solo al enviar el SMS",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
@@ -72,6 +74,11 @@ fun PlantillaSmsScreen(viewModel: PlantillaSmsViewModel) {
                 color = Color.Gray,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
             )
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { viewModel.restaurarSemana(tipoSeleccionado, semanaSeleccionada) }) {
+                    Text("Restaurar esta semana a valores de fábrica")
+                }
+            }
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentPadding = PaddingValues(12.dp),
