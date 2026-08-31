@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 
 class RetornoAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val id = intent.getStringExtra("id") ?: "sin_id"
         val nombre = intent.getStringExtra("nombre")?.takeIf { it.isNotBlank() } ?: "Cliente"
         val numTT = intent.getStringExtra("numTT")
         val estado = intent.getStringExtra("estado")
@@ -24,7 +25,7 @@ class RetornoAlarmReceiver : BroadcastReceiver() {
             } catch (e: Exception) {
                 null
             }
-            NotificacionesHelper.mostrarNotificacion(context, nombre, numTT, estado, calle, ubicacion)
+            NotificacionesHelper.mostrarNotificacion(context, id, nombre, numTT, estado, calle, ubicacion)
             pendingResult.finish()
         }
     }

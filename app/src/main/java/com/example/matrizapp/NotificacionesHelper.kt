@@ -56,43 +56,72 @@ class NotificacionesHelper(private val context: Context) {
 
     /** Se debe llamar cada vez que se actualiza la lista completa de Filtro Fecha (no la
      * filtrada por rango de fechas, sino todos los registros), para mantener las alarmas
-     * sincronizadas con el estado actual de cada uno. Solo considera los que tienen Fecha de
-     * HOY — antes no filtraba por fecha, así que un registro que seguía en Retorno/App se
-     * re-armaba para "hoy a esa hora" en cada sync y la notificación terminaba repitiéndose
-     * día tras día aunque ya se hubiera atendido. */
+     * sincronizadas con el estado actual de cada uno.
+     *
+     * IMPORTANTE: Filtro Fecha comparte columnas con Matriz (se alimenta de ahí vía Apps
+     * Script) — su campo `fecha` es la fecha en que el cliente se capturó, NO el día del
+     * retorno. Por eso NO se filtra por fecha == hoy (una versión anterior de este método sí
+     * lo hacía y dejaba de notificar a cualquier cliente no capturado ese mismo día — bug
+     * corregido). En vez de eso, se guarda un historial de qué combinación exacta id+hora ya
+     * se armó: mientras el estado siga en Retorno/App con la MISMA hora, no se vuelve a
+     * programar (evita el repetirse día tras día); si el usuario pone una hora nueva, sí se
+     * arma de nuevo porque es efectivamente un recordatorio distinto. */
     fun sincronizarAlarmasRetorno(items: List<FiltroFechaEntity>) {
         val prefs = context.getSharedPreferences(PREFS_RETORNOS, Context.MODE_PRIVATE)
         val idsAnteriores = prefs.getStringSet("ids", emptySet()) ?: emptySet()
+        val historial = parseHistorial(prefs.getStringSet("historial", emptySet()))
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val ahora = System.currentTimeMillis()
-        val hoyCal = java.util.Calendar.getInstance()
 
-        val objetivos = items.filter {
-            esEstadoNotificable(it.estado) && !it.hora.isNullOrBlank() && esHoy(it.fecha, hoyCal)
-        }
-        // Atajo: si no hay ningún candidato y tampoco había nada programado antes, no hay
-        // nada que hacer (evita tocar AlarmManager/SharedPreferences en cada sync sin motivo).
-        if (objetivos.isEmpty() && idsAnteriores.isEmpty()) return
+        val objetivos = items.filter { esEstadoNotificable(it.estado) && !it.hora.isNullOrBlank() }
+        if (objetivos.isEmpty() && idsAnteriores.isEmpty() && historial.isEmpty()) return
 
         val puedeExacta = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarmManager.canScheduleExactAlarms() else true
         val idsNuevos = mutableSetOf<String>()
+        val historialNuevo = mutableMapOf<String, Long>()
 
         for (item in objetivos) {
+            val clave = "${item.id}|${item.hora}"
+            val triggerPrevio = historial[clave]
+            if (triggerPrevio != null) {
+                // Ya se armó esta combinación exacta de cliente+hora antes.
+                if (triggerPrevio > ahora) {
+                    // Todavía no dispara: sigue viva, la mantenemos (no se toca AlarmManager, ya está armada).
+                    idsNuevos.add(item.id)
+                    historialNuevo[clave] = triggerPrevio
+                }
+                // Si ya pasó, ya se disparó una vez: no se repite aunque el estado/hora sigan igual.
+                continue
+            }
             val trigger = calcularTriggerHoy(item.hora!!) ?: continue
-            if (trigger <= ahora) continue // ya pasó esa hora hoy: no tiene caso programarla
+            if (trigger <= ahora) continue // ya pasó esa hora hoy y es la primera vez que se ve: no tiene caso
             idsNuevos.add(item.id)
+            historialNuevo[clave] = trigger
             programarAlarmaGenerica(alarmManager, crearPendingIntent(item.id, item.nombre, item.numTT, item.estado, item.ubicacion), trigger, puedeExacta)
         }
 
         // Cancela las alarmas de IDs que quedaron fuera del set nuevo (cambiaron de estado,
-        // se eliminaron, ya pasó su hora, o su fecha ya no es hoy).
+        // se eliminaron, o su hora ya pasó y disparó).
         for (idViejo in idsAnteriores) {
             if (idViejo !in idsNuevos) {
                 alarmManager.cancel(crearPendingIntent(idViejo, "", null, ""))
             }
         }
 
-        prefs.edit().putStringSet("ids", idsNuevos).apply()
+        prefs.edit()
+            .putStringSet("ids", idsNuevos)
+            .putStringSet("historial", historialNuevo.map { "${it.key}=${it.value}" }.toSet())
+            .apply()
+    }
+
+    private fun parseHistorial(raw: Set<String>?): Map<String, Long> {
+        if (raw.isNullOrEmpty()) return emptyMap()
+        return raw.mapNotNull { entry ->
+            val idx = entry.lastIndexOf('=')
+            if (idx == -1) return@mapNotNull null
+            val trigger = entry.substring(idx + 1).toLongOrNull() ?: return@mapNotNull null
+            entry.substring(0, idx) to trigger
+        }.toMap()
     }
 
     /** Igual que sincronizarAlarmasRetorno, pero para registros de Matriz. Solo considera los
@@ -179,7 +208,7 @@ class NotificacionesHelper(private val context: Context) {
     }
 
     companion object {
-        fun mostrarNotificacion(context: Context, nombre: String, numTT: String?, estado: String?, calle: String?, ubicacion: String?) {
+        fun mostrarNotificacion(context: Context, id: String, nombre: String, numTT: String?, estado: String?, calle: String?, ubicacion: String?) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
             }
@@ -209,7 +238,7 @@ class NotificacionesHelper(private val context: Context) {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 val navPendingIntent = PendingIntent.getActivity(
-                    context, "nav_${nombre.hashCode()}".hashCode(), navIntent,
+                    context, "nav_$id".hashCode(), navIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 builder.addAction(android.R.drawable.ic_menu_mylocation, "Cómo llegar", navPendingIntent)
@@ -222,13 +251,13 @@ class NotificacionesHelper(private val context: Context) {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 val dialPendingIntent = PendingIntent.getActivity(
-                    context, "call_${nombre.hashCode()}".hashCode(), dialIntent,
+                    context, "call_$id".hashCode(), dialIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
                 builder.addAction(android.R.drawable.ic_menu_call, "Llamar", dialPendingIntent)
             }
 
-            NotificationManagerCompat.from(context).notify(nombre.hashCode(), builder.build())
+            NotificationManagerCompat.from(context).notify(id.hashCode(), builder.build())
         }
     }
 }
