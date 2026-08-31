@@ -56,14 +56,20 @@ class NotificacionesHelper(private val context: Context) {
 
     /** Se debe llamar cada vez que se actualiza la lista completa de Filtro Fecha (no la
      * filtrada por rango de fechas, sino todos los registros), para mantener las alarmas
-     * sincronizadas con el estado actual de cada uno. */
+     * sincronizadas con el estado actual de cada uno. Solo considera los que tienen Fecha de
+     * HOY — antes no filtraba por fecha, así que un registro que seguía en Retorno/App se
+     * re-armaba para "hoy a esa hora" en cada sync y la notificación terminaba repitiéndose
+     * día tras día aunque ya se hubiera atendido. */
     fun sincronizarAlarmasRetorno(items: List<FiltroFechaEntity>) {
         val prefs = context.getSharedPreferences(PREFS_RETORNOS, Context.MODE_PRIVATE)
         val idsAnteriores = prefs.getStringSet("ids", emptySet()) ?: emptySet()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val ahora = System.currentTimeMillis()
+        val hoyCal = java.util.Calendar.getInstance()
 
-        val objetivos = items.filter { esEstadoNotificable(it.estado) && !it.hora.isNullOrBlank() }
+        val objetivos = items.filter {
+            esEstadoNotificable(it.estado) && !it.hora.isNullOrBlank() && esHoy(it.fecha, hoyCal)
+        }
         // Atajo: si no hay ningún candidato y tampoco había nada programado antes, no hay
         // nada que hacer (evita tocar AlarmManager/SharedPreferences en cada sync sin motivo).
         if (objetivos.isEmpty() && idsAnteriores.isEmpty()) return
@@ -79,7 +85,7 @@ class NotificacionesHelper(private val context: Context) {
         }
 
         // Cancela las alarmas de IDs que quedaron fuera del set nuevo (cambiaron de estado,
-        // se eliminaron, o su hora ya pasó).
+        // se eliminaron, ya pasó su hora, o su fecha ya no es hoy).
         for (idViejo in idsAnteriores) {
             if (idViejo !in idsNuevos) {
                 alarmManager.cancel(crearPendingIntent(idViejo, "", null, ""))
