@@ -30,12 +30,16 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -65,7 +69,9 @@ private fun tienePermisoAlarmasExactas(context: android.content.Context): Boolea
 fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
     val bloques by viewModel.bloques.collectAsState()
     val automatizacionActiva by viewModel.automatizacionActiva.collectAsState()
+    val configAutomatizacion by viewModel.configAutomatizacion.collectAsState()
     val context = LocalContext.current
+    val lineas = remember { SmsHelper.lineasActivas(context) }
 
     var mostrarDialogoNuevo by remember { mutableStateOf(false) }
     var bloqueEnEdicion by remember { mutableStateOf<BloqueHorarioEntity?>(null) }
@@ -110,6 +116,14 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                     }
                 )
             }
+            ConfiguracionAutomatizacionCard(
+                config = configAutomatizacion,
+                lineas = lineas,
+                onSim = { viewModel.setSimAutomatizacion(it) },
+                onOcultarNumero = { viewModel.setOcultarNumeroAutomatizacion(it) },
+                onSegundosPausa = { viewModel.setSegundosPausaAutomatizacion(it) },
+                onDuracionMaxima = { viewModel.setDuracionMaximaAutomatizacion(it) }
+            )
             if (bloques.isEmpty()) {
                 Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     Text("Sin bloques configurados. Agrega el primero con el botón +.")
@@ -201,6 +215,79 @@ private fun InterruptorGeneralCard(activa: Boolean, onCambiar: (Boolean) -> Unit
                 )
             }
             Switch(checked = activa, onCheckedChange = onCambiar)
+        }
+    }
+}
+
+/** Configuración exclusiva del flujo automático de Bloques de horario (SIM, ocultar número,
+ * pausa entre llamadas, duración máxima) — independiente de la que usa la pantalla manual de
+ * Llamadas, para que ajustar una no cambie el comportamiento de la otra. */
+@Composable
+private fun ConfiguracionAutomatizacionCard(
+    config: ConfiguracionAutomatizacionEntity,
+    lineas: List<LineaSim>,
+    onSim: (Int?) -> Unit,
+    onOcultarNumero: (Boolean) -> Unit,
+    onSegundosPausa: (Int) -> Unit,
+    onDuracionMaxima: (Int) -> Unit
+) {
+    var expandido by remember { mutableStateOf(false) }
+    var textoPausa by remember(config.segundosPausaEntreLlamadas) { mutableStateOf(config.segundosPausaEntreLlamadas.toString()) }
+    var textoDuracion by remember(config.duracionMaximaLlamada) { mutableStateOf(config.duracionMaximaLlamada.toString()) }
+
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Configuración de llamadas automáticas", style = MaterialTheme.typography.titleSmall)
+                TextButton(onClick = { expandido = !expandido }) {
+                    Text(if (expandido) "Ocultar" else "Editar")
+                }
+            }
+            if (expandido) {
+                Spacer(Modifier.height(4.dp))
+                if (lineas.size > 1) {
+                    Text("Línea para llamadas automáticas", style = MaterialTheme.typography.labelLarge)
+                    lineas.forEach { linea ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = config.simSeleccionada == linea.subscriptionId, onClick = { onSim(linea.subscriptionId) })
+                            Text(linea.etiqueta)
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Ocultar número al marcar", style = MaterialTheme.typography.bodyMedium)
+                        Text("Solo confirmado con Movistar — con otras compañías puede no marcar", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(checked = config.ocultarNumero, onCheckedChange = onOcultarNumero)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row {
+                    OutlinedTextField(
+                        value = textoPausa,
+                        onValueChange = { v -> textoPausa = v.filter { it.isDigit() }; v.filter { it.isDigit() }.toIntOrNull()?.let(onSegundosPausa) },
+                        label = { Text("Segundos de pausa entre llamadas") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f).padding(end = 4.dp), singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = textoDuracion,
+                        onValueChange = { v -> textoDuracion = v.filter { it.isDigit() }; v.filter { it.isDigit() }.toIntOrNull()?.let(onDuracionMaxima) },
+                        label = { Text("Duración máxima por llamada (seg)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f).padding(start = 4.dp), singleLine = true
+                    )
+                }
+                Text(
+                    "Si nadie contesta o nadie cuelga, la app cuelga sola al llegar a este tiempo (necesita el permiso \"Responder llamadas\").",
+                    style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }

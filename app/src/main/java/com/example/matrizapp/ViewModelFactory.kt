@@ -34,7 +34,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
                 CallViewModel(container.database.matrizDao(), container.workManager) as T
 
             modelClass.isAssignableFrom(BloqueHorarioViewModel::class.java) ->
-                BloqueHorarioViewModel(container.database.bloqueHorarioDao(), container.llamadaAutomaticaScheduler, container.context) as T
+                BloqueHorarioViewModel(container.database.bloqueHorarioDao(), container.llamadaAutomaticaScheduler, container.context, container.database.configuracionAutomatizacionDao()) as T
 
             modelClass.isAssignableFrom(PlantillaSmsViewModel::class.java) ->
                 PlantillaSmsViewModel(container.database.plantillaSmsDao()) as T

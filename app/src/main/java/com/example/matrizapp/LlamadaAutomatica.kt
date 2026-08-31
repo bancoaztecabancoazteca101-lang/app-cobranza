@@ -185,16 +185,18 @@ class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
 // ============================================================
 // Lógica de contacto compartida entre el worker de bloque normal
 // y el de catchup — llama al titular (+ SMS) y manda SMS a las
-// referencias, reusando CallHelper/SmsHelper.
+// referencias, reusando CallHelper/SmsHelper. Lee su propia
+// ConfiguracionAutomatizacionEntity (SIM, ocultar número, pausa,
+// duración máxima) — independiente de la pantalla manual de
+// Llamadas, para que ajustar una no afecte a la otra.
 // ============================================================
-private const val DURACION_MAX_LLAMADA_MS = 45_000L // mismo default que CallViewModel
-
-private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, subId: Int?, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao) {
+private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, config: ConfiguracionAutomatizacionEntity, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao) {
     val variante = logDao.contarTotalContactos(r.id)
+    val subId = config.simSeleccionada
     if (r.numTT.isNotBlank()) {
-        CallHelper.realizarLlamada(context, subId, r.numTT)
+        CallHelper.realizarLlamada(context, subId, r.numTT, ocultarNumero = config.ocultarNumero)
         delay(2_000)
-        CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = DURACION_MAX_LLAMADA_MS)
+        CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaLlamada * 1_000L)
         SmsHelper.enviarSms(context, subId, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
     }
     listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }).forEach { tel ->
@@ -227,14 +229,16 @@ class LlamadaAutomaticaWorker(
         val matrizDao = container.database.matrizDao()
         val logDao = container.database.contactoLogDao()
         val plantillaDao = container.database.plantillaSmsDao()
+        val configDao = container.database.configuracionAutomatizacionDao()
 
         val bloquesActivos = bloqueDao.obtenerBloquesActivos()
         val bloqueActualIndex = bloquesActivos.indexOfFirst { it.id == bloqueId }
         if (bloqueActualIndex == -1) return Result.success() // el bloque fue eliminado/desactivado desde entonces
 
         val registros = matrizDao.getAllMatriz().first()
-        val subId: Int? = null // línea default; si se necesita fijar SIM, se agrega config a BloqueHorarioEntity
+        val config = configDao.obtenerOSembrar()
         val hoyMillis = inicioDeDiaMillis(LocalDate.now())
+        var esPrimerContacto = true
 
         for (r in registros) {
             if (r.estado.equals("Pagado", ignoreCase = true)) continue
@@ -245,7 +249,9 @@ class LlamadaAutomaticaWorker(
             val bloqueAltaIndex = ReglaRepeticion.calcularBloqueDeAlta(fechaAlta, bloquesActivos)
             if (!ReglaRepeticion.debeContactarseEnBloque(sem, bloqueActualIndex, bloqueAltaIndex)) continue
 
-            procesarClienteLlamadaAutomatica(applicationContext, r, sem, subId, logDao, plantillaDao)
+            if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
+            esPrimerContacto = false
+            procesarClienteLlamadaAutomatica(applicationContext, r, sem, config, logDao, plantillaDao)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = hoyMillis, bloqueIndex = bloqueActualIndex))
         }
         return Result.success()
@@ -273,9 +279,11 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
         val matrizDao = container.database.matrizDao()
         val logDao = container.database.contactoLogDao()
         val plantillaDao = container.database.plantillaSmsDao()
+        val configDao = container.database.configuracionAutomatizacionDao()
         val registros = matrizDao.getAllMatriz().first()
-        val subId: Int? = null
+        val config = configDao.obtenerOSembrar()
         val ayerMillis = inicioDeDiaMillis(LocalDate.now().minusDays(1))
+        var esPrimerContacto = true
 
         for (r in registros) {
             if (r.estado.equals("Pagado", ignoreCase = true)) continue
@@ -286,7 +294,9 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
             val deficit = ReglaRepeticion.calcularDeficit(sem, contactosAyer)
             if (deficit <= 0) continue
 
-            procesarClienteLlamadaAutomatica(applicationContext, r, sem, subId, logDao, plantillaDao)
+            if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
+            esPrimerContacto = false
+            procesarClienteLlamadaAutomatica(applicationContext, r, sem, config, logDao, plantillaDao)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = ayerMillis, bloqueIndex = -1))
         }
 

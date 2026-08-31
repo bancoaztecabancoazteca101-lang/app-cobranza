@@ -6,7 +6,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [MatrizEntity::class, PaseEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class, BloqueHorarioEntity::class, ContactoLogEntity::class, PlantillaSmsEntity::class], version = 14, exportSchema = false)
+@Database(entities = [MatrizEntity::class, PaseEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class, BloqueHorarioEntity::class, ContactoLogEntity::class, PlantillaSmsEntity::class, ConfiguracionAutomatizacionEntity::class], version = 15, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun matrizDao(): MatrizDao
     abstract fun paseDao(): PaseCarteraDao
@@ -17,6 +17,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun bloqueHorarioDao(): BloqueHorarioDao
     abstract fun contactoLogDao(): ContactoLogDao
     abstract fun plantillaSmsDao(): PlantillaSmsDao
+    abstract fun configuracionAutomatizacionDao(): ConfiguracionAutomatizacionDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -132,10 +133,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS config_automatizacion_table (
+                        id INTEGER PRIMARY KEY NOT NULL,
+                        simSeleccionada INTEGER,
+                        ocultarNumero INTEGER NOT NULL DEFAULT 0,
+                        segundosPausaEntreLlamadas INTEGER NOT NULL DEFAULT 5,
+                        duracionMaximaLlamada INTEGER NOT NULL DEFAULT 45
+                    )
+                """.trimIndent())
+                // Semilla con los mismos defaults que ya usaba el flujo automático hardcodeado
+                // (subId null, sin ocultar número, 45s de duración máxima) para no cambiar
+                // comportamiento existente al migrar instalaciones ya en uso.
+                db.execSQL("INSERT OR IGNORE INTO config_automatizacion_table (id, simSeleccionada, ocultarNumero, segundosPausaEntreLlamadas, duracionMaximaLlamada) VALUES (1, NULL, 0, 5, 45)")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "matriz_database")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
