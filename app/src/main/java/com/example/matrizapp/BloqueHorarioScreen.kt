@@ -105,49 +105,59 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
             }
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            InterruptorGeneralCard(
-                activa = automatizacionActiva,
-                onCambiar = { viewModel.setAutomatizacionActiva(it) }
-            )
-            if (!permisoAlarmasOk) {
-                PermisoAlarmasBanner(
-                    onAutorizar = {
-                        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                            data = Uri.parse("package:${context.packageName}")
-                        }
-                        context.startActivity(intent)
-                    }
+        val totalBloquesActivos = bloques.count { it.activo }
+        val numerosGuia = remember(bloques) {
+            bloques.filter { it.activo }.mapIndexed { i, b -> b.id to (i + 1) }.toMap()
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                InterruptorGeneralCard(
+                    activa = automatizacionActiva,
+                    onCambiar = { viewModel.setAutomatizacionActiva(it) }
                 )
             }
-            ConfiguracionAutomatizacionCard(
-                config = configAutomatizacion,
-                lineas = lineas,
-                onSim = { viewModel.setSimAutomatizacion(it) },
-                onOcultarNumero = { viewModel.setOcultarNumeroAutomatizacion(it) },
-                onSegundosPausa = { viewModel.setSegundosPausaAutomatizacion(it) },
-                onDuracionMaxima = { viewModel.setDuracionMaximaAutomatizacion(it) }
-            )
-            val totalBloquesActivos = bloques.count { it.activo }
-            FrecuenciaPorSemanaCard(
-                reglas = reglasSemana,
-                totalBloquesActivos = totalBloquesActivos,
-                onToggleOffset = { semana, offset -> viewModel.toggleOffsetEnSemana(semana, offset) }
-            )
+            if (!permisoAlarmasOk) {
+                item {
+                    PermisoAlarmasBanner(
+                        onAutorizar = {
+                            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        }
+                    )
+                }
+            }
+            item {
+                ConfiguracionAutomatizacionCard(
+                    config = configAutomatizacion,
+                    lineas = lineas,
+                    onSim = { viewModel.setSimAutomatizacion(it) },
+                    onOcultarNumero = { viewModel.setOcultarNumeroAutomatizacion(it) },
+                    onSegundosPausa = { viewModel.setSegundosPausaAutomatizacion(it) },
+                    onDuracionMaxima = { viewModel.setDuracionMaximaAutomatizacion(it) }
+                )
+            }
+            item {
+                FrecuenciaPorSemanaCard(
+                    reglas = reglasSemana,
+                    totalBloquesActivos = totalBloquesActivos,
+                    onToggleOffset = { semana, offset -> viewModel.toggleOffsetEnSemana(semana, offset) }
+                )
+            }
             if (bloques.isEmpty()) {
-                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                    Text("Sin bloques configurados. Agrega el primero con el botón +.")
+                item {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text("Sin bloques configurados. Agrega el primero con el botón +.")
+                    }
                 }
             } else {
-                val numerosGuia = remember(bloques) {
-                    bloques.filter { it.activo }.mapIndexed { i, b -> b.id to (i + 1) }.toMap()
-                }
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(bloques, key = { it.id }) { bloque ->
+                items(bloques, key = { it.id }) { bloque ->
+                    Box(Modifier.padding(horizontal = 12.dp)) {
                         BloqueCard(
                             numeroGuia = numerosGuia[bloque.id], // null si el bloque está inactivo -- no cuenta para la programación
                             bloque = bloque,
