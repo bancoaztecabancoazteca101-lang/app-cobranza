@@ -192,15 +192,16 @@ class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
 // ============================================================
 private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, config: ConfiguracionAutomatizacionEntity, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao) {
     val variante = logDao.contarTotalContactos(r.id)
-    val subId = config.simSeleccionada
+    val subIdLlamada = config.simSeleccionada
+    val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
     if (r.numTT.isNotBlank()) {
-        CallHelper.realizarLlamada(context, subId, r.numTT, ocultarNumero = config.ocultarNumero)
+        CallHelper.realizarLlamada(context, subIdLlamada, r.numTT, ocultarNumero = config.ocultarNumero)
         delay(2_000)
         CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaLlamada * 1_000L)
-        SmsHelper.enviarSms(context, subId, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
+        SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
     }
     listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }).forEach { tel ->
-        SmsHelper.enviarSms(context, subId, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
+        SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
     }
 }
 

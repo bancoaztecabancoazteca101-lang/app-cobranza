@@ -137,6 +137,7 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                     config = configAutomatizacion,
                     lineas = lineas,
                     onSim = { viewModel.setSimAutomatizacion(it) },
+                    onSimSms = { viewModel.setSimSmsAutomatizacion(it) },
                     onOcultarNumero = { viewModel.setOcultarNumeroAutomatizacion(it) },
                     onSegundosPausa = { viewModel.setSegundosPausaAutomatizacion(it) },
                     onDuracionMaxima = { viewModel.setDuracionMaximaAutomatizacion(it) }
@@ -251,6 +252,7 @@ private fun ConfiguracionAutomatizacionCard(
     config: ConfiguracionAutomatizacionEntity,
     lineas: List<LineaSim>,
     onSim: (Int?) -> Unit,
+    onSimSms: (Int?) -> Unit,
     onOcultarNumero: (Boolean) -> Unit,
     onSegundosPausa: (Int) -> Unit,
     onDuracionMaxima: (Int) -> Unit
@@ -278,6 +280,15 @@ private fun ConfiguracionAutomatizacionCard(
                     lineas.forEach { linea ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = config.simSeleccionada == linea.subscriptionId, onClick = { onSim(linea.subscriptionId) })
+                            Text(linea.etiqueta)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Línea para SMS automáticos", style = MaterialTheme.typography.labelLarge)
+                    Text("Puede ser distinta a la de llamadas", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                    lineas.forEach { linea ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = config.simSms == linea.subscriptionId, onClick = { onSimSms(linea.subscriptionId) })
                             Text(linea.etiqueta)
                         }
                     }

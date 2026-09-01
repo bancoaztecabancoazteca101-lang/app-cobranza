@@ -52,6 +52,10 @@ class BloqueHorarioViewModel(
         configDao.actualizar(configAutomatizacion.value.copy(simSeleccionada = subscriptionId))
     }
 
+    fun setSimSmsAutomatizacion(subscriptionId: Int?) = viewModelScope.launch {
+        configDao.actualizar(configAutomatizacion.value.copy(simSms = subscriptionId))
+    }
+
     fun setOcultarNumeroAutomatizacion(v: Boolean) = viewModelScope.launch {
         configDao.actualizar(configAutomatizacion.value.copy(ocultarNumero = v))
     }

@@ -18,10 +18,11 @@ import kotlinx.coroutines.flow.Flow
 @Entity(tableName = "config_automatizacion_table")
 data class ConfiguracionAutomatizacionEntity(
     @PrimaryKey val id: Int = 1,
-    val simSeleccionada: Int? = null, // null = línea default del sistema
+    val simSeleccionada: Int? = null, // null = línea default del sistema -- usado para llamadas
     val ocultarNumero: Boolean = false,
     val segundosPausaEntreLlamadas: Int = 5,
-    val duracionMaximaLlamada: Int = 45 // segundos
+    val duracionMaximaLlamada: Int = 45, // segundos
+    val simSms: Int? = null // línea para los SMS automáticos, independiente de simSeleccionada
 )
 
 /**
@@ -84,7 +85,7 @@ interface ConfiguracionAutomatizacionDao {
     @Update
     suspend fun actualizar(config: ConfiguracionAutomatizacionEntity)
 
-    @Query("INSERT OR IGNORE INTO config_automatizacion_table (id, simSeleccionada, ocultarNumero, segundosPausaEntreLlamadas, duracionMaximaLlamada) VALUES (1, NULL, 0, 5, 45)")
+    @Query("INSERT OR IGNORE INTO config_automatizacion_table (id, simSeleccionada, ocultarNumero, segundosPausaEntreLlamadas, duracionMaximaLlamada, simSms) VALUES (1, NULL, 0, 5, 45, NULL)")
     suspend fun sembrarSiVacia()
 
     /** Devuelve la fila (sembrando el default si aún no existe) — así el worker en background
