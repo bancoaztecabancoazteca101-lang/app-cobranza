@@ -22,7 +22,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
+fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (MatrizEntity) -> Boolean = { true }) {
     val context = LocalContext.current
     val allItems by viewModel.matrizList.collectAsState()
     val deleteInProgress by viewModel.deleteInProgress.collectAsState()
@@ -33,15 +33,17 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    val items = remember(allItems, searchQuery) {
-        if (searchQuery.isBlank()) allItems else allItems.filter { item ->
-            val q = searchQuery.trim()
-            coincideBusqueda(item.nombre, q) ||
-                coincideBusqueda(item.numTT, q) ||
-                coincideBusqueda(item.ref1, q) ||
-                coincideBusqueda(item.ref2, q) ||
-                coincideBusqueda(item.observaciones, q) ||
-                coincideBusqueda(item.estado, q)
+    val items = remember(allItems, searchQuery, filtro) {
+        allItems.filter(filtro).filter { item ->
+            if (searchQuery.isBlank()) true else {
+                val q = searchQuery.trim()
+                coincideBusqueda(item.nombre, q) ||
+                    coincideBusqueda(item.numTT, q) ||
+                    coincideBusqueda(item.ref1, q) ||
+                    coincideBusqueda(item.ref2, q) ||
+                    coincideBusqueda(item.observaciones, q) ||
+                    coincideBusqueda(item.estado, q)
+            }
         }
     }
 
@@ -142,6 +144,21 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "") {
         )
     }
 }
+
+/** true si `fechaMillis` cae dentro de la semana calendario actual (lunes a domingo). */
+fun estaEnSemanaActual(fechaMillis: Long?): Boolean {
+    if (fechaMillis == null) return false
+    val fecha = java.time.Instant.ofEpochMilli(fechaMillis).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+    val hoy = java.time.LocalDate.now()
+    val inicioSemana = hoy.with(java.time.DayOfWeek.MONDAY)
+    val finSemana = inicioSemana.plusDays(6)
+    return !fecha.isBefore(inicioSemana) && !fecha.isAfter(finSemana)
+}
+
+/** Filtro de la pantalla Pase: registros de Matriz con estado "PASE" y fecha en la semana
+ * calendario actual -- mismos campos y funciones que Matriz, solo cambia qué se muestra. */
+fun esPaseDeLaSemanaActual(item: MatrizEntity): Boolean =
+    item.estado.equals("PASE", ignoreCase = true) && estaEnSemanaActual(item.fecha)
 
 /** Formatea el Req como precio: "199" -> "$199". Si no es numérico, regresa el valor tal cual. */
 fun formatearMontoMatriz(req: String): String {

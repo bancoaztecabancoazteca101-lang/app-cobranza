@@ -99,7 +99,6 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val coroutineScope = rememberCoroutineScope()
                 val matrizVm: MatrizViewModel = viewModel(factory = factory)
-                val paseVm: PaseCarteraViewModel = viewModel(factory = factory)
                 val solicitudVm: SolicitudViewModel = viewModel(factory = factory)
                 val filtroVm: FiltroFechaViewModel = viewModel(factory = factory)
                 val filtrarVm: FiltrarViewModel = viewModel(factory = factory)
@@ -316,7 +315,7 @@ class MainActivity : ComponentActivity() {
                 ) { innerPadding ->
                     NavHost(navController, Screen.Matriz.route, Modifier.padding(innerPadding)) {
                         composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery) }
-                        composable(Screen.PaseCartera.route) { PaseCarteraScreen(paseVm, searchQuery) }
+                        composable(Screen.PaseCartera.route) { MatrizScreen(matrizVm, searchQuery, filtro = ::esPaseDeLaSemanaActual) }
                         composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
                         composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, searchQuery) }
                         composable(Screen.Filtrar.route) { FiltrarScreen(filtrarVm, searchQuery) }
