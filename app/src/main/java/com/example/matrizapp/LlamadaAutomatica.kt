@@ -197,7 +197,13 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     if (r.numTT.isNotBlank()) {
         CallHelper.realizarLlamada(context, subIdLlamada, r.numTT, ocultarNumero = config.ocultarNumero)
         delay(2_000)
+        // Silencia el micrófono del lado del titular durante la llamada automática -- es un
+        // recordatorio unidireccional, no una conversación, así que no debe captar audio
+        // ambiente mientras espera a que conteste o cuelgue. Se restaura al terminar para no
+        // dejar el micrófono mudo en llamadas manuales posteriores.
+        CallHelper.silenciarMicrofono(context, true)
         CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaLlamada * 1_000L)
+        CallHelper.silenciarMicrofono(context, false)
         SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
     }
     listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }).forEach { tel ->
