@@ -230,6 +230,7 @@ class LlamadaAutomaticaWorker(
         val logDao = container.database.contactoLogDao()
         val plantillaDao = container.database.plantillaSmsDao()
         val configDao = container.database.configuracionAutomatizacionDao()
+        val reglaSemanaDao = container.database.reglaSemanaDao()
 
         val bloquesActivos = bloqueDao.obtenerBloquesActivos()
         val bloqueActualIndex = bloquesActivos.indexOfFirst { it.id == bloqueId }
@@ -237,6 +238,7 @@ class LlamadaAutomaticaWorker(
 
         val registros = matrizDao.getAllMatriz().first()
         val config = configDao.obtenerOSembrar()
+        val reglas = reglaSemanaDao.obtenerMapaOSembrar()
         val hoyMillis = inicioDeDiaMillis(LocalDate.now())
         var esPrimerContacto = true
 
@@ -248,7 +250,7 @@ class LlamadaAutomaticaWorker(
             val fechaAlta = ReglaRepeticion.fechaAltaDe(r) ?: continue
             if (fechaAlta.toLocalDate() != LocalDate.now()) continue // solo el día de alta -- el remanente lo cubre el catchup de mañana
             val bloqueAltaIndex = ReglaRepeticion.calcularBloqueDeAlta(fechaAlta, bloquesActivos)
-            if (!ReglaRepeticion.debeContactarseEnBloque(sem, bloqueActualIndex, bloqueAltaIndex)) continue
+            if (!ReglaRepeticion.debeContactarseEnBloque(sem, bloqueActualIndex, bloqueAltaIndex, reglas)) continue
 
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
             esPrimerContacto = false
@@ -281,8 +283,10 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
         val logDao = container.database.contactoLogDao()
         val plantillaDao = container.database.plantillaSmsDao()
         val configDao = container.database.configuracionAutomatizacionDao()
+        val reglaSemanaDao = container.database.reglaSemanaDao()
         val registros = matrizDao.getAllMatriz().first()
         val config = configDao.obtenerOSembrar()
+        val reglas = reglaSemanaDao.obtenerMapaOSembrar()
         val ayerMillis = inicioDeDiaMillis(LocalDate.now().minusDays(1))
         var esPrimerContacto = true
 
@@ -292,7 +296,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
             if (sem !in 1..5) continue
 
             val contactosAyer = logDao.contarContactosEnDia(r.id, ayerMillis)
-            val deficit = ReglaRepeticion.calcularDeficit(sem, contactosAyer)
+            val deficit = ReglaRepeticion.calcularDeficit(sem, contactosAyer, reglas)
             if (deficit <= 0) continue
 
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)

@@ -19,11 +19,27 @@ class BloqueHorarioViewModel(
     private val dao: BloqueHorarioDao,
     private val scheduler: LlamadaAutomaticaScheduler,
     private val context: Context,
-    private val configDao: ConfiguracionAutomatizacionDao
+    private val configDao: ConfiguracionAutomatizacionDao,
+    private val reglaSemanaDao: ReglaSemanaDao
 ) : ViewModel() {
 
     val bloques: StateFlow<List<BloqueHorarioEntity>> = dao.observarBloques()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Frecuencia de contacto editable por semana (offsets 0-based == "número de guía" - 1
+     * que se ve en la lista de bloques). Se siembra sola con ReglaRepeticion.BLOQUES_POR_SEM
+     * la primera vez que se observa. */
+    val reglasSemana: StateFlow<List<ReglaSemanaEntity>> = flow {
+        reglaSemanaDao.sembrarSiVacia()
+        emitAll(reglaSemanaDao.observarTodas())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun toggleOffsetEnSemana(semana: Int, offset: Int) = viewModelScope.launch {
+        val actual = reglasSemana.value.find { it.semana == semana } ?: return@launch
+        val offsets = actual.offsetsList().toMutableSet()
+        if (!offsets.remove(offset)) offsets.add(offset)
+        reglaSemanaDao.actualizar(actual.copy(offsets = offsets.sorted().joinToString(",")))
+    }
 
     /** Config exclusiva del flujo automático — independiente de la pantalla manual de
      * Llamadas. Se siembra sola la primera vez que se observa (obtenerOSembrar). */

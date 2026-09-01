@@ -19,7 +19,7 @@ object ReglaRepeticion {
         5 to listOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
     )
 
-    fun metaContactos(sem: Int): Int = BLOQUES_POR_SEM[sem]?.size ?: 0
+    fun metaContactos(sem: Int, reglas: Map<Int, List<Int>> = BLOQUES_POR_SEM): Int = reglas[sem]?.size ?: 0
 
     /**
      * Índice (0-based) del bloque de alta de un cliente, sobre la lista de bloques
@@ -39,13 +39,13 @@ object ReglaRepeticion {
         return if (idx == -1) ordenados.lastIndex else idx
     }
 
-    fun debeContactarseEnBloque(sem: Int, bloqueActualIndex: Int, bloqueAltaIndex: Int): Boolean {
-        val offsets = BLOQUES_POR_SEM[sem] ?: return false
+    fun debeContactarseEnBloque(sem: Int, bloqueActualIndex: Int, bloqueAltaIndex: Int, reglas: Map<Int, List<Int>> = BLOQUES_POR_SEM): Boolean {
+        val offsets = reglas[sem] ?: return false
         return offsets.contains(bloqueActualIndex - bloqueAltaIndex)
     }
 
-    fun calcularDeficit(sem: Int, contactosRealizadosAyer: Int): Int =
-        (metaContactos(sem) - contactosRealizadosAyer).coerceAtLeast(0)
+    fun calcularDeficit(sem: Int, contactosRealizadosAyer: Int, reglas: Map<Int, List<Int>> = BLOQUES_POR_SEM): Int =
+        (metaContactos(sem, reglas) - contactosRealizadosAyer).coerceAtLeast(0)
 
     /**
      * Reconstruye la fecha/hora de alta de un MatrizEntity. `fecha` es el timestamp;

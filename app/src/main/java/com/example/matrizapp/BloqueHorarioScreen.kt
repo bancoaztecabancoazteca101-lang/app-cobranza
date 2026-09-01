@@ -30,6 +30,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +73,7 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
     val bloques by viewModel.bloques.collectAsState()
     val automatizacionActiva by viewModel.automatizacionActiva.collectAsState()
     val configAutomatizacion by viewModel.configAutomatizacion.collectAsState()
+    val reglasSemana by viewModel.reglasSemana.collectAsState()
     val context = LocalContext.current
     val lineas = remember { SmsHelper.lineasActivas(context) }
 
@@ -126,6 +128,12 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                 onSegundosPausa = { viewModel.setSegundosPausaAutomatizacion(it) },
                 onDuracionMaxima = { viewModel.setDuracionMaximaAutomatizacion(it) }
             )
+            val totalBloquesActivos = bloques.count { it.activo }
+            FrecuenciaPorSemanaCard(
+                reglas = reglasSemana,
+                totalBloquesActivos = totalBloquesActivos,
+                onToggleOffset = { semana, offset -> viewModel.toggleOffsetEnSemana(semana, offset) }
+            )
             if (bloques.isEmpty()) {
                 Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     Text("Sin bloques configurados. Agrega el primero con el botón +.")
@@ -136,8 +144,12 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val numerosGuia = remember(bloques) {
+                        bloques.filter { it.activo }.mapIndexed { i, b -> b.id to (i + 1) }.toMap()
+                    }
                     items(bloques, key = { it.id }) { bloque ->
                         BloqueCard(
+                            numeroGuia = numerosGuia[bloque.id], // null si el bloque está inactivo -- no cuenta para la programación
                             bloque = bloque,
                             onToggleActivo = { viewModel.toggleActivo(bloque) },
                             onEditar = { bloqueEnEdicion = bloque },
@@ -294,6 +306,61 @@ private fun ConfiguracionAutomatizacionCard(
     }
 }
 
+/** Frecuencia de contacto editable por semana de atraso. Cada offset seleccionado hace
+ * referencia al "número de guía" de un bloque (offset 0 = Bloque #1, el de alta del cliente;
+ * offset 2 = Bloque #3, 2 bloques después del suyo, etc.) -- mismo número que ve Diego en la
+ * lista de bloques de arriba. */
+@Composable
+private fun FrecuenciaPorSemanaCard(
+    reglas: List<ReglaSemanaEntity>,
+    totalBloquesActivos: Int,
+    onToggleOffset: (semana: Int, offset: Int) -> Unit
+) {
+    var expandido by remember { mutableStateOf(false) }
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Frecuencia de contacto por semana", style = MaterialTheme.typography.titleSmall)
+                TextButton(onClick = { expandido = !expandido }) {
+                    Text(if (expandido) "Ocultar" else "Editar")
+                }
+            }
+            if (expandido) {
+                if (totalBloquesActivos == 0) {
+                    Text(
+                        "Activa al menos un bloque para poder elegir la frecuencia.",
+                        style = MaterialTheme.typography.bodySmall, color = Color.Gray
+                    )
+                } else {
+                    Text(
+                        "El número de cada chip es el Bloque #N que ves arriba, contado desde el bloque en que el cliente se dio de alta (#1 = su propio bloque de alta).",
+                        style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    reglas.sortedBy { it.semana }.forEach { regla ->
+                        val seleccionados = regla.offsetsList().toSet()
+                        Text("Semana ${regla.semana}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+                        (0 until totalBloquesActivos).chunked(6).forEach { fila ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 2.dp)) {
+                                fila.forEach { offset ->
+                                    FilterChip(
+                                        selected = offset in seleccionados,
+                                        onClick = { onToggleOffset(regla.semana, offset) },
+                                        label = { Text("#${offset + 1}") }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PermisoAlarmasBanner(onAutorizar: () -> Unit) {
     Card(
@@ -322,6 +389,7 @@ private fun PermisoAlarmasBanner(onAutorizar: () -> Unit) {
 
 @Composable
 private fun BloqueCard(
+    numeroGuia: Int?,
     bloque: BloqueHorarioEntity,
     onToggleActivo: () -> Unit,
     onEditar: () -> Unit,
@@ -338,11 +406,18 @@ private fun BloqueCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = bloque.toLocalTime().format(FORMATO_HORA),
-                style = MaterialTheme.typography.headlineSmall,
-                color = if (bloque.activo) AZUL_ACENTO else Color.Gray
-            )
+            Column {
+                Text(
+                    text = if (numeroGuia != null) "Bloque #$numeroGuia" else "Inactivo",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (bloque.activo) AZUL_ACENTO else Color.Gray
+                )
+                Text(
+                    text = bloque.toLocalTime().format(FORMATO_HORA),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = if (bloque.activo) AZUL_ACENTO else Color.Gray
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = bloque.activo, onCheckedChange = { onToggleActivo() })
                 IconButton(onClick = onEditar) {
