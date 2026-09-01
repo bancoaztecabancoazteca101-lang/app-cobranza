@@ -139,14 +139,14 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                     Text("Sin bloques configurados. Agrega el primero con el botón +.")
                 }
             } else {
+                val numerosGuia = remember(bloques) {
+                    bloques.filter { it.activo }.mapIndexed { i, b -> b.id to (i + 1) }.toMap()
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val numerosGuia = remember(bloques) {
-                        bloques.filter { it.activo }.mapIndexed { i, b -> b.id to (i + 1) }.toMap()
-                    }
                     items(bloques, key = { it.id }) { bloque ->
                         BloqueCard(
                             numeroGuia = numerosGuia[bloque.id], // null si el bloque está inactivo -- no cuenta para la programación
