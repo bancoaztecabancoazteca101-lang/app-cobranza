@@ -142,7 +142,7 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
         val excluidos = valores[4] as Set<String>
         val estados = valores[5] as Map<String, EstadoEnvio>
         registros
-            .filter { r -> r.fecha != null && r.fecha in ini..fin }
+            .filter { r -> r.fecha != null && r.fecha in ini..fin && !r.estado.equals("Pagado", ignoreCase = true) }
             .mapNotNull { r ->
                 val telefono = when (fte) {
                     FuenteSms.TT -> r.numTT

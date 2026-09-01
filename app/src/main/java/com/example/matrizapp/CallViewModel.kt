@@ -156,7 +156,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
         val excluidos = valores[4] as Set<String>
         @Suppress("UNCHECKED_CAST") val estados = valores[5] as Map<String, EstadoLlamada>
 
-        registros.filter { it.fecha in ini..fin }.mapNotNull { r ->
+        registros.filter { it.fecha in ini..fin && !it.estado.equals("Pagado", ignoreCase = true) }.mapNotNull { r ->
             val telefono = when (tipoActual) {
                 TipoLlamada.TT -> r.numTT
                 TipoLlamada.REF1 -> r.ref1

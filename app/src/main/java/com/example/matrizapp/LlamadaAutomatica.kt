@@ -246,6 +246,7 @@ class LlamadaAutomaticaWorker(
             if (sem !in 1..5) continue
 
             val fechaAlta = ReglaRepeticion.fechaAltaDe(r) ?: continue
+            if (fechaAlta.toLocalDate() != LocalDate.now()) continue // solo el día de alta -- el remanente lo cubre el catchup de mañana
             val bloqueAltaIndex = ReglaRepeticion.calcularBloqueDeAlta(fechaAlta, bloquesActivos)
             if (!ReglaRepeticion.debeContactarseEnBloque(sem, bloqueActualIndex, bloqueAltaIndex)) continue
 
