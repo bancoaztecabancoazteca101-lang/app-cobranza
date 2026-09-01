@@ -138,6 +138,26 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 LaunchedEffect(signedIn) { refreshData() }
+                // Antes solo sincronizaba una vez al iniciar sesión -- si el equipo dejaba la
+                // app abierta en segundo plano y volvía más tarde, o esperaba a ver datos
+                // nuevos sin tocar el botón manual, no se refrescaba solo. Ahora también
+                // sincroniza cada vez que la app vuelve a primer plano, y cada 3 minutos
+                // mientras sigue abierta y con sesión iniciada.
+                val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner, signedIn) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && signedIn) refreshData()
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
+                LaunchedEffect(signedIn) {
+                    if (!signedIn) return@LaunchedEffect
+                    while (true) {
+                        delay(3 * 60 * 1000L)
+                        refreshData()
+                    }
+                }
                 syncError?.let { errorText ->
                     AlertDialog(
                         onDismissRequest = { syncError = null },
@@ -317,7 +337,7 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery) }
                         composable(Screen.PaseCartera.route) { MatrizScreen(matrizVm, searchQuery, filtro = ::esPaseDeLaSemanaActual) }
                         composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
-                        composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, searchQuery) }
+                        composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, container.notificacionesHelper, searchQuery) }
                         composable(Screen.Filtrar.route) { FiltrarScreen(filtrarVm, searchQuery) }
                         composable(Screen.Control.route) { ControlScreen(controlVm) }
                         composable(Screen.Ubi.route) { UbiScreen(matrizVm) }

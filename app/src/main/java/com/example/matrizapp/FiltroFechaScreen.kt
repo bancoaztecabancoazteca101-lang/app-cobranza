@@ -21,10 +21,10 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "") {
+fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, notificacionesHelper: NotificacionesHelper, searchQuery: String = "") {
     val allItems by viewModel.filteredList.collectAsState()
     val df = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
-    var itemToView by remember { mutableStateOf<FiltroFechaEntity?>(null) }
+    var itemToView by remember { mutableStateOf<MatrizEntity?>(null) }
     val context = LocalContext.current
 
     val items = remember(allItems, searchQuery) {
@@ -38,7 +38,7 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
+        if (items.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros de hoy", color = Color.Gray) }
         else LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(items, key = { it.id }) { item ->
                 FiltroItemCard(item, df, driveHelper = viewModel.driveHelper, onClick = { itemToView = item })
@@ -51,7 +51,7 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
             item = item, df = df, driveHelper = viewModel.driveHelper,
             onDismiss = { itemToView = null },
             onGuardarEstadoYHora = { id, estado, hora ->
-                viewModel.guardarEstadoYHora(id, estado, hora) { mensaje ->
+                viewModel.guardarEstadoYHora(id, estado, hora, notificacionesHelper) { mensaje ->
                     if (mensaje != null) {
                         android.widget.Toast.makeText(context, mensaje, android.widget.Toast.LENGTH_LONG).show()
                     }
@@ -63,7 +63,7 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, searchQuery: String = "")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FiltroItemCard(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: DriveHelper, onClick: () -> Unit) {
+fun FiltroItemCard(item: MatrizEntity, df: SimpleDateFormat, driveHelper: DriveHelper, onClick: () -> Unit) {
     val esRetorno = item.estado.contains("retorno", ignoreCase = true)
     Card(
         onClick = onClick,
@@ -81,7 +81,7 @@ fun FiltroItemCard(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: D
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("TT: ${item.numTT}", style = MaterialTheme.typography.bodySmall)
-                    Text("Req: ${item.req ?: "-"}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    Text("Req: ${item.requisito.ifBlank { "-" }}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                 }
                 ColoniaLabel(ubicacion = item.ubicacion)
                 Spacer(modifier = Modifier.height(4.dp))
@@ -100,7 +100,7 @@ fun FiltroItemCard(item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: D
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FiltroFechaDetailDialog(
-    item: FiltroFechaEntity, df: SimpleDateFormat, driveHelper: DriveHelper,
+    item: MatrizEntity, df: SimpleDateFormat, driveHelper: DriveHelper,
     onDismiss: () -> Unit, onGuardarEstadoYHora: (id: String, nuevoEstado: String, nuevaHora: String) -> Unit
 ) {
     val context = LocalContext.current
@@ -133,8 +133,8 @@ fun FiltroFechaDetailDialog(
                 ContactFieldRow("Num TT", item.numTT)
                 ContactFieldRow("Ref 1", item.ref1)
                 ContactFieldRow("Ref 2", item.ref2)
-                if (!item.req.isNullOrBlank()) Text("Req: ${item.req}")
-                Text("Fecha: ${df.format(Date(item.fecha))}")
+                if (item.requisito.isNotBlank()) Text("Req: ${item.requisito}")
+                item.fecha?.let { Text("Fecha: ${df.format(Date(it))}") }
                 ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
                 if (!item.observaciones.isNullOrBlank()) {
                     Divider()

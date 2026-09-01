@@ -1,34 +1,30 @@
 package com.example.matrizapp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+/** Antes leía de FiltroFechaEntity, una tabla aparte sincronizada desde una hoja de Sheets
+ * ("Filtro Fecha") que a su vez se alimentaba de Matriz vía Apps Script -- un intermediario
+ * lento y a veces desincronizado. Ahora lee directo de MatrizEntity (mismo dato que Matriz,
+ * sin script ni hoja aparte de por medio), filtrado por defecto al día de hoy. Las alarmas de
+ * Retorno/App ya las programa MatrizViewModel.sincronizarAlarmasRetornoMatriz -- no se duplica
+ * aquí. */
 class FiltroFechaViewModel(
-    private val repository: SheetsRepository,
-    private val filtroDao: FiltroFechaDao,
-    val driveHelper: DriveHelper,
-    private val notificacionesHelper: NotificacionesHelper
+    private val matrizDao: MatrizDao,
+    val driveHelper: DriveHelper
 ) : ViewModel() {
-    init {
-        // Cada vez que cambian los datos de Filtro Fecha (sync, edición de estado/hora, etc.)
-        // se revisan los "Retorno" con hora y se reprograman/cancelan las alarmas locales.
-        // Corre en Dispatchers.IO (no en el hilo principal) porque recorre toda la lista y
-        // llama repetidamente a AlarmManager/SharedPreferences: hacerlo en el hilo de UI era
-        // la causa del lag al presionar botones cada vez que se sincronizaban datos.
-        viewModelScope.launch(Dispatchers.IO) {
-            filtroDao.getAll().collect { items ->
-                notificacionesHelper.sincronizarAlarmasRetorno(items)
-            }
-        }
-    }
 
-    private val _desde = MutableStateFlow<Long?>(null)
+    private fun inicioDeHoy(): Long = java.time.LocalDate.now()
+        .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+    private fun finDeHoy(): Long = java.time.LocalDate.now().plusDays(1)
+        .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
+
+    private val _desde = MutableStateFlow<Long?>(inicioDeHoy())
     val desde: StateFlow<Long?> = _desde
 
-    private val _hasta = MutableStateFlow<Long?>(null)
+    private val _hasta = MutableStateFlow<Long?>(finDeHoy())
     val hasta: StateFlow<Long?> = _hasta
 
     private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
@@ -39,9 +35,9 @@ class FiltroFechaViewModel(
         if (miUbicacion != null) _miUbicacion.value = miUbicacion
     }
 
-    private fun ordenar(list: List<FiltroFechaEntity>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<FiltroFechaEntity> = when (o) {
-        OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending { it.fecha }
-        OrdenLista.FECHA_HORA_ANTIGUA -> list.sortedBy { it.fecha }
+    private fun ordenar(list: List<MatrizEntity>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<MatrizEntity> = when (o) {
+        OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending { it.fecha ?: 0L }
+        OrdenLista.FECHA_HORA_ANTIGUA -> list.sortedBy { it.fecha ?: 0L }
         OrdenLista.UBICACION_CERCA -> if (miUbicacion == null) list else list.sortedBy { distanciaOrNull(it.ubicacion, miUbicacion) ?: Double.MAX_VALUE }
         OrdenLista.UBICACION_LEJOS -> if (miUbicacion == null) list else list.sortedByDescending { distanciaOrNull(it.ubicacion, miUbicacion) ?: -1.0 }
         OrdenLista.ALFABETICO_AZ -> list.sortedBy { it.nombre.lowercase() }
@@ -52,16 +48,14 @@ class FiltroFechaViewModel(
         parseLatLngOrden(raw)?.let { distanciaKm(miUbicacion, it) }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val filteredList: StateFlow<List<FiltroFechaEntity>> = combine(_desde, _hasta, _orden, _miUbicacion) { d, h, o, loc ->
+    val filteredList: StateFlow<List<MatrizEntity>> = combine(_desde, _hasta, _orden, _miUbicacion) { d, h, o, loc ->
         Triple(d, h, o) to loc
     }.flatMapLatest { (t, loc) ->
         val (d, h, o) = t
-        val base = if (d != null && h != null) {
-            filtroDao.getItemsByRange(d, h)
-        } else {
-            filtroDao.getAll()
+        matrizDao.getAllMatriz().map { list ->
+            val enRango = if (d != null && h != null) list.filter { val f = it.fecha; f != null && f in d..h } else list
+            ordenar(enRango, o, loc)
         }
-        base.map { list -> ordenar(list, o, loc) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setRangoFecha(desde: Long?, hasta: Long?) {
@@ -69,16 +63,14 @@ class FiltroFechaViewModel(
         _hasta.value = hasta
     }
 
-    /** Guarda el nuevo status localmente (Room) y lo marca dirty para subirlo al Sheet en el próximo sync. */
-    fun guardarEstado(id: String, nuevoEstado: String) {
-        viewModelScope.launch { filtroDao.updateEstadoLocal(id, nuevoEstado) }
-    }
+    /** Restaura el filtro al día de hoy (para el botón "Hoy" si se agrega uno más adelante). */
+    fun filtrarHoy() = setRangoFecha(inicioDeHoy(), finDeHoy())
 
-    /** Guarda status y hora localmente (Room) y los marca dirty para subirlos al Sheet
-     * (columnas H y N respectivamente) en el próximo sync. */
-    fun guardarEstadoYHora(id: String, nuevoEstado: String, nuevaHora: String, onResult: (String?) -> Unit = {}) {
+    /** Guarda status y hora localmente (Room) y los marca dirty para subirlos al Sheet de
+     * Matriz en el próximo sync -- ya no hay una hoja "Filtro Fecha" aparte que actualizar. */
+    fun guardarEstadoYHora(id: String, nuevoEstado: String, nuevaHora: String, notificacionesHelper: NotificacionesHelper, onResult: (String?) -> Unit = {}) {
         viewModelScope.launch {
-            filtroDao.updateEstadoYHoraLocal(id, nuevoEstado, nuevaHora)
+            matrizDao.updateEstadoYHora(id, nuevoEstado, nuevaHora)
             onResult(notificacionesHelper.evaluarProgramacion(nuevoEstado, nuevaHora))
         }
     }

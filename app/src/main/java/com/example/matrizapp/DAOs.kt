@@ -12,6 +12,8 @@ interface MatrizDao {
     suspend fun insertOne(item: MatrizEntity)
     @Query("UPDATE matriz_table SET estado = :nuevoEstado, observaciones = :obs, isDirty = 1 WHERE id = :id")
     suspend fun updateGestionLocal(id: String, nuevoEstado: String, obs: String)
+    @Query("UPDATE matriz_table SET estado = :nuevoEstado, hora = :nuevaHora, isDirty = 1 WHERE id = :id")
+    suspend fun updateEstadoYHora(id: String, nuevoEstado: String, nuevaHora: String)
     @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
         ubicacion = :ubicacion, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP, isDirty = 1

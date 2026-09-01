@@ -16,7 +16,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
                 SolicitudViewModel(container.repository, container.database.solicitudDao(), container.audioHelper, container.workManager, container.driveHelper) as T
 
             modelClass.isAssignableFrom(FiltroFechaViewModel::class.java) ->
-                FiltroFechaViewModel(container.repository, container.database.filtroDao(), container.driveHelper, container.notificacionesHelper) as T
+                FiltroFechaViewModel(container.database.matrizDao(), container.driveHelper) as T
 
             modelClass.isAssignableFrom(FiltrarViewModel::class.java) ->
                 FiltrarViewModel(container.database.matrizDao(), container.workManager, container.driveHelper) as T
