@@ -80,6 +80,17 @@ class BloqueHorarioViewModel(
         scheduler.reprogramarTodos()
     }
 
+    /** Interruptor independiente para el reintento de catchup (8:15/9:15) — permite dejar
+     * prendidos los bloques normales del día y apagar solo estas 2 corridas fijas. */
+    private val _catchupActiva = MutableStateFlow(AutomatizacionPrefs.catchupActiva(context))
+    val catchupActiva: StateFlow<Boolean> = _catchupActiva
+
+    fun setCatchupActiva(activa: Boolean) = viewModelScope.launch {
+        AutomatizacionPrefs.setCatchupActiva(context, activa)
+        _catchupActiva.value = activa
+        scheduler.reprogramarTodos()
+    }
+
     fun agregarBloque(hora: LocalTime) = viewModelScope.launch {
         dao.insertar(BloqueHorarioEntity.fromLocalTime(hora))
         scheduler.reprogramarTodos()
