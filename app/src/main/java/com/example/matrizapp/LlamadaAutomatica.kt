@@ -25,12 +25,23 @@ import java.time.ZoneId
 object AutomatizacionPrefs {
     private const val PREFS_NAME = "automatizacion_prefs"
     private const val KEY_ACTIVA = "activa"
+    private const val KEY_CATCHUP_ACTIVA = "catchup_activa"
 
     fun activa(context: Context): Boolean =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_ACTIVA, false)
 
     fun setActiva(context: Context, valor: Boolean) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_ACTIVA, valor).apply()
+    }
+
+    /** Interruptor independiente del general: permite dejar prendidos los bloques normales
+     * del día pero apagar solo las 2 corridas fijas de catchup (8:15/9:15). Prendido por
+     * defecto para no cambiar el comportamiento de quien ya tenía la automatización activa. */
+    fun catchupActiva(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_CATCHUP_ACTIVA, true)
+
+    fun setCatchupActiva(context: Context, valor: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_CATCHUP_ACTIVA, valor).apply()
     }
 }
 
@@ -58,7 +69,7 @@ class LlamadaAutomaticaScheduler(
         val bloques = dao.obtenerBloquesActivos()
         bloques.forEach { programarBloque(it) }
         programarReprogramacionMedianoche()
-        programarCatchup()
+        if (AutomatizacionPrefs.catchupActiva(context)) programarCatchup()
     }
 
     private fun programarBloque(bloque: BloqueHorarioEntity) {
@@ -284,6 +295,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
 
     override suspend fun doWork(): Result {
         if (!AutomatizacionPrefs.activa(applicationContext)) return Result.success()
+        if (!AutomatizacionPrefs.catchupActiva(applicationContext)) return Result.success() // se apagó el interruptor de catchup mientras esta alarma esperaba
 
         val container = (applicationContext as MainApplication).container
         val matrizDao = container.database.matrizDao()
@@ -294,13 +306,24 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
         val registros = matrizDao.getAllMatriz().first()
         val config = configDao.obtenerOSembrar()
         val reglas = reglaSemanaDao.obtenerMapaOSembrar()
-        val ayerMillis = inicioDeDiaMillis(LocalDate.now().minusDays(1))
+        val ayer = LocalDate.now().minusDays(1)
+        val ayerMillis = inicioDeDiaMillis(ayer)
         var esPrimerContacto = true
 
         for (r in registros) {
             if (r.estado.equals("Pagado", ignoreCase = true)) continue
             val sem = r.semana.trim().toIntOrNull() ?: continue
             if (sem !in 1..5) continue
+
+            // Bug corregido: antes no se filtraba por fecha de alta, así que el catchup
+            // recontactaba a CUALQUIER cliente activo con sem 1-5 todos los días (su meta
+            // semanal completa casi siempre es mayor a los contactos hechos solo "ayer"),
+            // sin importar cuándo se había dado de alta -- por eso aparecían llamadas a
+            // nombres que no correspondían al día anterior. El catchup de 8:15/9:15 debe
+            // cubrir únicamente a quien se dio de alta AYER (mismo día que procesó el
+            // worker normal de bloques), igual que ese worker solo procesa altas de HOY.
+            val fechaAlta = ReglaRepeticion.fechaAltaDe(r) ?: continue
+            if (fechaAlta.toLocalDate() != ayer) continue
 
             val contactosAyer = logDao.contarContactosEnDia(r.id, ayerMillis)
             val deficit = ReglaRepeticion.calcularDeficit(sem, contactosAyer, reglas)
