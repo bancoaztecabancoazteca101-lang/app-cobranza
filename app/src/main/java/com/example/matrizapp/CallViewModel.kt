@@ -279,7 +279,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
             onResultado(CallHelper.colgarLlamadaConFallback(context))
         }
     }
-    fun silenciar(context: Context, mute: Boolean) = CallHelper.silenciarMicrofono(context, mute)
+    fun silenciar(context: Context, mute: Boolean) = viewModelScope.launch { CallHelper.silenciarMicrofono(context, mute) }
     fun microfonoSilenciado(context: Context): Boolean = CallHelper.microfonoSilenciado(context)
 
     /** Programa el primer bloque del tipo activo para la próxima ocurrencia de la hora elegida

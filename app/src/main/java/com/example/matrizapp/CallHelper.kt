@@ -68,11 +68,18 @@ object CallHelper {
         } catch (e: SecurityException) { false }
     }
 
-    /** Silencia/des-silencia el micrófono del dispositivo (funciona en cualquier llamada activa,
-     * sin permisos extra a los ya requeridos por CALL_PHONE/READ_PHONE_STATE). */
-    fun silenciarMicrofono(context: Context, mute: Boolean) {
+    /** Silencia/des-silencia el micrófono. Primero intenta la API oficial de AudioManager; en
+     * el marcador del sistema de algunos fabricantes (MIUI/Redmi, mismo caso que colgar) esa
+     * bandera no siempre se refleja como silenciado en la llamada real -- el toggle propio del
+     * marcador maneja su estado aparte. Como respaldo, si el CallAccessibilityService está
+     * activo, busca y toca el botón real de Silenciar en pantalla, igual que con colgar. */
+    suspend fun silenciarMicrofono(context: Context, mute: Boolean) {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager.isMicrophoneMute = mute
+        if (CallAccessibilityService.servicioActivo()) {
+            kotlinx.coroutines.delay(300) // dar tiempo a que la pantalla de llamada esté lista
+            CallAccessibilityService.intentarSilenciar(mute)
+        }
     }
 
     fun microfonoSilenciado(context: Context): Boolean =
