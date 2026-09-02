@@ -43,6 +43,16 @@ interface PaseCarteraDao {
     fun getAllPase(): Flow<List<PaseEntity>>
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<PaseEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertar(item: PaseEntity)
+    @Update
+    suspend fun actualizar(item: PaseEntity)
+    @Query("DELETE FROM pase_cartera_table WHERE id = :id")
+    suspend fun eliminar(id: String)
+    /** ids de los registros de Matriz que YA se copiaron a Pase -- para no duplicar la copia
+     * si el registro de Matriz sigue en status "PASE" en el siguiente refresh. */
+    @Query("SELECT origenMatrizId FROM pase_cartera_table")
+    suspend fun getOrigenesYaCopiados(): List<String>
     @Query("UPDATE pase_cartera_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
     suspend fun updateEstadoLocal(id: String, nuevoEstado: String)
     @Query("SELECT * FROM pase_cartera_table WHERE isDirty = 1")

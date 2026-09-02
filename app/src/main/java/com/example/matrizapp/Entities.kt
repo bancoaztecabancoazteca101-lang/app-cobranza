@@ -12,11 +12,18 @@ data class MatrizEntity(
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 
+/** Copia independiente de un registro de Matriz cuando su status pasa a "PASE" -- MISMOS
+ * campos que MatrizEntity para tener paridad total de UI/funciones, pero es una tabla
+ * completamente aparte: una vez copiado, editar aquí NUNCA toca matriz_table y viceversa.
+ * `origenMatrizId` guarda de qué registro de Matriz vino, solo para no duplicar la copia (no
+ * se usa para sincronizar cambios de vuelta). */
 @Entity(tableName = "pase_cartera_table")
 data class PaseEntity(
     @PrimaryKey val id: String,
-    val nombre: String, val numTT: String, val ref1: String, val ref2: String,
-    val imagen1: String?, val imagen2: String?, val ubicacion: String?, var estado: String,
+    val nombre: String, val semana: String, val requisito: String, val numTT: String,
+    val ref1: String, val ref2: String, var observaciones: String?, var estado: String,
+    val ubicacion: String?, var imagenUrl: String?, var imagenUrl2: String?, val fecha: Long?, val hora: String?,
+    val ruta: String?, val folioP: String?, val origenMatrizId: String,
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 

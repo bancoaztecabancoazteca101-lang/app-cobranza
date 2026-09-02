@@ -6,6 +6,7 @@ import com.google.api.services.sheets.v4.model.DimensionRange
 import com.google.api.services.sheets.v4.model.Request
 import com.google.api.services.sheets.v4.model.ValueRange
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 class SheetsRepository(
@@ -180,7 +181,7 @@ class SheetsRepository(
     suspend fun refreshAll() = withContext(Dispatchers.IO) {
         val errors = mutableListOf<String>()
         try { refreshMatriz() } catch (e: Exception) { errors.add("Matriz: ${e.message}") }
-        try { refreshPase() } catch (e: Exception) { errors.add("Pase: ${e.message}") }
+        try { copiarPaseDesdeMatriz() } catch (e: Exception) { errors.add("Pase: ${e.message}") }
         try { refreshSolicitud() } catch (e: Exception) { errors.add("Solicitud: ${e.message}") }
         try { refreshFiltroFecha() } catch (e: Exception) { errors.add("Filtro Fecha: ${e.message}") }
         try { refreshFiltrar() } catch (e: Exception) { errors.add("Filtrar: ${e.message}") }
@@ -251,27 +252,28 @@ class SheetsRepository(
         if (items.isNotEmpty()) matrizDao.insertAll(items)
     }
 
-    private suspend fun refreshPase() {
-        val dirtyIds = paseDao.getDirtyItems().map { it.id }.toSet()
-        val rows = fetchRows(Constants.SHEET_PASE)
-        val items = rows.mapNotNull { row ->
-            val id = cell(row, Constants.PaseCols.ID) ?: return@mapNotNull null
-            if (id in dirtyIds) return@mapNotNull null
-            val nombre = cell(row, Constants.PaseCols.NOMBRE) ?: ""
-            if (nombre.contains("Pase semana", ignoreCase = true)) return@mapNotNull null
-            PaseEntity(
-                id = id,
-                nombre = nombre,
-                numTT = cell(row, Constants.PaseCols.NUMTT) ?: "",
-                ref1 = cell(row, Constants.PaseCols.REF1) ?: "",
-                ref2 = cell(row, Constants.PaseCols.REF2) ?: "",
-                imagen1 = cell(row, Constants.PaseCols.IMAGEN1),
-                imagen2 = cell(row, Constants.PaseCols.IMAGEN2),
-                ubicacion = cell(row, Constants.PaseCols.UBICACION),
-                estado = cell(row, Constants.PaseCols.ESTADO) ?: ""
-            )
-        }
-        if (items.isNotEmpty()) paseDao.insertAll(items)
+    /** Copia a Pase (local, Room) los registros de Matriz cuyo status es "PASE" y cuya fecha
+     * cae en la semana actual, una sola vez por registro (no vuelve a tocar una copia ya
+     * hecha, ni sobrescribe cambios locales en Pase). Reemplaza el pull viejo desde la hoja
+     * "Pase de Cartera" -- esa hoja nunca se llenaba porque dependía de un Apps Script aparte;
+     * ahora Matriz "pasa" los datos directo dentro de la app, sin intermediario. */
+    private suspend fun copiarPaseDesdeMatriz() {
+        val registros = matrizDao.getAllMatriz().first()
+        val yaCopiados = paseDao.getOrigenesYaCopiados().toSet()
+        val nuevos = registros
+            .filter { it.estado.equals("PASE", ignoreCase = true) && estaEnSemanaActual(it.fecha) }
+            .filter { it.id !in yaCopiados }
+            .map { m ->
+                PaseEntity(
+                    id = java.util.UUID.randomUUID().toString().replace("-", "").take(12),
+                    nombre = m.nombre, semana = m.semana, requisito = m.requisito, numTT = m.numTT,
+                    ref1 = m.ref1, ref2 = m.ref2, observaciones = m.observaciones, estado = m.estado,
+                    ubicacion = m.ubicacion, imagenUrl = m.imagenUrl, imagenUrl2 = m.imagenUrl2,
+                    fecha = m.fecha, hora = m.hora, ruta = m.ruta, folioP = m.folioP,
+                    origenMatrizId = m.id
+                )
+            }
+        nuevos.forEach { paseDao.insertar(it) }
     }
 
     private suspend fun refreshSolicitud() {

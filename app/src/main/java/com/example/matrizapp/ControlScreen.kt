@@ -12,9 +12,9 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun ControlScreen(viewModel: ControlViewModel) {
-    val items by viewModel.items.collectAsState()
+    val itemsHoy by viewModel.itemsHoy.collectAsState()
     val itemsSemanaActual by viewModel.itemsSemanaActual.collectAsState()
-    if (items.isEmpty() && itemsSemanaActual.isEmpty()) {
+    if (itemsHoy.isEmpty() && itemsSemanaActual.isEmpty()) {
         Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin datos", color = Color.Gray) }
         return
     }
@@ -23,13 +23,17 @@ fun ControlScreen(viewModel: ControlViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Requerido por día", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        items.forEach { row -> ControlFilaCard(row) }
+        if (itemsHoy.isEmpty()) {
+            Text("Sin datos", color = Color.Gray)
+        } else {
+            itemsHoy.forEach { row -> ControlFilaCard(row) }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
         // Misma estructura que la tabla de arriba, pero sumando todos los registros de la
-        // semana actual (lunes-domingo) en vez de solo hoy. Se calcula local desde Matriz
-        // (Room), no viene de ninguna hoja de Sheets.
+        // semana actual (lunes-domingo) en vez de solo hoy. Ambas se calculan local desde
+        // Matriz (Room) y excluyen status "PASE" -- ya no dependen de ninguna hoja de Sheets.
         Text("Requerido semana actual", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (itemsSemanaActual.isEmpty()) {
             Text("Sin datos", color = Color.Gray)

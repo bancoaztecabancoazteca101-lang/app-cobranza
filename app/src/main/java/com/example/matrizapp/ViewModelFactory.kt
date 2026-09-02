@@ -10,7 +10,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
                 MatrizViewModel(container.repository, container.database.matrizDao(), container.workManager, container.driveHelper, container.notificacionesHelper) as T
 
             modelClass.isAssignableFrom(PaseCarteraViewModel::class.java) ->
-                PaseCarteraViewModel(container.repository, container.database.paseDao(), container.workManager) as T
+                PaseCarteraViewModel(container.database.paseDao(), container.driveHelper) as T
 
             modelClass.isAssignableFrom(SolicitudViewModel::class.java) ->
                 SolicitudViewModel(container.repository, container.database.solicitudDao(), container.audioHelper, container.workManager, container.driveHelper) as T

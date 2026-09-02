@@ -53,7 +53,11 @@ class FiltroFechaViewModel(
     }.flatMapLatest { (t, loc) ->
         val (d, h, o) = t
         matrizDao.getAllMatriz().map { list ->
-            val enRango = if (d != null && h != null) list.filter { val f = it.fecha; f != null && f in d..h } else list
+            val enRango = if (d != null && h != null) {
+                list.filter { val f = it.fecha; f != null && f in d..h && !it.estado.equals("PASE", ignoreCase = true) }
+            } else {
+                list.filter { !it.estado.equals("PASE", ignoreCase = true) }
+            }
             ordenar(enRango, o, loc)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
