@@ -134,8 +134,8 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     private val _excluidos = MutableStateFlow<Set<String>>(emptySet())
     private val _estados = MutableStateFlow<Map<String, EstadoLlamada>>(emptyMap())
 
-    private val _coloniaTexto = MutableStateFlow("")
-    val coloniaTexto: StateFlow<String> = _coloniaTexto
+    private val _coloniaSeleccionadas = MutableStateFlow<Set<String>>(emptySet())
+    val coloniaSeleccionadas: StateFlow<Set<String>> = _coloniaSeleccionadas
     private val _coloniaIdsPermitidos = MutableStateFlow<Set<String>?>(null)
     private val _coloniaCargando = MutableStateFlow(false)
     val coloniaCargando: StateFlow<Boolean> = _coloniaCargando
@@ -188,11 +188,18 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
         SmsHelper.enviarSms(context, subId, item.telefono, mensaje)
     }
 
-    fun setColoniaTexto(texto: String) { _coloniaTexto.value = texto }
+    fun toggleColoniaSeleccionada(nombre: String) {
+        val actuales = _coloniaSeleccionadas.value.toMutableSet()
+        if (!actuales.add(nombre)) actuales.remove(nombre)
+        _coloniaSeleccionadas.value = actuales
+    }
 
-    fun aplicarFiltroColonia(context: Context) {
-        val texto = _coloniaTexto.value.trim()
-        if (texto.isBlank()) { _coloniaIdsPermitidos.value = null; return }
+    fun seleccionarTodasLasColonias() { _coloniaSeleccionadas.value = _coloniasDisponibles.value.toSet() }
+    fun deseleccionarTodasLasColonias() { _coloniaSeleccionadas.value = emptySet() }
+
+    fun aplicarFiltroColonias(context: Context) {
+        val seleccionadas = _coloniaSeleccionadas.value
+        if (seleccionadas.isEmpty()) { _coloniaIdsPermitidos.value = null; return }
         viewModelScope.launch {
             _coloniaCargando.value = true
             val base = candidatos.value
@@ -200,7 +207,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
                 val ub = c.ubicacion ?: continue
                 if (!coloniaCache.containsKey(ub)) coloniaCache[ub] = resolverColonia(context, ub)
             }
-            val ids = base.filter { c -> c.ubicacion?.let { coloniaCache[it] }?.contains(texto, ignoreCase = true) == true }
+            val ids = base.filter { c -> c.ubicacion?.let { coloniaCache[it] } in seleccionadas }
                 .map { it.id }.toSet()
             _coloniaIdsPermitidos.value = ids
             _coloniaCargando.value = false
@@ -221,12 +228,7 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
         }
     }
 
-    fun seleccionarColoniaDelCatalogo(context: Context, nombre: String) {
-        _coloniaTexto.value = nombre
-        aplicarFiltroColonia(context)
-    }
-
-    fun limpiarFiltroColonia() { _coloniaTexto.value = ""; _coloniaIdsPermitidos.value = null }
+    fun limpiarFiltroColonias() { _coloniaSeleccionadas.value = emptySet(); _coloniaIdsPermitidos.value = null }
 
     fun toggleSeleccionado(id: String) {
         val actuales = _excluidos.value.toMutableSet()
