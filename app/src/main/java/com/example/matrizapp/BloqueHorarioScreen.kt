@@ -72,6 +72,7 @@ private fun tienePermisoAlarmasExactas(context: android.content.Context): Boolea
 fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
     val bloques by viewModel.bloques.collectAsState()
     val automatizacionActiva by viewModel.automatizacionActiva.collectAsState()
+    val catchupActiva by viewModel.catchupActiva.collectAsState()
     val configAutomatizacion by viewModel.configAutomatizacion.collectAsState()
     val reglasSemana by viewModel.reglasSemana.collectAsState()
     val context = LocalContext.current
@@ -118,6 +119,12 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                 InterruptorGeneralCard(
                     activa = automatizacionActiva,
                     onCambiar = { viewModel.setAutomatizacionActiva(it) }
+                )
+            }
+            item {
+                InterruptorCatchupCard(
+                    activa = catchupActiva,
+                    onCambiar = { viewModel.setCatchupActiva(it) }
                 )
             }
             if (!permisoAlarmasOk) {
@@ -234,6 +241,39 @@ private fun InterruptorGeneralCard(activa: Boolean, onCambiar: (Boolean) -> Unit
                 Text(
                     if (activa) "Activa — se dispara sola cada día en los bloques de abajo"
                     else "Apagada — los bloques quedan guardados pero no van a marcar solos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Switch(checked = activa, onCheckedChange = onCambiar)
+        }
+    }
+}
+
+/** Interruptor independiente del general: apaga solo las 2 corridas fijas de catchup
+ * (8:15 y 9:15) que reintentan a quien se quedó corto de contactos el día anterior — deja
+ * intactos los bloques normales del día de abajo. */
+@Composable
+private fun InterruptorCatchupCard(activa: Boolean, onCambiar: (Boolean) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = if (activa) Color(0xFFE3F2FD) else Color(0xFFF5F5F5))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Reintento automático (8:15 y 9:15)",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (activa) AZUL_ACENTO else Color.Gray
+                )
+                Text(
+                    if (activa) "Activo — recontacta solo a quien se dio de alta ayer y se quedó corto de su meta"
+                    else "Apagado — solo corren los bloques normales del día, sin las 2 corridas de recuperación",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                     modifier = Modifier.padding(top = 2.dp)
