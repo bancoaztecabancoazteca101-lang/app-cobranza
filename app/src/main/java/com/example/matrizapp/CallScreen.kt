@@ -277,7 +277,7 @@ private fun SubMenuLlamadas(
                         TextButton(onClick = { viewModel.seleccionarTodasLasColonias() }) { Text("Todas") }
                         TextButton(onClick = { viewModel.deseleccionarTodasLasColonias() }) { Text("Ninguna") }
                     }
-                    HorizontalDivider()
+                    Divider()
                     coloniasDisponibles.forEach { nombre ->
                         DropdownMenuItem(
                             text = {
