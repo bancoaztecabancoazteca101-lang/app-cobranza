@@ -89,7 +89,7 @@ private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: andr
     val contactos by viewModel.contactos.collectAsState()
     val fechaInicio by viewModel.fechaInicio.collectAsState()
     val fechaFin by viewModel.fechaFin.collectAsState()
-    val coloniaTexto by viewModel.coloniaTexto.collectAsState()
+    val coloniaSeleccionadas by viewModel.coloniaSeleccionadas.collectAsState()
     val coloniaCargando by viewModel.coloniaCargando.collectAsState()
     val coloniasDisponibles by viewModel.coloniasDisponibles.collectAsState()
     val coloniasCargando by viewModel.coloniasCargando.collectAsState()
@@ -160,44 +160,52 @@ private fun SubMenuSms(viewModel: SmsViewModel, fuente: FuenteSms, context: andr
         }
 
         Spacer(Modifier.height(8.dp))
-        Text("Filtro por Colonia (opcional)", style = MaterialTheme.typography.labelLarge)
+        Text("Filtro por Colonia (opcional, elige varias)", style = MaterialTheme.typography.labelLarge)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.weight(1f).padding(end = 4.dp)) {
-                OutlinedTextField(
-                    value = coloniaTexto, onValueChange = { viewModel.setColoniaTexto(it) },
-                    label = { Text("Nombre de colonia (escribe o elige de la lista)") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth(), enabled = !enviando && !coloniaCargando,
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                if (coloniasDisponibles.isEmpty() && !coloniasCargando) viewModel.cargarColoniasDisponibles(context)
-                                mostrarListaColonias = true
-                            },
-                            enabled = !enviando && !coloniasCargando
-                        ) {
-                            if (coloniasCargando) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            else Icon(Icons.Default.ArrowDropDown, contentDescription = "Ver colonias disponibles")
-                        }
+                OutlinedButton(
+                    onClick = {
+                        if (coloniasDisponibles.isEmpty() && !coloniasCargando) viewModel.cargarColoniasDisponibles(context)
+                        mostrarListaColonias = true
+                    },
+                    enabled = !enviando && !coloniasCargando, modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (coloniasCargando) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(
+                            if (coloniaSeleccionadas.isEmpty()) "Todas las colonias"
+                            else "${coloniaSeleccionadas.size} colonia(s) elegida(s)",
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Elegir colonias")
                     }
-                )
+                }
                 DropdownMenu(expanded = mostrarListaColonias && coloniasDisponibles.isNotEmpty(), onDismissRequest = { mostrarListaColonias = false }) {
+                    Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+                        TextButton(onClick = { viewModel.seleccionarTodasLasColonias() }) { Text("Todas") }
+                        TextButton(onClick = { viewModel.deseleccionarTodasLasColonias() }) { Text("Ninguna") }
+                    }
+                    HorizontalDivider()
                     coloniasDisponibles.forEach { nombre ->
                         DropdownMenuItem(
-                            text = { Text(nombre) },
-                            onClick = {
-                                mostrarListaColonias = false
-                                viewModel.seleccionarColoniaDelCatalogo(context, nombre)
-                            }
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(checked = nombre in coloniaSeleccionadas, onCheckedChange = { viewModel.toggleColoniaSeleccionada(nombre) })
+                                    Text(nombre)
+                                }
+                            },
+                            onClick = { viewModel.toggleColoniaSeleccionada(nombre) }
                         )
                     }
                 }
             }
-            Button(onClick = { viewModel.aplicarFiltroColonia(context) }, enabled = !enviando && !coloniaCargando) {
+            Button(onClick = { viewModel.aplicarFiltroColonias(context) }, enabled = !enviando && !coloniaCargando) {
                 if (coloniaCargando) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
                 else Text("Aplicar")
             }
-            if (coloniaTexto.isNotBlank()) {
-                TextButton(onClick = { viewModel.limpiarFiltroColonia() }, enabled = !enviando && !coloniaCargando) { Text("Quitar") }
+            if (coloniaSeleccionadas.isNotEmpty()) {
+                TextButton(onClick = { viewModel.limpiarFiltroColonias() }, enabled = !enviando && !coloniaCargando) { Text("Quitar") }
             }
         }
         if (coloniasCargando) {
