@@ -954,22 +954,36 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
             .addOnSuccessListener { visionText ->
                 var mejorLinea: String? = null
                 var mejorAltura = 0
+                fun evaluarCandidato(textoCrudo: String, box: android.graphics.Rect?, alturaComparable: Int) {
+                    // NFC: compone letra+acento suelto (p.ej. "e" + ´) en un solo carácter ("é")
+                    // antes de validar "solo letras". Sin esto, el acento queda como una marca
+                    // Unicode aparte que Char.isLetter() no cuenta como letra y rechaza la línea
+                    // completa (por eso los nombres con acentos no se detectaban).
+                    val texto = java.text.Normalizer.normalize(textoCrudo, java.text.Normalizer.Form.NFC).trim()
+                    val enZonaEncabezado = box != null && alturaImagen > 0 && box.top < alturaImagen * 0.25
+                    val esPalabraUi = palabrasUi.any { texto.contains(it, ignoreCase = true) }
+                    val soloLetras = texto.replace(" ", "").isNotEmpty() &&
+                        texto.replace(" ", "").all { it.isLetter() }
+                    val palabras = texto.split(" ").filter { it.isNotBlank() }
+                    if (soloLetras && !esPalabraUi && !enZonaEncabezado && palabras.size in 2..5 && texto.length in 5..40) {
+                        if (alturaComparable > mejorAltura) { mejorAltura = alturaComparable; mejorLinea = texto }
+                    }
+                }
                 for (block in visionText.textBlocks) {
+                    // Candidato a nivel de línea (nombre corto que cabe en una sola línea visual).
                     for (line in block.lines) {
-                        val texto = line.text.trim()
-                        val box = line.boundingBox
-                        // Ignora todo lo que esté en el primer 25% superior de la imagen: ahí
-                        // suele estar la barra de estado, el título de la pantalla y el stepper
-                        // de pasos (Prepárate/En ruta/Localiza/...), nunca el nombre del cliente.
-                        val enZonaEncabezado = box != null && alturaImagen > 0 && box.top < alturaImagen * 0.25
-                        val esPalabraUi = palabrasUi.any { texto.contains(it, ignoreCase = true) }
-                        val soloLetras = texto.replace(" ", "").isNotEmpty() &&
-                            texto.replace(" ", "").all { it.isLetter() }
-                        val palabras = texto.split(" ").filter { it.isNotBlank() }
-                        if (soloLetras && !esPalabraUi && !enZonaEncabezado && palabras.size in 2..5 && texto.length in 5..40) {
-                            val altura = box?.height() ?: 0
-                            if (altura > mejorAltura) { mejorAltura = altura; mejorLinea = texto }
-                        }
+                        evaluarCandidato(line.text.trim(), line.boundingBox, line.boundingBox?.height() ?: 0)
+                    }
+                    // Candidato a nivel de bloque: junta todas las líneas del mismo bloque/párrafo,
+                    // para reconstruir nombres largos que la pantalla corta a una segunda línea
+                    // visual (p.ej. un apellido que no cupo junto al resto del nombre). La altura
+                    // se compara por línea promedio (no la del bloque completo) para que un bloque
+                    // de 2 líneas no gane solo por ser más alto, sino solo si el texto en sí es
+                    // del tamaño de letra correcto.
+                    if (block.lines.size > 1) {
+                        val textoBloque = block.lines.joinToString(" ") { it.text.trim() }
+                        val alturaPromedio = block.lines.sumOf { it.boundingBox?.height() ?: 0 } / block.lines.size
+                        evaluarCandidato(textoBloque, block.boundingBox, alturaPromedio)
                     }
                 }
                 if (cont.isActive) cont.resume(mejorLinea) {}
