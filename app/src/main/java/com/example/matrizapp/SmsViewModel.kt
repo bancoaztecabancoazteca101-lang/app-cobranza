@@ -125,8 +125,8 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
 
     // Filtro de Colonia: se aplica explícito (no en cada tecleo) porque cada registro nuevo
     // necesita un geocoding inverso local (Android Geocoder), y eso tarda. null = sin filtro.
-    private val _coloniaTexto = MutableStateFlow("")
-    val coloniaTexto: StateFlow<String> = _coloniaTexto
+    private val _coloniaSeleccionadas = MutableStateFlow<Set<String>>(emptySet())
+    val coloniaSeleccionadas: StateFlow<Set<String>> = _coloniaSeleccionadas
     private val _coloniaIdsPermitidos = MutableStateFlow<Set<String>?>(null)
     private val _coloniaCargando = MutableStateFlow(false)
     val coloniaCargando: StateFlow<Boolean> = _coloniaCargando
@@ -185,11 +185,14 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
         }
     }
 
-    /** Selección directa desde el desplegable: aplica el filtro de inmediato con el nombre exacto. */
-    fun seleccionarColoniaDelCatalogo(context: Context, nombre: String) {
-        _coloniaTexto.value = nombre
-        aplicarFiltroColonia(context)
+    fun toggleColoniaSeleccionada(nombre: String) {
+        val actuales = _coloniaSeleccionadas.value.toMutableSet()
+        if (!actuales.add(nombre)) actuales.remove(nombre)
+        _coloniaSeleccionadas.value = actuales
     }
+
+    fun seleccionarTodasLasColonias() { _coloniaSeleccionadas.value = _coloniasDisponibles.value.toSet() }
+    fun deseleccionarTodasLasColonias() { _coloniaSeleccionadas.value = emptySet() }
 
     private val _enviando = MutableStateFlow(false)
     val enviando: StateFlow<Boolean> = _enviando
@@ -203,13 +206,11 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
     fun setContactoGestor(texto: String) { _contacto.value = texto }
     fun setSim(subscriptionId: Int?) { _subscriptionIdSeleccionado.value = subscriptionId }
 
-    fun setColoniaTexto(texto: String) { _coloniaTexto.value = texto }
-
     /** Geocodifica (una sola vez por ubicación, con caché) los candidatos actuales y deja
-     * activo el filtro por Colonia. Se dispara con botón, no en cada tecleo. */
-    fun aplicarFiltroColonia(context: Context) {
-        val texto = _coloniaTexto.value.trim()
-        if (texto.isBlank()) { _coloniaIdsPermitidos.value = null; return }
+     * activo el filtro por Colonia con todas las colonias marcadas. Se dispara con botón. */
+    fun aplicarFiltroColonias(context: Context) {
+        val seleccionadas = _coloniaSeleccionadas.value
+        if (seleccionadas.isEmpty()) { _coloniaIdsPermitidos.value = null; return }
         viewModelScope.launch {
             _coloniaCargando.value = true
             val base = candidatos.value
@@ -221,14 +222,14 @@ class SmsViewModel(private val matrizDao: MatrizDao, private val workManager: Wo
             }
             val ids = base.filter { c ->
                 val colonia = c.ubicacion?.let { coloniaCache[it] }
-                colonia != null && colonia.contains(texto, ignoreCase = true)
+                colonia != null && colonia in seleccionadas
             }.map { it.id }.toSet()
             _coloniaIdsPermitidos.value = ids
             _coloniaCargando.value = false
         }
     }
 
-    fun limpiarFiltroColonia() { _coloniaTexto.value = ""; _coloniaIdsPermitidos.value = null }
+    fun limpiarFiltroColonias() { _coloniaSeleccionadas.value = emptySet(); _coloniaIdsPermitidos.value = null }
 
     fun toggleSeleccionado(id: String) {
         val actuales = _excluidos.value.toMutableSet()
