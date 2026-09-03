@@ -3,6 +3,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -230,6 +231,7 @@ private fun RutaIAItemCard(item: RutaIAEntity, posicion: Int, onMarcarVisitado: 
  * es el orden en que se van activando -- el primero que se marca manda, los siguientes solo
  * desempatan -- con flechas para reordenar manualmente. Misma idea que el filtro de la app de
  * trabajo de Banco Azteca (Distancia/Cercania, Dias de atraso, Pago requerido, Personalizado). */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RutaIAFiltroDialog(
     criteriosActuales: List<CriterioOrdenRutaIA>,
