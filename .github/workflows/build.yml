@@ -9,6 +9,10 @@ permissions:
   contents: write
   issues: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -48,7 +52,7 @@ jobs:
 
       # Ya NO se sube a Actions Artifacts: ese almacenamiento tiene una cuota compartida por
       # cuenta que se llena rapido con builds tan seguidos (llegamos a acumular 107 builds /
-      # 2.2 GB y tumbo el paso siguiente con "Artifact storage quota has been hit"). El unico
+      # 2.2 GB y tumbo el paso siguiente con "Artifact storage quota has been hit". El unico
       # lugar donde el APK necesita vivir es el GitHub Release de abajo (latest-debug), que
       # usa almacenamiento de Releases -- una cuota totalmente aparte que no se llena con esto.
       - name: Publish stable release with APK
