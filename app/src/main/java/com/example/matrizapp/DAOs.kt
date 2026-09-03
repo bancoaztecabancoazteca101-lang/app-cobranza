@@ -149,3 +149,33 @@ interface ControlDao {
     @Query("DELETE FROM control_table")
     suspend fun deleteAll()
 }
+
+@Dao
+interface RutaIADao {
+    @Query("SELECT * FROM ruta_ia_table ORDER BY orden ASC")
+    fun getAll(): Flow<List<RutaIAEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<RutaIAEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOne(item: RutaIAEntity)
+    /** Reemplaza toda la ruta del día: se usa al procesar un lote nuevo de fotos para no
+     * acumular rutas de días/lotes anteriores encima. */
+    @Query("DELETE FROM ruta_ia_table")
+    suspend fun deleteAll()
+    @Query("UPDATE ruta_ia_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
+    suspend fun updateEstadoLocal(id: String, nuevoEstado: String)
+    @Query("SELECT * FROM ruta_ia_table WHERE isDirty = 1")
+    suspend fun getDirtyItems(): List<RutaIAEntity>
+    @Query("UPDATE ruta_ia_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
+    suspend fun markAsClean(id: String, syncTime: Long = System.currentTimeMillis())
+}
+
+@Dao
+interface RutaIAFiltroDao {
+    @Query("SELECT * FROM ruta_ia_filtro_table WHERE id = 1")
+    suspend fun get(): RutaIAFiltroEntity?
+    @Query("SELECT * FROM ruta_ia_filtro_table WHERE id = 1")
+    fun getFlow(): Flow<RutaIAFiltroEntity?>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun guardar(item: RutaIAFiltroEntity)
+}

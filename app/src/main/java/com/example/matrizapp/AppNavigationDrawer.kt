@@ -133,6 +133,16 @@ fun AppNavigationDrawer(
                     },
                     modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                 )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Route, contentDescription = null) },
+                    label = { Text("Ruta IA") },
+                    selected = currentRoute == "ruta_ia",
+                    onClick = {
+                        onNavigate("ruta_ia")
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                )
 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
 

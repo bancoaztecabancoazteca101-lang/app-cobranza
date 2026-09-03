@@ -16,7 +16,8 @@ class SheetsRepository(
     private val solicitudDao: SolicitudDao,
     private val filtroDao: FiltroFechaDao,
     private val filtrarDao: FiltrarDao,
-    private val controlDao: ControlDao
+    private val controlDao: ControlDao,
+    private val rutaIADao: RutaIADao
 ) {
     suspend fun findRowIndexById(sheetName: String, id: String, idColumn: String): Int = withContext(Dispatchers.IO) {
         val range = "$sheetName!$idColumn:$idColumn"
@@ -176,6 +177,66 @@ class SheetsRepository(
 
     suspend fun getDirtyFiltroFechaItems() = filtroDao.getDirtyItems()
     suspend fun markFiltroFechaAsClean(id: String) = filtroDao.markAsClean(id)
+
+    /** Crea la hoja "Ruta IA" con sus encabezados si todavía no existe -- así Diego no tiene
+     * que crearla a mano en el Spreadsheet antes del primer uso. Invalida el cache de nombres
+     * de hoja tras crearla para que resolveSheetName la encuentre de inmediato. */
+    private fun asegurarHojaRutaIAExiste() {
+        val yaExiste = getRealSheetTitles().values.any { it.equals(Constants.SHEET_RUTA_IA, ignoreCase = true) }
+        if (yaExiste) return
+        val addSheetRequest = Request().setAddSheet(
+            com.google.api.services.sheets.v4.model.AddSheetRequest().setProperties(
+                com.google.api.services.sheets.v4.model.SheetProperties().setTitle(Constants.SHEET_RUTA_IA)
+            )
+        )
+        sheetsService.spreadsheets()
+            .batchUpdate(Constants.SPREADSHEET_ID, BatchUpdateSpreadsheetRequest().setRequests(listOf(addSheetRequest)))
+            .execute()
+        sheetTitleCache = null
+        val encabezados = listOf(
+            "Id", "Nombre", "CU", "Direccion", "ColoniaCP", "DiasAtraso", "PagoRequerido",
+            "Lat", "Lng", "Orden", "EsNuevo", "CuMatrizMatch", "Fecha", "Estado"
+        )
+        val realName = resolveSheetName(Constants.SHEET_RUTA_IA)
+        val body = ValueRange().setValues(listOf(encabezados))
+        sheetsService.spreadsheets().values().update(Constants.SPREADSHEET_ID, "'$realName'!A1", body)
+            .setValueInputOption("USER_ENTERED").execute()
+    }
+
+    suspend fun getDirtyRutaIAItems() = rutaIADao.getDirtyItems()
+    suspend fun markRutaIAAsClean(id: String) = rutaIADao.markAsClean(id)
+
+    /** Reemplaza por completo el contenido de la hoja "Ruta IA": borra las filas de datos
+     * existentes (A2:N) y sube el lote actual en un solo batch. Se llama justo después de
+     * procesar un lote nuevo de fotos, para que la hoja siempre refleje la ruta del día
+     * actual sin acumular lotes/días anteriores -- misma idea que la limpieza automática de
+     * madrugada (AppsScript/RutaIA.gs), pero disparada al momento desde la app. Push-only:
+     * esta hoja nunca se lee de vuelta hacia Room. */
+    suspend fun reemplazarRutaIAEnSheet(items: List<RutaIAEntity>) = withContext(Dispatchers.IO) {
+        asegurarHojaRutaIAExiste()
+        val realName = resolveSheetName(Constants.SHEET_RUTA_IA)
+        try {
+            sheetsService.spreadsheets().values().clear(
+                Constants.SPREADSHEET_ID, "'$realName'!A2:N", com.google.api.services.sheets.v4.model.ClearValuesRequest()
+            ).execute()
+        } catch (e: Exception) { /* hoja vacía o aún sin filas: no pasa nada, el append de abajo la llena igual */ }
+        if (items.isEmpty()) return@withContext
+        val filas = items.map { item ->
+            listOf(
+                item.id, item.nombre, item.cu ?: "", item.direccion, item.coloniaCp ?: "",
+                item.diasAtraso?.toString() ?: "", item.pagoRequerido?.toString() ?: "",
+                item.lat?.toString() ?: "", item.lng?.toString() ?: "", item.orden.toString(),
+                if (item.esNuevo) "TRUE" else "FALSE", item.cuMatrizMatch ?: "",
+                DateUtils.toSheetsSerial(item.fechaDia), item.estado
+            )
+        }
+        val body = ValueRange().setValues(filas)
+        sheetsService.spreadsheets().values().append(Constants.SPREADSHEET_ID, "'$realName'!A1", body)
+            .setValueInputOption("USER_ENTERED")
+            .setInsertDataOption("INSERT_ROWS")
+            .execute()
+        Unit
+    }
 
     /** Trae los datos actuales del Spreadsheet hacia la base local (Room). */
     suspend fun refreshAll() = withContext(Dispatchers.IO) {

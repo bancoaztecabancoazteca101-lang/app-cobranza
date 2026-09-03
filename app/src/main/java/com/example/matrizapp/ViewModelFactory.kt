@@ -39,6 +39,9 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
             modelClass.isAssignableFrom(PlantillaSmsViewModel::class.java) ->
                 PlantillaSmsViewModel(container.database.plantillaSmsDao()) as T
 
+            modelClass.isAssignableFrom(RutaIAViewModel::class.java) ->
+                RutaIAViewModel(container.database.rutaIADao(), container.database.rutaIAFiltroDao(), container.database.matrizDao(), container.repository, container.context) as T
+
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
     }

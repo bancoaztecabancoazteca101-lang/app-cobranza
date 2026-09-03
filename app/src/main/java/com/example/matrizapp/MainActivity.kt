@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
                 val callVm: CallViewModel = viewModel(factory = factory)
                 val bloqueVm: BloqueHorarioViewModel = viewModel(factory = factory)
                 val plantillaVm: PlantillaSmsViewModel = viewModel(factory = factory)
+                val rutaIAVm: RutaIAViewModel = viewModel(factory = factory)
                 // searchInput es lo que el usuario teclea (se actualiza al instante, sin costo,
                 // porque no dispara el filtrado). searchQuery es la versión "debounced" que se
                 // pasa a las pantallas y sí dispara el filtrado de las listas; se actualiza ~180ms
@@ -376,6 +377,7 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Llamadas.route) { CallScreen(callVm) }
                         composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
                         composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
+                        composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm) }
                     }
                 }
                 }
@@ -396,4 +398,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Llamadas : Screen("llamadas", "Llamadas", Icons.Default.Call)
     object BloquesLlamada : Screen("bloques_llamada", "Bloques de horario", Icons.Default.Schedule)
     object PlantillasSms : Screen("plantillas_sms", "Plantillas de SMS", Icons.Default.Message)
+    object RutaIA : Screen("ruta_ia", "Ruta IA", Icons.Default.Route)
 }

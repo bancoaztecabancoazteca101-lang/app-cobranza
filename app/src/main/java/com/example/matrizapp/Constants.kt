@@ -7,6 +7,7 @@ object Constants {
     const val SHEET_FILTRO = "Filtro Fecha"
     const val SHEET_FILTRAR = "Filtrar"
     const val SHEET_CONTROL = "GraficaSuma"
+    const val SHEET_RUTA_IA = "Ruta IA"
     const val FOLDER_IMAGES = "Matriz_Images/"
     const val FOLDER_AUDIOS = "Matriz_Audios/"
 
@@ -50,6 +51,17 @@ object Constants {
     // "GraficaSuma": tabla resumen fija de 5 filas (Semana, Requerido Hoy).
     object ControlCols {
         const val SEMANA = 0; const val REQUERIDO = 1
+    }
+    // "Ruta IA": Id,Nombre,CU,Direccion,ColoniaCP,DiasAtraso,PagoRequerido,Lat,Lng,Orden,
+    // EsNuevo,CuMatrizMatch,Fecha,Estado. Hoja de trabajo diario, se limpia cada madrugada
+    // (ver AppsScript/RutaIA.gs) -- nunca se lee de vuelta hacia Room (push-only), la lista
+    // en la app vive en Room y ahí se reordena localmente según el filtro activo.
+    object RutaIACols {
+        const val ID = 0; const val NOMBRE = 1; const val CU = 2; const val DIRECCION = 3
+        const val COLONIA_CP = 4; const val DIAS_ATRASO = 5; const val PAGO_REQUERIDO = 6
+        const val LAT = 7; const val LNG = 8; const val ORDEN = 9; const val ES_NUEVO = 10
+        const val CU_MATRIZ_MATCH = 11; const val FECHA = 12; const val ESTADO = 13
+        const val COL_ID = "A"
     }
 }
 /** Orden aplicable a las listas de Filtro Fecha, Sem6 y Solicitud. ORIGINAL = tal como llega
