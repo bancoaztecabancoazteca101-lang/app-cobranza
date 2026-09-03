@@ -1,6 +1,9 @@
 package com.example.matrizapp
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.net.Uri
+import android.speech.RecognizerIntent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -197,6 +200,29 @@ class MainActivity : ComponentActivity() {
                 val ocrPickImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                     procesarFotoBusqueda(uri)
                 }
+                // Búsqueda por voz: delega la grabación al reconocedor del sistema (Google u
+                // otro instalado) en vez de manejar SpeechRecognizer manualmente -- así no hace
+                // falta lidiar con permisos/callbacks propios ni con diferencias entre fabricantes.
+                val vozBusquedaLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+                    val texto = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+                    if (!texto.isNullOrBlank()) {
+                        searchActive = true
+                        searchInput = texto
+                        searchQuery = texto
+                    }
+                }
+                fun iniciarBusquedaPorVoz() {
+                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-MX")
+                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Di el nombre a buscar")
+                    }
+                    try {
+                        vozBusquedaLauncher.launch(intent)
+                    } catch (e: ActivityNotFoundException) {
+                        Toast.makeText(this, "Este dispositivo no tiene reconocimiento de voz instalado", Toast.LENGTH_LONG).show()
+                    }
+                }
                 if (mostrarSelectorFotoBusqueda) {
                     AlertDialog(
                         onDismissRequest = { mostrarSelectorFotoBusqueda = false },
@@ -286,6 +312,9 @@ class MainActivity : ComponentActivity() {
                                     } else {
                                         IconButton(onClick = { mostrarSelectorFotoBusqueda = true }) {
                                             Icon(Icons.Default.CameraAlt, contentDescription = "Buscar con foto")
+                                        }
+                                        IconButton(onClick = { iniciarBusquedaPorVoz() }) {
+                                            Icon(Icons.Default.Mic, contentDescription = "Buscar por voz")
                                         }
                                     }
                                     if (searchInput.isNotEmpty()) {
