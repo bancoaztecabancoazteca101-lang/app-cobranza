@@ -41,6 +41,13 @@ class BloqueHorarioViewModel(
         reglaSemanaDao.actualizar(actual.copy(offsets = offsets.sorted().joinToString(",")))
     }
 
+    /** Apaga/prende el catchup (8:15/9:15) solo para esta semana de atraso -- los bloques
+     * normales del día siguen usando sus offsets de siempre, esto no los toca. */
+    fun toggleCatchupSemana(semana: Int) = viewModelScope.launch {
+        val actual = reglasSemana.value.find { it.semana == semana } ?: return@launch
+        reglaSemanaDao.actualizar(actual.copy(catchupActivo = !actual.catchupActivo))
+    }
+
     /** Config exclusiva del flujo automático — independiente de la pantalla manual de
      * Llamadas. Se siembra sola la primera vez que se observa (obtenerOSembrar). */
     val configAutomatizacion: StateFlow<ConfiguracionAutomatizacionEntity> = flow {

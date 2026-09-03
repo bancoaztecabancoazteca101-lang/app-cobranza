@@ -154,7 +154,8 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                 FrecuenciaPorSemanaCard(
                     reglas = reglasSemana,
                     totalBloquesActivos = totalBloquesActivos,
-                    onToggleOffset = { semana, offset -> viewModel.toggleOffsetEnSemana(semana, offset) }
+                    onToggleOffset = { semana, offset -> viewModel.toggleOffsetEnSemana(semana, offset) },
+                    onToggleCatchup = { semana -> viewModel.toggleCatchupSemana(semana) }
                 )
             }
             if (bloques.isEmpty()) {
@@ -375,7 +376,8 @@ private fun ConfiguracionAutomatizacionCard(
 private fun FrecuenciaPorSemanaCard(
     reglas: List<ReglaSemanaEntity>,
     totalBloquesActivos: Int,
-    onToggleOffset: (semana: Int, offset: Int) -> Unit
+    onToggleOffset: (semana: Int, offset: Int) -> Unit,
+    onToggleCatchup: (semana: Int) -> Unit
 ) {
     var expandido by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
@@ -398,12 +400,30 @@ private fun FrecuenciaPorSemanaCard(
                     )
                 } else {
                     Text(
-                        "El número de cada chip es el Bloque #N que ves arriba, contado desde el bloque en que el cliente se dio de alta (#1 = su propio bloque de alta).",
+                        "El número de cada chip es el Bloque #N que ves arriba, contado desde el bloque en que el cliente se dio de alta (#1 = su propio bloque de alta). El switch junto al nombre de la semana prende/apaga solo el reintento de catchup (8:15/9:15) para esa semana -- los bloques normales del día no se tocan.",
                         style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp)
                     )
                     reglas.sortedBy { it.semana }.forEach { regla ->
                         val seleccionados = regla.offsetsList().toSet()
-                        Text("Semana ${regla.semana}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                        ) {
+                            Text("Semana ${regla.semana}", style = MaterialTheme.typography.labelLarge)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    if (regla.catchupActivo) "Catchup" else "Catchup apagado",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (regla.catchupActivo) Color.Gray else Color(0xFFB00020)
+                                )
+                                Switch(
+                                    checked = regla.catchupActivo,
+                                    onCheckedChange = { onToggleCatchup(regla.semana) },
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                            }
+                        }
                         (0 until totalBloquesActivos).chunked(6).forEach { fila ->
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 2.dp)) {
                                 fila.forEach { offset ->

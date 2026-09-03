@@ -36,7 +36,8 @@ data class ConfiguracionAutomatizacionEntity(
 @Entity(tableName = "regla_semana_table")
 data class ReglaSemanaEntity(
     @PrimaryKey val semana: Int,
-    val offsets: String // ej. "0,2,4,6,8"
+    val offsets: String, // ej. "0,2,4,6,8"
+    val catchupActivo: Boolean = true // si esta semana participa en el reintento de 8:15/9:15
 ) {
     fun offsetsList(): List<Int> = offsets.split(",").mapNotNull { it.trim().toIntOrNull() }
 }
@@ -70,6 +71,13 @@ interface ReglaSemanaDao {
         val filas = obtenerTodas()
         return if (filas.isEmpty()) ReglaRepeticion.BLOQUES_POR_SEM
         else filas.associate { it.semana to it.offsetsList() }
+    }
+
+    /** Igual que obtenerMapaOSembrar() pero devuelve las entidades completas -- lo usa el
+     * catchup para saber además qué semanas tienen catchupActivo, no solo sus offsets. */
+    suspend fun obtenerEntidadesOSembrar(): List<ReglaSemanaEntity> {
+        sembrarSiVacia()
+        return obtenerTodas()
     }
 }
 

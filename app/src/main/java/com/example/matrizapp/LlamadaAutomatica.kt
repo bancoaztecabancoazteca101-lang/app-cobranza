@@ -305,7 +305,9 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
         val reglaSemanaDao = container.database.reglaSemanaDao()
         val registros = matrizDao.getAllMatriz().first()
         val config = configDao.obtenerOSembrar()
-        val reglas = reglaSemanaDao.obtenerMapaOSembrar()
+        val entidadesRegla = reglaSemanaDao.obtenerEntidadesOSembrar()
+        val reglas = entidadesRegla.associate { it.semana to it.offsetsList() }
+        val semanasConCatchup = entidadesRegla.filter { it.catchupActivo }.map { it.semana }.toSet()
         val ayer = LocalDate.now().minusDays(1)
         val ayerMillis = inicioDeDiaMillis(ayer)
         var esPrimerContacto = true
@@ -314,6 +316,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
             if (r.estado.equals("Pagado", ignoreCase = true)) continue
             val sem = r.semana.trim().toIntOrNull() ?: continue
             if (sem !in 1..5) continue
+            if (sem !in semanasConCatchup) continue // catchup apagado para esta semana específica
 
             // Bug corregido: antes no se filtraba por fecha de alta, así que el catchup
             // recontactaba a CUALQUIER cliente activo con sem 1-5 todos los días (su meta
