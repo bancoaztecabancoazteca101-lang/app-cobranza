@@ -46,6 +46,21 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     var fotoAmpliada by remember { mutableStateOf<Uri?>(null) }
     var matrizAbierto by remember { mutableStateOf<MatrizEntity?>(null) }
     var matrizAEditar by remember { mutableStateOf<MatrizEntity?>(null) }
+    var mostrarMapa by remember { mutableStateOf(false) }
+
+    /** Misma acción que tocar una tarjeta en la lista, reutilizada por los marcadores del mapa:
+     * si el cliente tuvo match en Matriz abre su detalle, si es nuevo solo avisa. */
+    fun abrirEnMatriz(item: RutaIAEntity) {
+        if (item.esNuevo || item.cuMatrizMatch == null) {
+            Toast.makeText(context, "Cliente nuevo: todavía no existe en Matriz", Toast.LENGTH_SHORT).show()
+        } else {
+            scope.launch {
+                val registro = viewModel.buscarMatrizPorId(item.cuMatrizMatch)
+                if (registro != null) matrizAbierto = registro
+                else Toast.makeText(context, "No se encontró el registro en Matriz", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     val tomarFotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { exito ->
         if (exito && fotoTemporalUri != null) fotosCapturadas = fotosCapturadas + fotoTemporalUri!!
@@ -59,7 +74,11 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            // Barra superior con resumen + botón de filtro
+            // Barra superior: total de paradas + botones redondos de acción (filtro, mapa,
+            // limpiar). Antes había también una línea fija con el resumen de criterios
+            // ("Distancia (▲) › Días de atraso (▼)...") que ocupaba varias líneas y desordenaba
+            // esta zona -- se quitó; el botón de filtro ya abre el panel completo con el estado
+            // actual marcado, no hace falta repetirlo aquí fijo.
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -69,18 +88,25 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                     if (rutaOrdenada.isEmpty()) "Sin ruta generada hoy" else "${rutaOrdenada.size} paradas",
                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold
                 )
-                Row {
-                    IconButton(onClick = { mostrarFiltro = true }) {
-                        Icon(Icons.Default.Tune, contentDescription = "Filtrar/ordenar ruta")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledIconButton(
+                        onClick = { mostrarFiltro = true },
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    ) { Icon(Icons.Default.Tune, contentDescription = "Filtrar y ordenar ruta", tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+                    if (rutaOrdenada.any { it.lat != null && it.lng != null }) {
+                        FilledIconButton(
+                            onClick = { mostrarMapa = true },
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        ) { Icon(Icons.Default.Map, contentDescription = "Ver mapa", tint = MaterialTheme.colorScheme.onPrimaryContainer) }
                     }
                     if (rutaOrdenada.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.limpiarRutaAhora() }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = "Limpiar ruta")
-                        }
+                        FilledIconButton(
+                            onClick = { viewModel.limpiarRutaAhora() },
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) { Icon(Icons.Default.DeleteSweep, contentDescription = "Limpiar ruta") }
                     }
                 }
             }
-            ResumenCriteriosChip(criterios)
 
             if (rutaOrdenada.isEmpty() && !procesando) {
                 Box(Modifier.fillMaxWidth().weight(1f), Alignment.Center) {
@@ -104,17 +130,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                                 Toast.makeText(context, "Marcado como visitado", Toast.LENGTH_SHORT).show()
                             },
                             onVerFoto = { item.fotoOrigenUrl?.let { fotoAmpliada = Uri.parse(it) } },
-                            onAbrirEnMatriz = {
-                                if (item.esNuevo || item.cuMatrizMatch == null) {
-                                    Toast.makeText(context, "Cliente nuevo: todavía no existe en Matriz", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    scope.launch {
-                                        val registro = viewModel.buscarMatrizPorId(item.cuMatrizMatch)
-                                        if (registro != null) matrizAbierto = registro
-                                        else Toast.makeText(context, "No se encontró el registro en Matriz", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
+                            onAbrirEnMatriz = { abrirEnMatriz(item) }
                         )
                     }
                 }
@@ -231,16 +247,17 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
             }
         )
     }
-}
-
-@Composable
-private fun ResumenCriteriosChip(criterios: List<CriterioOrdenRutaIA>) {
-    if (criterios.isEmpty()) return
-    val texto = criterios.joinToString("  ›  ") { "${it.campo.etiqueta} (${if (it.direccion == DireccionOrdenRutaIA.ASC) "▲" else "▼"})" }
-    Text(
-        texto, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
-    )
+    // Mapa a pantalla completa (botón redondo "Ver mapa" del encabezado) -- se abre encima de
+    // todo lo demás con un Dialog sin restricción de ancho, para que ocupe toda la pantalla.
+    if (mostrarMapa) {
+        Dialog(onDismissRequest = { mostrarMapa = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+            RutaIAMapaFullScreen(
+                items = rutaOrdenada,
+                onCerrar = { mostrarMapa = false },
+                onMarcadorClick = { item -> abrirEnMatriz(item) }
+            )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
