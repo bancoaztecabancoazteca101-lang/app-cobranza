@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - 'feature/**'
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -53,7 +55,7 @@ jobs:
         run: exit 1
 
       - name: Publish stable release with APK
-        if: env.BUILD_FAILED != 'true'
+        if: env.BUILD_FAILED != 'true' && github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-debug-${{ github.ref_name }}
