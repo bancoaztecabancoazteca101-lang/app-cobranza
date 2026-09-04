@@ -46,5 +46,10 @@ class AppContainer(val context: Context) {
             }
             dao.migrarPlaceholdersLegado()
         }
+        // Limpieza diaria de Ruta IA (4 AM) -- se reprograma aquí cada vez que la app arranca
+        // (por si el usuario cambió la hora del sistema o la alarma se perdió por algún motivo)
+        // y también en BootCompletedReceiver, porque un reinicio del dispositivo borra todas
+        // las alarmas de AlarmManager.
+        programarLimpiezaRutaIA(context)
     }
 }

@@ -51,6 +51,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".RutaIALimpiezaAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".LlamadaBloqueAlarmReceiver"
             android:exported="false" />
 
