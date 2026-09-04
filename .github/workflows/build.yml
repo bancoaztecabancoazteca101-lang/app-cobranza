@@ -2,7 +2,9 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - 'feature/**'
   workflow_dispatch:
 
 permissions:
@@ -50,19 +52,14 @@ jobs:
         if: env.BUILD_FAILED == 'true'
         run: exit 1
 
-      # Ya NO se sube a Actions Artifacts: ese almacenamiento tiene una cuota compartida por
-      # cuenta que se llena rapido con builds tan seguidos (llegamos a acumular 107 builds /
-      # 2.2 GB y tumbo el paso siguiente con "Artifact storage quota has been hit". El unico
-      # lugar donde el APK necesita vivir es el GitHub Release de abajo (latest-debug), que
-      # usa almacenamiento de Releases -- una cuota totalmente aparte que no se llena con esto.
       - name: Publish stable release with APK
         if: env.BUILD_FAILED != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest-debug
-          name: "Última build (debug)"
-          body: "APK generado automáticamente desde el commit ${{ github.sha }}. Este link nunca cambia; siempre apunta a la ultima build exitosa."
+          tag_name: latest-debug-${{ github.ref_name }}
+          name: "Última build (debug) - ${{ github.ref_name }}"
+          body: "APK generado automáticamente desde el commit ${{ github.sha }}."
           files: app/build/outputs/apk/debug/*.apk
-          make_latest: true
+          make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
