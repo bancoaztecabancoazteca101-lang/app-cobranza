@@ -35,9 +35,12 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
         val title = data["title"] ?: message.notification?.title ?: "Matriz App"
-        val body = data["body"] ?: message.notification?.body ?: "Nuevo retorno"
-        val ubicacion = data["ubicacion"]
+        val nombre = data["nombre"]?.takeIf { it.isNotBlank() }
+        val requerido = data["requerido"]?.takeIf { it.isNotBlank() }
         val eventId = data["eventId"] ?: ""
+        val ubicacion = data["ubicacion"]
+        val colonia = data["colonia"]?.takeIf { it.isNotBlank() }
+        val calle = data["calle"]?.takeIf { it.isNotBlank() }
 
         createNotificationChannel()
 
@@ -50,18 +53,31 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
+        // La notificación ya no muestra el teléfono. Muestra el requerido/saldo y la dirección.
+        val fallbackBody = data["body"] ?: message.notification?.body ?: "Nuevo retorno"
+        val direccion = listOfNotNull(colonia, calle).joinToString(" — ")
+        val body = buildString {
+            if (!requerido.isNullOrBlank()) append("Requerido: $requerido")
+            if (direccion.isNotBlank()) {
+                if (isNotEmpty()) append("\n")
+                append(direccion)
+            }
+            if (isEmpty()) append(fallbackBody)
+        }
+
+        val displayTitle = if (!nombre.isNullOrBlank()) "$title: $nombre" else title
+
         val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(title)
-            .setContentText(body)
+            .setContentTitle(displayTitle)
+            .setContentText(body.replace("\n", " — "))
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
 
-        // Si el retorno trae coordenadas "lat, lng", muestra un botón que abre
-        // Google Maps directamente en modo navegación.
+        // Botón "Iniciar ruta": abre Google Maps directamente en navegación.
         val latLng = parseLatLng(ubicacion)
         if (latLng != null) {
             val navIntent = Intent(
@@ -86,11 +102,9 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
             )
         }
 
-        val notification = builder.build()
-
         NotificationManagerCompat.from(this).notify(
             (eventId.ifBlank { System.currentTimeMillis().toString() }).hashCode(),
-            notification
+            builder.build()
         )
     }
 
@@ -126,7 +140,7 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
             "Retornos multi-dispositivo",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Avisos de RETORNO con fecha y hora y acceso directo a la ruta"
+            description = "Avisos de RETORNO con requerido, colonia, calle y acceso directo a la ruta"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 300, 200, 300)
             setSound(soundUri, audioAttributes)
