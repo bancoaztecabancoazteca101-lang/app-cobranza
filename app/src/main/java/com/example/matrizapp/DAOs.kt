@@ -162,6 +162,8 @@ interface RutaIADao {
     suspend fun deleteAll()
     @Query("UPDATE ruta_ia_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
     suspend fun updateEstadoLocal(id: String, nuevoEstado: String)
+    @Query("UPDATE ruta_ia_table SET orden = :nuevoOrden, isDirty = 1 WHERE id = :id")
+    suspend fun updateOrden(id: String, nuevoOrden: Int)
     @Query("SELECT * FROM ruta_ia_table WHERE isDirty = 1")
     suspend fun getDirtyItems(): List<RutaIAEntity>
     @Query("UPDATE ruta_ia_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")

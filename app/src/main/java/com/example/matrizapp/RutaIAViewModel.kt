@@ -146,8 +146,32 @@ class RutaIAViewModel(
         }
     }
 
-    fun marcarVisitado(id: String) {
-        viewModelScope.launch { rutaIADao.updateEstadoLocal(id, "Visitado") }
+    /** Alterna entre "Visitado" y "Pendiente" -- antes solo marcaba y el botón quedaba
+     * deshabilitado (no se podía deshacer un toque accidental). */
+    fun alternarVisitado(item: RutaIAEntity) {
+        val nuevoEstado = if (item.estado.equals("Visitado", ignoreCase = true)) "Pendiente" else "Visitado"
+        viewModelScope.launch { rutaIADao.updateEstadoLocal(item.id, nuevoEstado) }
+    }
+
+    /** Mueve un cliente una posición arriba (-1) o abajo (+1) dentro de la lista visible
+     * (`rutaOrdenada`, no `rutaList` -- así el intercambio siempre parte de lo que Diego está
+     * viendo en pantalla, sin importar qué criterio estaba activo antes). Renumera el campo
+     * `orden` de TODA la lista para que quede consistente con la posición visual actual, hace
+     * el swap entre las dos posiciones afectadas, y cambia el criterio activo a PERSONALIZADO
+     * para que ese orden manual no se pierda la próxima vez que se recalcule `rutaOrdenada`. */
+    fun moverManualmente(id: String, delta: Int) {
+        viewModelScope.launch {
+            val actual = rutaOrdenada.value
+            val idx = actual.indexOfFirst { it.id == id }
+            val nuevoIdx = idx + delta
+            if (idx == -1 || nuevoIdx < 0 || nuevoIdx >= actual.size) return@launch
+
+            val reordenado = actual.toMutableList()
+            val tmp = reordenado[idx]; reordenado[idx] = reordenado[nuevoIdx]; reordenado[nuevoIdx] = tmp
+
+            reordenado.forEachIndexed { i, item -> rutaIADao.updateOrden(item.id, i) }
+            actualizarCriterios(listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC)))
+        }
     }
 
     /** Para abrir el registro existente en Matriz cuando el cliente sí tuvo match (no es nuevo).
