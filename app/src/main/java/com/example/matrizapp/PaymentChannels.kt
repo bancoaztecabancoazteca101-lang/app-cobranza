@@ -194,7 +194,7 @@ fun PaymentChannelsDialog(customerName: String, ubicacion: String?, onDismiss: (
                     }
                     result?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
-                HorizontalDivider()
+                Divider()
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                     Text("Impresora Bluetooth", style = MaterialTheme.typography.titleSmall)
                     IconButton(onClick = { refreshPrinters() }, enabled = !printing) { Icon(Icons.Default.Refresh, contentDescription = "Actualizar impresoras") }
