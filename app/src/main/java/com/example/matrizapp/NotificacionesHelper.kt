@@ -122,6 +122,23 @@ class NotificacionesHelper(private val context: Context) {
                 val navPendingIntent = PendingIntent.getActivity(context, "nav_$id".hashCode(), navIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 builder.addAction(android.R.drawable.ic_menu_mylocation, "Iniciar ruta", navPendingIntent)
             }
+            val whatsappDigits = numTT.orEmpty().filter { it.isDigit() }
+            val whatsappNumber = when {
+                whatsappDigits.length == 10 -> "52$whatsappDigits"
+                whatsappDigits.length in 11..15 -> whatsappDigits
+                else -> ""
+            }
+            if (whatsappNumber.isNotBlank()) {
+                val pm = context.packageManager
+                val whatsappIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://wa.me/$whatsappNumber")).apply {
+                    setPackage("com.whatsapp")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (whatsappIntent.resolveActivity(pm) != null) {
+                    val whatsappPendingIntent = PendingIntent.getActivity(context, "wa_$id".hashCode(), whatsappIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                    builder.addAction(android.R.drawable.ic_dialog_email, "WhatsApp", whatsappPendingIntent)
+                }
+            }
             NotificationManagerCompat.from(context).notify(id.hashCode(), builder.build())
         }
     }
