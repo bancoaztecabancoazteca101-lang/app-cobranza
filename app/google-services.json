@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "542876060274",
+    "project_id": "app-matriz",
+    "storage_bucket": "app-matriz.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:542876060274:android:d334e9f168a8ab2ce890eb",
+        "android_client_info": {
+          "package_name": "com.example.matrizapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBo-CwbjdEuam9io6X4HDvQ5WsDs4mwV4A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
