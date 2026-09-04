@@ -240,6 +240,7 @@ private fun ResumenCriteriosChip(criterios: List<CriterioOrdenRutaIA>) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RutaIAItemCard(
     item: RutaIAEntity,
