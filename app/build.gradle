@@ -2,6 +2,7 @@ plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'kotlin-kapt'
+    id 'com.google.gms.google-services'
 }
 android {
     namespace 'com.example.matrizapp'
@@ -64,5 +65,8 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3'
     implementation 'com.google.maps.android:maps-compose:2.11.4'
     implementation 'com.google.mlkit:text-recognition:16.0.0'
-    implementation 'com.google.firebase:firebase-messaging:23.4.1'
+
+    // Firebase BoM: mantiene compatibles las versiones de los SDK de Firebase.
+    implementation platform('com.google.firebase:firebase-bom:34.18.0')
+    implementation 'com.google.firebase:firebase-messaging'
 }
