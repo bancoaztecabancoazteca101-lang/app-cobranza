@@ -9,14 +9,19 @@ import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
-/** Recibe los avisos enviados por FCM cuando la app está en segundo plano o cerrada. */
+/** Recibe avisos FCM y mantiene actualizado el registro del dispositivo. */
 class MatrizFirebaseMessagingService : FirebaseMessagingService() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onNewToken(token: String) {
-        // El token se conserva localmente. El registro contra el backend se puede ejecutar
-        // cuando la app tenga configurada NOTIFICATION_API_URL.
         getSharedPreferences("multi_device_notifications", MODE_PRIVATE)
             .edit().putString("fcm_token", token).apply()
+        scope.launch { MultiDeviceNotificationManager(this@MatrizFirebaseMessagingService).register() }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
