@@ -3,9 +3,12 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -326,7 +329,12 @@ private fun RutaIAItemCard(
  * se activa con un checkbox y, una vez activo, se le elige dirección (asc/desc). La prioridad
  * es el orden en que se van activando -- el primero que se marca manda, los siguientes solo
  * desempatan -- con flechas para reordenar manualmente. Misma idea que el filtro de la app de
- * trabajo de Banco Azteca (Distancia/Cercania, Dias de atraso, Pago requerido, Personalizado). */
+ * trabajo de Banco Azteca (Distancia/Cercania, Dias de atraso, Pago requerido, Personalizado).
+ *
+ * El estado activo/inactivo se marca con relleno sólido vs. contorno (no con un tinte claro
+ * apenas distinguible) para que sea obvio de un vistazo qué está prendido, tanto en el criterio
+ * completo (tarjeta con fondo de color cuando está marcado) como en el botón de dirección
+ * (Menor a mayor / Mayor a menor). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RutaIAFiltroDialog(
@@ -359,34 +367,61 @@ private fun RutaIAFiltroDialog(
         onDismissRequest = onDismiss,
         title = { Text("Ordenar ruta por...") },
         text = {
-            Column {
+            Column(
+                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text("Marca uno o varios criterios. El orden en que los marques define la prioridad (el primero manda, los demás solo desempatan).", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                Spacer(Modifier.height(8.dp))
                 CampoOrdenRutaIA.values().forEach { campo ->
                     val activo = estaActivo(campo)
                     val prioridad = seleccion.indexOfFirst { it.campo == campo } + 1
-                    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = activo, onCheckedChange = { alternar(campo) })
-                            Text(campo.etiqueta, modifier = Modifier.weight(1f))
-                            if (activo) {
-                                Text("#$prioridad", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                                IconButton(onClick = { mover(campo, -1) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ArrowUpward, contentDescription = "Subir prioridad", modifier = Modifier.size(16.dp)) }
-                                IconButton(onClick = { mover(campo, 1) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ArrowDownward, contentDescription = "Bajar prioridad", modifier = Modifier.size(16.dp)) }
-                            }
-                        }
-                        if (activo) {
-                            Row(Modifier.padding(start = 40.dp)) {
-                                FilterChip(
-                                    selected = direccionDe(campo) == DireccionOrdenRutaIA.ASC,
-                                    onClick = { cambiarDireccion(campo, DireccionOrdenRutaIA.ASC) },
-                                    label = { Text(if (campo == CampoOrdenRutaIA.DISTANCIA) "Más cercano" else "Menor a mayor") }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (activo) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = if (activo) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                        onClick = { alternar(campo) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (activo) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                                    contentDescription = null,
+                                    tint = if (activo) MaterialTheme.colorScheme.primary else Color.Gray
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                FilterChip(
-                                    selected = direccionDe(campo) == DireccionOrdenRutaIA.DESC,
-                                    onClick = { cambiarDireccion(campo, DireccionOrdenRutaIA.DESC) },
-                                    label = { Text(if (campo == CampoOrdenRutaIA.DISTANCIA) "Más lejano" else "Mayor a menor") }
+                                Text(
+                                    campo.etiqueta, modifier = Modifier.weight(1f),
+                                    fontWeight = if (activo) FontWeight.Bold else FontWeight.Normal
+                                )
+                                if (activo) {
+                                    // Insignia de prioridad + flechas con área de toque grande y
+                                    // fondo propio, para que se vean como controles y no como
+                                    // texto suelto -- se detienen los clicks aquí para que no le
+                                    // "peguen" también al toggle de toda la tarjeta.
+                                    Box(
+                                        Modifier.size(26.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                                        Alignment.Center
+                                    ) { Text("$prioridad", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) }
+                                    Spacer(Modifier.width(4.dp))
+                                    FilledIconButton(
+                                        onClick = { mover(campo, -1) }, modifier = Modifier.size(32.dp),
+                                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.surface)
+                                    ) { Icon(Icons.Default.ArrowUpward, contentDescription = "Subir prioridad", modifier = Modifier.size(16.dp)) }
+                                    Spacer(Modifier.width(4.dp))
+                                    FilledIconButton(
+                                        onClick = { mover(campo, 1) }, modifier = Modifier.size(32.dp),
+                                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.surface)
+                                    ) { Icon(Icons.Default.ArrowDownward, contentDescription = "Bajar prioridad", modifier = Modifier.size(16.dp)) }
+                                }
+                            }
+                            if (activo) {
+                                Spacer(Modifier.height(8.dp))
+                                SegmentedToggleDireccion(
+                                    seleccionAsc = direccionDe(campo) == DireccionOrdenRutaIA.ASC,
+                                    etiquetaAsc = if (campo == CampoOrdenRutaIA.DISTANCIA) "Más cercano" else "Menor a mayor",
+                                    etiquetaDesc = if (campo == CampoOrdenRutaIA.DISTANCIA) "Más lejano" else "Mayor a menor",
+                                    onSeleccionar = { esAsc -> cambiarDireccion(campo, if (esAsc) DireccionOrdenRutaIA.ASC else DireccionOrdenRutaIA.DESC) }
                                 )
                             }
                         }
@@ -397,4 +432,36 @@ private fun RutaIAFiltroDialog(
         confirmButton = { Button(onClick = { onAplicar(seleccion) }) { Text("Aplicar") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
+}
+
+/** Toggle de dos opciones con contraste fuerte: la opción activa se pinta con relleno sólido y
+ * texto blanco; la inactiva queda solo con contorno sobre fondo transparente. Nada de tintes
+ * claros casi iguales entre sí -- de un vistazo se distingue cuál está prendida. Reutilizable
+ * para cualquier par de opciones excluyentes en la app (no solo Ruta IA). */
+@Composable
+fun SegmentedToggleDireccion(
+    seleccionAsc: Boolean,
+    etiquetaAsc: String,
+    etiquetaDesc: String,
+    onSeleccionar: (esAsc: Boolean) -> Unit
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SegmentoToggleBoton(texto = etiquetaAsc, seleccionado = seleccionAsc, onClick = { onSeleccionar(true) }, modifier = Modifier.weight(1f))
+        SegmentoToggleBoton(texto = etiquetaDesc, seleccionado = !seleccionAsc, onClick = { onSeleccionar(false) }, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun SegmentoToggleBoton(texto: String, seleccionado: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    if (seleccionado) {
+        Button(onClick = onClick, modifier = modifier, contentPadding = PaddingValues(vertical = 10.dp)) {
+            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(texto, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        }
+    } else {
+        OutlinedButton(onClick = onClick, modifier = modifier, contentPadding = PaddingValues(vertical = 10.dp)) {
+            Text(texto, style = MaterialTheme.typography.labelLarge, maxLines = 1, color = Color.Gray)
+        }
+    }
 }
