@@ -65,8 +65,6 @@ interface PaseCarteraDao {
 interface SolicitudDao {
     @Query("SELECT * FROM solicitud_table ORDER BY id ASC")
     fun getAllSolicitud(): Flow<List<SolicitudEntity>>
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(items: List<SolicitudEntity>)
     @Query("UPDATE solicitud_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
     suspend fun updateEstadoLocal(id: String, nuevoEstado: String)
     @Query("UPDATE solicitud_table SET audioUrl = :uri, isDirty = 1 WHERE id = :id")
@@ -137,7 +135,7 @@ interface FiltrarDao {
     @Query("SELECT * FROM filtrar_table WHERE isDirty = 1")
     suspend fun getDirtyItems(): List<FiltrarEntity>
     @Query("UPDATE filtrar_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
-    suspend fun markAsClean(id: String, remoteImg: String? = null, syncTime: Long = System.currentTimeMillis())
+    suspend fun markAsClean(id: String, syncTime: Long = System.currentTimeMillis())
 }
 
 @Dao
