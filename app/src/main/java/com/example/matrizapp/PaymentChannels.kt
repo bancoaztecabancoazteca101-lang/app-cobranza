@@ -129,12 +129,6 @@ private fun buildAddress(tags: JSONObject): String = listOf(
     tags.optString("addr:street"), tags.optString("addr:housenumber"), tags.optString("addr:suburb"), tags.optString("addr:postcode")
 ).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Dirección no disponible" }
 
-private fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
-    val dLat = Math.toRadians(b.first - a.first); val dLng = Math.toRadians(b.second - a.second)
-    val x = sin(dLat / 2).pow(2.0) + cos(Math.toRadians(a.first)) * cos(Math.toRadians(b.first)) * sin(dLng / 2).pow(2.0)
-    return 6371.0088 * 2 * atan2(sqrt(x), sqrt(1 - x))
-}
-
 @SuppressLint("MissingPermission")
 private fun pairedPrinters(context: Context): List<BluetoothDevice> {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return emptyList()
