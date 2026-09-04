@@ -2,8 +2,11 @@ package com.example.matrizapp
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -33,6 +36,8 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
         val data = message.data
         val title = data["title"] ?: message.notification?.title ?: "Matriz App"
         val body = data["body"] ?: message.notification?.body ?: "Nuevo retorno"
+        val ubicacion = data["ubicacion"]
+        val eventId = data["eventId"] ?: ""
 
         createNotificationChannel()
 
@@ -45,7 +50,7 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
 
-        val notification = NotificationCompat.Builder(this, channelId)
+        val builder = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
             .setContentText(body)
@@ -54,12 +59,49 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .build()
+
+        // Si el retorno trae coordenadas "lat, lng", muestra un botón que abre
+        // Google Maps directamente en modo navegación.
+        val latLng = parseLatLng(ubicacion)
+        if (latLng != null) {
+            val navIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("google.navigation:q=${latLng.first},${latLng.second}&mode=d")
+            ).apply {
+                setPackage("com.google.android.apps.maps")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            val navPendingIntent = PendingIntent.getActivity(
+                this,
+                ("nav_$eventId").hashCode(),
+                navIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            builder.addAction(
+                android.R.drawable.ic_menu_mylocation,
+                "Iniciar ruta",
+                navPendingIntent
+            )
+        }
+
+        val notification = builder.build()
 
         NotificationManagerCompat.from(this).notify(
-            (System.currentTimeMillis() % Int.MAX_VALUE).toInt(),
+            (eventId.ifBlank { System.currentTimeMillis().toString() }).hashCode(),
             notification
         )
+    }
+
+    private fun parseLatLng(raw: String?): Pair<Double, Double>? {
+        if (raw.isNullOrBlank()) return null
+        val parts = raw.split(",").map { it.trim() }
+        if (parts.size != 2) return null
+        val lat = parts[0].toDoubleOrNull() ?: return null
+        val lng = parts[1].toDoubleOrNull() ?: return null
+        if (lat !in -90.0..90.0 || lng !in -180.0..180.0) return null
+        return lat to lng
     }
 
     private fun createNotificationChannel() {
@@ -84,7 +126,7 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
             "Retornos multi-dispositivo",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Avisos de RETORNO con fecha y hora"
+            description = "Avisos de RETORNO con fecha y hora y acceso directo a la ruta"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 300, 200, 300)
             setSound(soundUri, audioAttributes)
