@@ -34,7 +34,7 @@ class RetornoAlarmReceiver : BroadcastReceiver() {
                     ubicacion = matriz.ubicacion ?: ubicacion
                     requerido = matriz.requisito.ifBlank { requerido ?: "" }
                 } else {
-                    val filtro = db.filtroFechaDao().getById(id)
+                    val filtro = db.filtroDao().getById(id)
                     if (filtro != null) {
                         nombre = filtro.nombre.ifBlank { nombre }
                         numTT = filtro.numTT.ifBlank { numTT ?: "" }
