@@ -99,7 +99,7 @@ class RutaIAViewModel(
                 // 3) Geocodificar + cruzar cada cliente
                 _progreso.value = "Ubicando direcciones (0/${extraidos.size})..."
                 val fechaHoy = inicioDeHoy()
-                val nuevos = extraidos.mapIndexed { idx, (cliente, _) ->
+                val nuevos = extraidos.mapIndexed { idx, (cliente, fotoUri) ->
                     _progreso.value = "Ubicando direcciones (${idx + 1}/${extraidos.size})..."
                     val coords = geocodificarDireccion(context, cliente.direccion)
                     val matchMatriz = buscarEnMatriz(cliente.nombre)
@@ -116,6 +116,7 @@ class RutaIAViewModel(
                         esNuevo = matchMatriz == null,
                         cuMatrizMatch = matchMatriz?.id,
                         fechaDia = fechaHoy,
+                        fotoOrigenUrl = fotoUri.toString(),
                         isDirty = true
                     )
                 }
@@ -148,6 +149,11 @@ class RutaIAViewModel(
     fun marcarVisitado(id: String) {
         viewModelScope.launch { rutaIADao.updateEstadoLocal(id, "Visitado") }
     }
+
+    /** Para abrir el registro existente en Matriz cuando el cliente sí tuvo match (no es nuevo).
+     * Si no hay match (cliente nuevo, sin datos en Matriz), devuelve null y la pantalla no
+     * intenta abrir nada. */
+    suspend fun buscarMatrizPorId(id: String): MatrizEntity? = matrizDao.getById(id)
 
     /** Borrado manual de la ruta actual (además del borrado automático de madrugada por
      * Apps Script) -- por si Diego quiere limpiar y volver a tomar fotos a media mañana. */

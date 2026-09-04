@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,11 +23,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
+import kotlinx.coroutines.launch
 
 @Composable
-fun RutaIAScreen(viewModel: RutaIAViewModel) {
+fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val rutaOrdenada by viewModel.rutaOrdenada.collectAsState()
     val criterios by viewModel.criterios.collectAsState()
     val procesando by viewModel.procesando.collectAsState()
@@ -36,6 +40,9 @@ fun RutaIAScreen(viewModel: RutaIAViewModel) {
     var mostrarPanelFotos by remember { mutableStateOf(false) }
     var mostrarFiltro by remember { mutableStateOf(false) }
     var fotoTemporalUri by remember { mutableStateOf<Uri?>(null) }
+    var fotoAmpliada by remember { mutableStateOf<Uri?>(null) }
+    var matrizAbierto by remember { mutableStateOf<MatrizEntity?>(null) }
+    var matrizAEditar by remember { mutableStateOf<MatrizEntity?>(null) }
 
     val tomarFotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { exito ->
         if (exito && fotoTemporalUri != null) fotosCapturadas = fotosCapturadas + fotoTemporalUri!!
@@ -87,7 +94,25 @@ fun RutaIAScreen(viewModel: RutaIAViewModel) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     itemsIndexed(rutaOrdenada, key = { _, item -> item.id }) { idx, item ->
-                        RutaIAItemCard(item = item, posicion = idx + 1, onMarcarVisitado = { viewModel.marcarVisitado(item.id) })
+                        RutaIAItemCard(
+                            item = item, posicion = idx + 1,
+                            onMarcarVisitado = {
+                                viewModel.marcarVisitado(item.id)
+                                Toast.makeText(context, "Marcado como visitado", Toast.LENGTH_SHORT).show()
+                            },
+                            onVerFoto = { item.fotoOrigenUrl?.let { fotoAmpliada = Uri.parse(it) } },
+                            onAbrirEnMatriz = {
+                                if (item.esNuevo || item.cuMatrizMatch == null) {
+                                    Toast.makeText(context, "Cliente nuevo: todavía no existe en Matriz", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    scope.launch {
+                                        val registro = viewModel.buscarMatrizPorId(item.cuMatrizMatch)
+                                        if (registro != null) matrizAbierto = registro
+                                        else Toast.makeText(context, "No se encontró el registro en Matriz", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -162,6 +187,47 @@ fun RutaIAScreen(viewModel: RutaIAViewModel) {
             onAplicar = { nuevos -> viewModel.actualizarCriterios(nuevos); mostrarFiltro = false }
         )
     }
+
+    // Foto de origen ampliada (la foto completa que se tomó esa mañana, no un recorte del
+    // cliente individual -- ver nota en RutaIAItemCard sobre por qué no se recorta la carita).
+    fotoAmpliada?.let { uri ->
+        Dialog(onDismissRequest = { fotoAmpliada = null }) {
+            Box(Modifier.clip(RoundedCornerShape(12.dp))) {
+                coil.compose.AsyncImage(
+                    model = uri, contentDescription = null,
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.FillWidth
+                )
+            }
+        }
+    }
+
+    // Registro existente en Matriz (solo llega aquí si el cliente sí tuvo match) -- se
+    // reutilizan los mismos diálogos de detalle/edición que usa la pantalla de Matriz.
+    matrizAbierto?.let { item ->
+        MatrizDetailDialog(
+            item = item,
+            driveHelper = matrizViewModel.driveHelper,
+            onDismiss = { matrizAbierto = null },
+            onEditClick = { matrizAEditar = item; matrizAbierto = null }
+        )
+    }
+    matrizAEditar?.let { item ->
+        MatrizFullFormDialog(
+            item = item,
+            viewModel = matrizViewModel,
+            onDismiss = { matrizAEditar = null },
+            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+                matrizViewModel.cambiarIdYGuardar(
+                    item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2,
+                    observaciones, estado, ubicacion, fecha, hora, ruta, folioP
+                ) { exito, error ->
+                    if (!exito) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
+                }
+                matrizAEditar = null
+            }
+        )
+    }
 }
 
 @Composable
@@ -175,10 +241,17 @@ private fun ResumenCriteriosChip(criterios: List<CriterioOrdenRutaIA>) {
 }
 
 @Composable
-private fun RutaIAItemCard(item: RutaIAEntity, posicion: Int, onMarcarVisitado: () -> Unit) {
+private fun RutaIAItemCard(
+    item: RutaIAEntity,
+    posicion: Int,
+    onMarcarVisitado: () -> Unit,
+    onVerFoto: () -> Unit,
+    onAbrirEnMatriz: () -> Unit
+) {
     val context = LocalContext.current
     val visitado = item.estado.equals("Visitado", ignoreCase = true)
     Card(
+        onClick = onAbrirEnMatriz,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = if (visitado) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface)
     ) {
@@ -187,7 +260,20 @@ private fun RutaIAItemCard(item: RutaIAEntity, posicion: Int, onMarcarVisitado: 
                 Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
                 Alignment.Center
             ) { Text("$posicion", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(8.dp))
+            // Miniatura de la foto de origen (la foto completa de esa mañana, no un recorte del
+            // cliente): recortar la carita redonda de cada cliente no sale confiable porque las
+            // fotos son de una pantalla física (reflejos, ángulo, movimiento) -- así al menos
+            // Diego puede tocarla y ver de qué foto salió ese cliente si necesita revisar algo.
+            if (item.fotoOrigenUrl != null) {
+                coil.compose.AsyncImage(
+                    model = Uri.parse(item.fotoOrigenUrl), contentDescription = "Foto de origen",
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onVerFoto),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(item.nombre, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
@@ -203,23 +289,32 @@ private fun RutaIAItemCard(item: RutaIAEntity, posicion: Int, onMarcarVisitado: 
                 if (item.lat == null || item.lng == null) {
                     Text("Sin ubicar en el mapa", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                 }
+                if (!item.esNuevo) {
+                    Text("Toca la tarjeta para ver el registro en Matriz", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 if (item.lat != null && item.lng != null) {
-                    IconButton(onClick = {
-                        val intent = android.content.Intent(
-                            android.content.Intent.ACTION_VIEW,
-                            android.net.Uri.parse("geo:${item.lat},${item.lng}?q=${item.lat},${item.lng}(${android.net.Uri.encode(item.nombre)})")
-                        )
-                        try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "No hay app de mapas instalada", Toast.LENGTH_SHORT).show() }
-                    }) { Icon(Icons.Default.Map, contentDescription = "Ver en mapa") }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = {
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("geo:${item.lat},${item.lng}?q=${item.lat},${item.lng}(${android.net.Uri.encode(item.nombre)})")
+                            )
+                            try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "No hay app de mapas instalada", Toast.LENGTH_SHORT).show() }
+                        }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Map, contentDescription = "Ver en mapa") }
+                        Text("Mapa", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    }
                 }
-                IconButton(onClick = onMarcarVisitado, enabled = !visitado) {
-                    Icon(
-                        if (visitado) Icons.Default.CheckCircle else Icons.Default.CheckCircleOutline,
-                        contentDescription = "Marcar visitado",
-                        tint = if (visitado) Color(0xFF4CAF50) else LocalContentColor.current
-                    )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(onClick = onMarcarVisitado, enabled = !visitado, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            if (visitado) Icons.Default.CheckCircle else Icons.Default.CheckCircleOutline,
+                            contentDescription = "Marcar como visitado",
+                            tint = if (visitado) Color(0xFF4CAF50) else LocalContentColor.current
+                        )
+                    }
+                    Text(if (visitado) "Visitado" else "Visitar", style = MaterialTheme.typography.labelSmall, color = if (visitado) Color(0xFF4CAF50) else Color.Gray)
                 }
             }
         }

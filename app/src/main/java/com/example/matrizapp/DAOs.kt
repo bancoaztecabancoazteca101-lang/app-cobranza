@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.Flow
 interface MatrizDao {
     @Query("SELECT * FROM matriz_table WHERE nombre NOT LIKE '%Pase semana%' AND nombre != '' ORDER BY id ASC")
     fun getAllMatriz(): Flow<List<MatrizEntity>>
+    @Query("SELECT * FROM matriz_table WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): MatrizEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<MatrizEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE)

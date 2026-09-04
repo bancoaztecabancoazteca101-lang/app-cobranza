@@ -377,7 +377,7 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Llamadas.route) { CallScreen(callVm) }
                         composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
                         composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
-                        composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm) }
+                        composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm) }
                     }
                 }
                 }

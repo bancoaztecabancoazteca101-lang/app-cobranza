@@ -103,8 +103,32 @@ data class ClienteRutaIAExtraido(
 )
 
 private val REGEX_CU_RUTA = Regex("""\d{2}-\d{2,}-\d{5}-\d+""")
-private val REGEX_DIAS_RUTA = Regex("""D[ií]as?\s+atraso\D{0,10}(\d+)""", RegexOption.IGNORE_CASE)
-private val REGEX_PAGO_RUTA = Regex("""Pago\s+requerido\D{0,10}\$?\s*([\d,]+)""", RegexOption.IGNORE_CASE)
+private val REGEX_DIAS_RUTA = Regex("""D[ií]as?\s+atraso\D{0,25}?(\d+)""", RegexOption.IGNORE_CASE)
+private val REGEX_PAGO_RUTA = Regex("""Pago\s+requerido\D{0,25}?\$?\s*([\d,]+)""", RegexOption.IGNORE_CASE)
+// Ruido típico de la barra de estado del dispositivo (hora, red, batería) que a veces el OCR
+// intercala entre las líneas de una tarjeta cuando la foto tiene reflejo/inclinación -- se
+// limpia línea por línea ANTES de segmentar, para que no contamine ni la dirección ni los
+// campos numéricos de la tarjeta.
+private val REGEX_RUIDO_RED = Regex("""\b\d{1,2}[Gg]\w{0,3}\b""") // "4G", "4G73", "5G"
+private val REGEX_RUIDO_BATERIA = Regex("""\b\d{1,3}\s?%""") // "87 %", "73%"
+private val REGEX_RUIDO_HORA = Regex("""\b\d{1,2}:\d{2}\b""") // "8:50", "19:17"
+
+private fun limpiarRuidoStatusBar(linea: String): String {
+    var l = linea
+    l = REGEX_RUIDO_RED.replace(l, " ")
+    l = REGEX_RUIDO_BATERIA.replace(l, " ")
+    l = REGEX_RUIDO_HORA.replace(l, " ")
+    return l.replace(Regex("""\s{2,}"""), " ").trim()
+}
+
+/** Quita cualquier residuo de las etiquetas "Dias atraso" / "Pago requerido" que se haya
+ * colado en la dirección (red de seguridad, además del corte por índice de línea de abajo). */
+private fun limpiarEtiquetasResiduales(texto: String): String {
+    var t = texto
+    t = Regex("""D[ií]as?\s+atraso""", RegexOption.IGNORE_CASE).replace(t, " ")
+    t = Regex("""Pago\s+requerido""", RegexOption.IGNORE_CASE).replace(t, " ")
+    return t.replace(Regex("""\s{2,}"""), " ").trim(' ', ',', '.', '-')
+}
 
 /** Segmenta el texto crudo del OCR (una foto con 2-3 tarjetas de "Clientes de cobranza") en
  * clientes individuales. Cada tarjeta trae: Nombre, luego el CU (patrón NN-NN-NNNNN-NNNN...),
@@ -112,7 +136,9 @@ private val REGEX_PAGO_RUTA = Regex("""Pago\s+requerido\D{0,10}\$?\s*([\d,]+)"""
  * es el único campo con formato 100% fijo y reconocible por regex; el nombre es la línea
  * inmediatamente anterior al CU dentro del mismo bloque. */
 fun parsearClientesRutaIA(textoOcr: String): List<ClienteRutaIAExtraido> {
-    val lineas = textoOcr.lines().map { it.trim() }.filter { it.isNotBlank() }
+    val lineas = textoOcr.lines()
+        .map { limpiarRuidoStatusBar(it) }
+        .filter { it.isNotBlank() }
     val resultados = mutableListOf<ClienteRutaIAExtraido>()
     var i = 0
     while (i < lineas.size) {
@@ -130,8 +156,15 @@ fun parsearClientesRutaIA(textoOcr: String): List<ClienteRutaIAExtraido> {
             val bloqueTexto = bloque.joinToString(" ")
             val dias = REGEX_DIAS_RUTA.find(bloqueTexto)?.groupValues?.get(1)?.toIntOrNull()
             val pago = REGEX_PAGO_RUTA.find(bloqueTexto)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
+            // La dirección es todo lo que viene ANTES de la primera etiqueta que aparezca
+            // ("Dias atraso" o "Pago requerido", lo que esté primero) -- así, aunque el regex de
+            // uno de los dos números falle por ruido de OCR, la etiqueta en sí sigue marcando
+            // dónde termina la dirección y no se cuela texto de más.
             val idxDias = bloque.indexOfFirst { it.contains("Dias atraso", true) || it.contains("Días atraso", true) }
-            val direccion = (if (idxDias > 0) bloque.subList(0, idxDias) else bloque).joinToString(" ").trim()
+            val idxPago = bloque.indexOfFirst { it.contains("Pago requerido", true) }
+            val idxCorte = listOf(idxDias, idxPago).filter { it >= 0 }.minOrNull() ?: -1
+            val direccionCruda = (if (idxCorte > 0) bloque.subList(0, idxCorte) else bloque).joinToString(" ")
+            val direccion = limpiarEtiquetasResiduales(direccionCruda)
             if (nombre.isNotBlank() && nombre.replace(" ", "").any { it.isLetter() }) {
                 resultados.add(ClienteRutaIAExtraido(nombre = nombre, cu = cu, direccion = direccion, diasAtraso = dias, pagoRequerido = pago))
             }
