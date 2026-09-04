@@ -3,10 +3,10 @@ const CONFIG = {
   SPREADSHEET_ID: '1iMFndEHeEOs95egkOkhhc-2yfhwfFSY3YNNuwR_NsMA',
   SHEET_NAME: 'Matriz ',
   DEVICES_SHEET: 'NotificacionesDispositivos',
-  API_KEY: 'MatrizFCM-2026-cambiar-esta-clave'
+  API_KEY: 'MatrizFCM'
 };
 
-const COL = { ESTADO: 7, FECHA: 11, ID: 12, HORA: 13 };
+const COL = { ESTADO: 7, UBICACION: 8, FECHA: 11, ID: 12, HORA: 13 };
 
 function doGet(e) { return json_(handle_(e && e.parameter ? e.parameter : {})); }
 function doPost(e) {
@@ -48,7 +48,7 @@ function toggle_(p) {
   for(let i=1;i<values.length;i++) if(String(values[i][0])===String(p.deviceId)){ const enabled=String(p.enabled).toLowerCase()==='true'; sh.getRange(i+1,4).setValue(enabled); return {ok:true,deviceId:p.deviceId,enabled}; }
   return {ok:false,error:'device_not_found'};
 }
-function test_(p){return sendToEnabledDevices_({title:String(p.title||'Matriz App'),body:String(p.body||'Notificación de prueba'),eventId:'TEST-'+Date.now()},p.deviceId?[String(p.deviceId)]:null);}
+function test_(p){return sendToEnabledDevices_({title:String(p.title||'Matriz App'),body:String(p.body||'Notificación de prueba'),eventId:'TEST-'+Date.now(),ubicacion:String(p.ubicacion||'')},p.deviceId?[String(p.deviceId)]:null);}
 function pollRetornos_() {
   const sh=SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.SHEET_NAME);
   if(!sh)return{ok:false,error:'matriz_sheet_not_found'};
@@ -61,7 +61,7 @@ function pollRetornos_() {
     if(Math.abs(dt.getTime()-now.getTime())>90*1000)continue;
     const rowId=String(values[r][COL.ID]||r+1),eventId='RETORNO:'+rowId+':'+Utilities.formatDate(dt,Session.getScriptTimeZone(),'yyyy-MM-dd-HH-mm');
     if(sent[eventId])continue;
-    const result=sendToEnabledDevices_({title:'Retorno',body:String(values[r][0]||'Cliente')+' tiene retorno a las '+Utilities.formatDate(dt,Session.getScriptTimeZone(),'HH:mm'),eventId,rowId},null);
+    const result=sendToEnabledDevices_({title:'Retorno',body:String(values[r][0]||'Cliente')+' tiene retorno a las '+Utilities.formatDate(dt,Session.getScriptTimeZone(),'HH:mm'),eventId:eventId,rowId:rowId,ubicacion:String(values[r][COL.UBICACION]||'')},null);
     if(result.ok&&result.sent>0){sent[eventId]=Date.now();delivered+=result.sent;}
   }
   props.setProperty('sentEvents',JSON.stringify(sent)); return {ok:true,sent:delivered};
@@ -71,12 +71,13 @@ function combineDateTime_(dateValue,timeValue){
   if(timeValue instanceof Date)d.setHours(timeValue.getHours(),timeValue.getMinutes(),0,0); else {const m=String(timeValue||'').match(/(\d{1,2})[:.](\d{2})/);if(!m)return null;d.setHours(Number(m[1]),Number(m[2]),0,0);} return d;
 }
 function sendToEnabledDevices_(message,targetIds){
-  const devices=rows_().filter(r=>Boolean(r[3])&&r[2]&&(!targetIds||targetIds.indexOf(String(r[0]))>=0)); let sent=0,failed=0;
+  const devices=rows_().filter(r=>(r[3]===true||String(r[3]).toLowerCase()==='true')&&r[2]&&(!targetIds||targetIds.indexOf(String(r[0]))>=0)); let sent=0,failed=0;
   devices.forEach(r=>{try{sendFcm_(String(r[2]),message);sent++;}catch(err){failed++;Logger.log('FCM error for '+r[0]+': '+err);}}); return {ok:true,sent,failed};
 }
 function sendFcm_(token,message){
-  const response=UrlFetchApp.fetch('https://fcm.googleapis.com/v1/projects/'+CONFIG.PROJECT_ID+'/messages:send',{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},payload:JSON.stringify({message:{token,data:{title:String(message.title||'Matriz App'),body:String(message.body||''),eventId:String(message.eventId||''),rowId:String(message.rowId||'')},android:{priority:'HIGH'}}}),muteHttpExceptions:true});
+  const response=UrlFetchApp.fetch('https://fcm.googleapis.com/v1/projects/'+CONFIG.PROJECT_ID+'/messages:send',{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},payload:JSON.stringify({message:{token,data:{title:String(message.title||'Matriz App'),body:String(message.body||''),eventId:String(message.eventId||''),rowId:String(message.rowId||''),ubicacion:String(message.ubicacion||'')},android:{priority:'HIGH'}}}),muteHttpExceptions:true});
   const code=response.getResponseCode(); if(code<200||code>=300)throw new Error(code+': '+response.getContentText());
 }
 function installMinuteTrigger(){ScriptApp.getProjectTriggers().forEach(t=>{if(t.getHandlerFunction()==='pollRetornos_')ScriptApp.deleteTrigger(t);});ScriptApp.newTrigger('pollRetornos_').timeBased().everyMinutes(1).create();}
+function configurarBackend(){const sh=sheet_();installMinuteTrigger();Logger.log('Hoja creada: '+sh.getName());Logger.log('Activador configurado: pollRetornos_ cada minuto');return {ok:true,sheetName:sh.getName(),trigger:'pollRetornos_ cada minuto',headers:sh.getRange(1,1,1,7).getValues()[0]};}
 function json_(obj){return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);}
