@@ -15,6 +15,13 @@
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <!-- Permisos clásicos de Bluetooth para Android <12 (API <31): sin estos, BluetoothAdapter
+         .getDefaultAdapter()/.bondedDevices/createRfcommSocketToServiceRecord truena con
+         SecurityException en esas versiones, aunque el permiso runtime BLUETOOTH_CONNECT nunca
+         se pida ahí. minSdk del proyecto es 24, así que hacen falta los dos. maxSdkVersion=30
+         evita que Android 12+ los muestre como permisos "instalados" de más. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <application android:name=".MainApplication" android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:label="Matriz App" android:roundIcon="@mipmap/ic_launcher_round" android:supportsRtl="true" android:theme="@style/Theme.Material3.DayNight">
         <meta-data android:name="com.google.android.geo.API_KEY" android:value="${MAPS_API_KEY}" />
         <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>

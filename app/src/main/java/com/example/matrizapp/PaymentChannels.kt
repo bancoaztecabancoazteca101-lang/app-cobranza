@@ -41,8 +41,17 @@ private const val MAX_CHANNELS = 3
 private const val TICKET_WIDTH = 32
 private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
 
-data class PaymentChannel(val name: String, val type: String, val address: String, val distanceKm: Double, val lat: Double, val lng: Double)
+data class PaymentChannel(val name: String, val type: String, val categoria: CategoriaCanalPago, val address: String, val distanceKm: Double, val lat: Double, val lng: Double)
 data class PaymentChannelSearchResult(val channels: List<PaymentChannel>, val error: String? = null)
+
+/** PRINCIPAL = canales propios de Grupo Elektra (Elektra, Elektra Motos, Banco Azteca, Italika,
+ * Tiendas Neto). AFILIADO = puntos de pago de terceros (OXXO, 7-Eleven, Soriana, Chedraui) --
+ * se muestran aparte porque no son "canal autorizado" en el mismo sentido, son solo lugares
+ * donde también se puede pagar. */
+enum class CategoriaCanalPago(val etiqueta: String) {
+    PRINCIPAL("Canal Elektra"),
+    AFILIADO("Punto de pago afiliado")
+}
 
 private fun parseCoordinates(text: String?): Pair<Double, Double>? {
     if (text.isNullOrBlank()) return null
@@ -97,12 +106,12 @@ private fun parseOverpassChannels(json: String, origin: Pair<Double, Double>): P
         val name = tags.optString("name").trim()
         val brand = tags.optString("brand").trim()
         val raw = if (name.isNotBlank()) name else brand
-        val type = classifyChannel(raw, brand, tags.optString("operator")) ?: continue
+        val clasificacion = classifyChannel(raw, brand, tags.optString("operator")) ?: continue
         val center = e.optJSONObject("center")
         val lat = if (e.has("lat")) e.optDouble("lat", Double.NaN) else center?.optDouble("lat", Double.NaN) ?: Double.NaN
         val lng = if (e.has("lon")) e.optDouble("lon", Double.NaN) else center?.optDouble("lon", Double.NaN) ?: Double.NaN
         if (lat.isNaN() || lng.isNaN()) continue
-        candidates += PaymentChannel(raw, type, buildAddress(tags), distanciaKm(origin, lat to lng), lat, lng)
+        candidates += PaymentChannel(raw, clasificacion.tipo, clasificacion.categoria, buildAddress(tags), distanciaKm(origin, lat to lng), lat, lng)
     }
     val unique = candidates.sortedBy { it.distanceKm }
         .distinctBy { "${it.name.lowercase(Locale.getDefault())}|${"%.5f".format(Locale.US, it.lat)}|${"%.5f".format(Locale.US, it.lng)}" }
@@ -110,17 +119,24 @@ private fun parseOverpassChannels(json: String, origin: Pair<Double, Double>): P
     return if (unique.isEmpty()) PaymentChannelSearchResult(emptyList(), "No se encontraron lugares de pago cercanos en el catálogo disponible.") else PaymentChannelSearchResult(unique)
 }
 
-private fun classifyChannel(name: String, brand: String, operator: String): String? {
+private data class ClasificacionCanal(val tipo: String, val categoria: CategoriaCanalPago)
+
+/** Clasificación por texto, sin buscar exactitud de sucursal -- solo qué cadena es y si es
+ * canal principal (Grupo Elektra) o afiliado (tercero). "Elektra Motos" se revisa antes que
+ * "Elektra" a secas porque si no, cualquier local con "Elektra Motos" en el nombre cae
+ * genérico en "Elektra" y se pierde el caso Motos. */
+private fun classifyChannel(name: String, brand: String, operator: String): ClasificacionCanal? {
     val t = "$name $brand $operator".lowercase(Locale.getDefault())
     return when {
-        "banco azteca" in t -> "Banco Azteca"
-        "elektra" in t -> "Elektra"
-        "italika" in t -> "Italika"
-        "neto" in t -> "Tiendas Neto"
-        "oxxo" in t -> "OXXO"
-        "7-eleven" in t || "seven eleven" in t -> "7-Eleven"
-        "soriana" in t -> "Soriana"
-        "chedraui" in t -> "Chedraui"
+        "elektra motos" in t -> ClasificacionCanal("Elektra Motos", CategoriaCanalPago.PRINCIPAL)
+        "banco azteca" in t -> ClasificacionCanal("Banco Azteca", CategoriaCanalPago.PRINCIPAL)
+        "elektra" in t -> ClasificacionCanal("Elektra", CategoriaCanalPago.PRINCIPAL)
+        "italika" in t -> ClasificacionCanal("Italika", CategoriaCanalPago.PRINCIPAL)
+        "neto" in t -> ClasificacionCanal("Tiendas Neto", CategoriaCanalPago.PRINCIPAL)
+        "oxxo" in t -> ClasificacionCanal("OXXO", CategoriaCanalPago.AFILIADO)
+        "7-eleven" in t || "seven eleven" in t -> ClasificacionCanal("7-Eleven", CategoriaCanalPago.AFILIADO)
+        "soriana" in t -> ClasificacionCanal("Soriana", CategoriaCanalPago.AFILIADO)
+        "chedraui" in t -> ClasificacionCanal("Chedraui", CategoriaCanalPago.AFILIADO)
         else -> null
     }
 }
@@ -180,7 +196,7 @@ fun PaymentChannelsDialog(customerName: String, ubicacion: String?, onDismiss: (
                             items(channels) { ch ->
                                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                     Text(ch.name, style = MaterialTheme.typography.titleSmall)
-                                    Text("${ch.type} · ${"%.2f".format(Locale.US, ch.distanceKm)} km")
+                                    Text("${ch.type} · ${ch.categoria.etiqueta} · ${"%.2f".format(Locale.US, ch.distanceKm)} km")
                                     Text(ch.address, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
@@ -245,7 +261,7 @@ private class ThermalPrinterManager(private val context: Context) {
         cmd(0x1B,0x21,8); write("muy cerca de tu domicilio:\n"); cmd(0x1B,0x21,0); write("\n")
         channels.forEachIndexed { i, ch ->
             cmd(0x1B,0x61,0); cmd(0x1B,0x21,8); write("${ch.name.take(TICKET_WIDTH)}\n"); cmd(0x1B,0x21,0)
-            write("${ch.type}\nDistancia: ${"%.2f".format(Locale.US, ch.distanceKm)} KM\n")
+            write("${ch.categoria.etiqueta}\nDistancia: ${"%.2f".format(Locale.US, ch.distanceKm)} KM\n")
             write(wrapText(ch.address, TICKET_WIDTH)); write("\n")
             if (i != channels.lastIndex) write("--------------------------------\n")
         }
