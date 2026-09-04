@@ -51,8 +51,6 @@ interface PaseCarteraDao {
     suspend fun actualizar(item: PaseEntity)
     @Query("DELETE FROM pase_cartera_table WHERE id = :id")
     suspend fun eliminar(id: String)
-    /** ids de los registros de Matriz que YA se copiaron a Pase -- para no duplicar la copia
-     * si el registro de Matriz sigue en status "PASE" en el siguiente refresh. */
     @Query("SELECT origenMatrizId FROM pase_cartera_table")
     suspend fun getOrigenesYaCopiados(): List<String>
     @Query("UPDATE pase_cartera_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
@@ -110,12 +108,12 @@ interface FiltroFechaDao {
     fun getAll(): Flow<List<FiltroFechaEntity>>
     @Query("SELECT * FROM filtro_fecha_table WHERE fecha BETWEEN :desde AND :hasta ORDER BY fecha DESC")
     fun getItemsByRange(desde: Long, hasta: Long): Flow<List<FiltroFechaEntity>>
+    @Query("SELECT * FROM filtro_fecha_table WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): FiltroFechaEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<FiltroFechaEntity>)
     @Query("DELETE FROM filtro_fecha_table")
     suspend fun deleteAll()
-    /** Igual que deleteAll pero conserva las filas con cambios locales aún sin subir (isDirty=1),
-     * para que un refresh no borre un status editado desde la app antes de que se sincronice. */
     @Query("DELETE FROM filtro_fecha_table WHERE isDirty = 0")
     suspend fun deleteAllClean()
     @Query("UPDATE filtro_fecha_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
@@ -132,14 +130,14 @@ interface FiltroFechaDao {
 interface FiltrarDao {
     @Query("SELECT * FROM filtrar_table ORDER BY nombre ASC")
     fun getAll(): Flow<List<FiltrarEntity>>
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(items: List<FiltrarEntity>)
     @Query("UPDATE filtrar_table SET estado = :nuevoEstado, observaciones = :obs, isDirty = 1 WHERE id = :id")
     suspend fun updateGestionLocal(id: String, nuevoEstado: String, obs: String)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<FiltrarEntity>)
     @Query("SELECT * FROM filtrar_table WHERE isDirty = 1")
     suspend fun getDirtyItems(): List<FiltrarEntity>
     @Query("UPDATE filtrar_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
-    suspend fun markAsClean(id: String, syncTime: Long = System.currentTimeMillis())
+    suspend fun markAsClean(id: String, remoteImg: String? = null, syncTime: Long = System.currentTimeMillis())
 }
 
 @Dao
@@ -160,8 +158,6 @@ interface RutaIADao {
     suspend fun insertAll(items: List<RutaIAEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOne(item: RutaIAEntity)
-    /** Reemplaza toda la ruta del día: se usa al procesar un lote nuevo de fotos para no
-     * acumular rutas de días/lotes anteriores encima. */
     @Query("DELETE FROM ruta_ia_table")
     suspend fun deleteAll()
     @Query("UPDATE ruta_ia_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
