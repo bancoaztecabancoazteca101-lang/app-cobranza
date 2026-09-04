@@ -41,19 +41,14 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
         val ubicacion = data["ubicacion"]
         val colonia = data["colonia"]?.takeIf { it.isNotBlank() }
         val calle = data["calle"]?.takeIf { it.isNotBlank() }
+        val numTT = data["numTT"]?.takeIf { it.isNotBlank() }
 
         createNotificationChannel()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(
-                this,
-                android.Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
 
-        // La notificación ya no muestra el teléfono. Muestra el requerido/saldo y la dirección.
         val fallbackBody = data["body"] ?: message.notification?.body ?: "Nuevo retorno"
         val direccion = listOfNotNull(colonia, calle).joinToString(" — ")
         val body = buildString {
@@ -77,34 +72,41 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
 
-        // Botón "Iniciar ruta": abre Google Maps directamente en navegación.
         val latLng = parseLatLng(ubicacion)
         if (latLng != null) {
-            val navIntent = Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse("google.navigation:q=${latLng.first},${latLng.second}&mode=d")
-            ).apply {
+            val navIntent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=${latLng.first},${latLng.second}&mode=d")).apply {
                 setPackage("com.google.android.apps.maps")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-
             val navPendingIntent = PendingIntent.getActivity(
-                this,
-                ("nav_$eventId").hashCode(),
-                navIntent,
+                this, ("nav_$eventId").hashCode(), navIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+            builder.addAction(android.R.drawable.ic_menu_mylocation, "Iniciar ruta", navPendingIntent)
+        }
 
-            builder.addAction(
-                android.R.drawable.ic_menu_mylocation,
-                "Iniciar ruta",
-                navPendingIntent
-            )
+        val digits = numTT.orEmpty().filter { it.isDigit() }
+        val whatsappNumber = when {
+            digits.length == 10 -> "52$digits"
+            digits.length in 11..15 -> digits
+            else -> ""
+        }
+        if (whatsappNumber.isNotBlank()) {
+            val whatsappIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$whatsappNumber")).apply {
+                setPackage("com.whatsapp")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (whatsappIntent.resolveActivity(packageManager) != null) {
+                val waPendingIntent = PendingIntent.getActivity(
+                    this, ("wa_$eventId").hashCode(), whatsappIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                builder.addAction(android.R.drawable.ic_dialog_email, "WhatsApp", waPendingIntent)
+            }
         }
 
         NotificationManagerCompat.from(this).notify(
-            (eventId.ifBlank { System.currentTimeMillis().toString() }).hashCode(),
-            builder.build()
+            (eventId.ifBlank { System.currentTimeMillis().toString() }).hashCode(), builder.build()
         )
     }
 
@@ -120,32 +122,19 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
-        val notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (notificationManager.getNotificationChannel(channelId) != null) return
-
-        val soundUri = android.media.RingtoneManager.getDefaultUri(
-            android.media.RingtoneManager.TYPE_NOTIFICATION
-        )
-
+        val soundUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-
-        val channel = NotificationChannel(
-            channelId,
-            "Retornos multi-dispositivo",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "Avisos de RETORNO con requerido, colonia, calle y acceso directo a la ruta"
+        val channel = NotificationChannel(channelId, "Retornos multi-dispositivo", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Avisos de RETORNO con requerido, colonia, calle y acceso directo a la ruta y WhatsApp"
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 300, 200, 300)
             setSound(soundUri, audioAttributes)
         }
-
         notificationManager.createNotificationChannel(channel)
     }
 }
