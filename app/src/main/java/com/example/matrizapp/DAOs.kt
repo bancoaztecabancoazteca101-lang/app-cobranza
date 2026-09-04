@@ -79,6 +79,8 @@ interface SolicitudDao {
     suspend fun updateImagen4Local(id: String, uri: String)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOne(item: SolicitudEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<SolicitudEntity>)
     @Query("""UPDATE solicitud_table SET nombre = :nombre, numero = :numero, sucursal = :sucursal,
         ubicacionRaw = :ubicacion, nombreRef1 = :nombreRef1, ref1 = :ref1, nombreRef2 = :nombreRef2, ref2 = :ref2,
         observaciones = :observaciones, estado = :estado,
