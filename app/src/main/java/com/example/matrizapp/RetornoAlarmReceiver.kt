@@ -1,4 +1,5 @@
 package com.example.matrizapp
+
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -13,19 +14,26 @@ class RetornoAlarmReceiver : BroadcastReceiver() {
         val numTT = intent.getStringExtra("numTT")
         val estado = intent.getStringExtra("estado")
         val ubicacion = intent.getStringExtra("ubicacion")
+        val requerido = intent.getStringExtra("requerido")
 
-        // Resolver la calle a partir de las coordenadas necesita el Geocoder (posiblemente
-        // consulta internet/red), así que no puede hacerse directo en onReceive: se usa
-        // goAsync() para tener tiempo de terminar la corrutina antes de que el sistema mate
-        // este BroadcastReceiver.
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
-            val calle = try {
-                resolverColoniaYCalle(context, ubicacion).second
+            val direccion = try {
+                resolverColoniaYCalle(context, ubicacion)
             } catch (e: Exception) {
-                null
+                null to null
             }
-            NotificacionesHelper.mostrarNotificacion(context, id, nombre, numTT, estado, calle, ubicacion)
+            NotificacionesHelper.mostrarNotificacion(
+                context = context,
+                id = id,
+                nombre = nombre,
+                numTT = numTT,
+                estado = estado,
+                colonia = direccion.first,
+                calle = direccion.second,
+                ubicacion = ubicacion,
+                requerido = requerido
+            )
             pendingResult.finish()
         }
     }
