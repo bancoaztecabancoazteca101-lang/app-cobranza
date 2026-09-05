@@ -31,10 +31,12 @@ class PaseCarteraViewModel(
         viewModelScope.launch {
             try {
                 preferenciasContext = context.applicationContext
-                val filas = uris.take(8).flatMap { extraerPaseDeFoto(context, it) }.distinctBy { it.cu }
+                val filas = uris.take(8).flatMap { extraerPaseDeFoto(context, it) }.distinctBy { normalizarCuPase(it.cu) }
                 val matriz = matrizDao.getAllMatriz().first()
-                val normalizarCu = { valor: String? -> valor?.trim()?.replace(" ", "")?.uppercase() ?: "" }
-                val matches = filas.count { fila -> matriz.any { normalizarCu(it.folioP) == normalizarCu(fila.cu) && fila.cu.isNotBlank() } }
+                val matches = filas.count { fila ->
+                    val cu = normalizarCuPase(fila.cu)
+                    matriz.any { normalizarCuPase(it.folioP) == cu && cu.isNotBlank() }
+                }
                 onResult(ImportResumen(filas.size, matches, filas.size - matches, filas), null)
             } catch (e: Exception) { onResult(null, e.message ?: "No se pudo procesar el reporte") }
         }
@@ -47,8 +49,8 @@ class PaseCarteraViewModel(
                 var matches = 0
                 var nuevos = 0
                 resumen.filas.forEach { fila ->
-                    val cu = fila.cu.trim().replace(" ", "").uppercase()
-                    val match = matriz.firstOrNull { it.folioP?.trim()?.replace(" ", "")?.uppercase() == cu && cu.isNotBlank() }
+                    val cu = normalizarCuPase(fila.cu)
+                    val match = matriz.firstOrNull { normalizarCuPase(it.folioP) == cu && cu.isNotBlank() }
                     if (match != null) {
                         val pendiente = Pendiente(match.id, fila.contiene, fila.capitales)
                         preferencias[match.id] = pendiente
