@@ -75,7 +75,7 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
             }
         }
         Row(Modifier.align(Alignment.BottomEnd).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SmallFloatingActionButton(onClick = { picker.launch("image/*") }, enabled = !importando) {
+            SmallFloatingActionButton(onClick = { if (!importando) picker.launch("image/*") }) {
                 Icon(Icons.Default.CameraAlt, contentDescription = "Importar Pase por foto")
             }
             FloatingActionButton(onClick = { showCreateDialog = true }) { Icon(Icons.Default.Add, contentDescription = "Nuevo registro en Pase") }
