@@ -1,10 +1,15 @@
 package com.example.matrizapp
+
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,9 +18,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-/** Convierte una copia de Pase a MatrizEntity SOLO para reusar los mismos composables de
- * tarjeta/diálogo que Matriz (misma estructura de campos) -- nunca se guarda de vuelta como
- * MatrizEntity, ni se toca matriz_table desde aquí. */
 private fun PaseEntity.comoMatrizParaUi(): MatrizEntity = MatrizEntity(
     id = id, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT,
     ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado,
@@ -30,114 +32,115 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
     val deleteInProgress by viewModel.deleteInProgress.collectAsState()
     var itemToEdit by remember { mutableStateOf<PaseEntity?>(null) }
     var itemToView by remember { mutableStateOf<PaseEntity?>(null) }
+    var itemGcr by remember { mutableStateOf<PaseEntity?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<PaseEntity?>(null) }
+    var importando by remember { mutableStateOf(false) }
+    var importResumen by remember { mutableStateOf<PaseCarteraViewModel.ImportResumen?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    val items = remember(allItems, searchQuery) {
-        if (searchQuery.isBlank()) allItems else allItems.filter { item ->
-            val q = searchQuery.trim()
-            coincideBusqueda(item.nombre, q) ||
-                coincideBusqueda(item.numTT, q) ||
-                coincideBusqueda(item.ref1, q) ||
-                coincideBusqueda(item.ref2, q) ||
-                coincideBusqueda(item.observaciones, q) ||
-                coincideBusqueda(item.estado, q)
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        importando = true
+        viewModel.importarFotos(context, uris.take(8)) { resumen, error ->
+            importando = false
+            if (error != null) Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+            else importResumen = resumen
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (items.isEmpty()) {
-            Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros en Pase", color = androidx.compose.ui.graphics.Color.Gray) }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(items, key = { it.id }) { item ->
-                    MatrizItemCard(
-                        item = item.comoMatrizParaUi(),
-                        driveHelper = viewModel.driveHelper,
-                        onCardClick = { itemToView = item },
-                        onDeleteClick = { itemToDelete = item }
-                    )
+    LaunchedEffect(allItems.size) { viewModel.procesarPendientes() }
+
+    val filtered = remember(allItems, searchQuery) {
+        if (searchQuery.isBlank()) allItems else allItems.filter { item ->
+            coincideBusqueda(item.nombre, searchQuery) || coincideBusqueda(item.numTT, searchQuery) ||
+                coincideBusqueda(item.ref1, searchQuery) || coincideBusqueda(item.ref2, searchQuery) ||
+                coincideBusqueda(item.observaciones, searchQuery) || coincideBusqueda(item.estado, searchQuery) ||
+                coincideBusqueda(item.folioP, searchQuery) || coincideBusqueda(item.contiene, searchQuery) ||
+                coincideBusqueda(item.capitales, searchQuery)
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        if (filtered.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros en Pase") }
+        else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(filtered, key = { it.id }) { item ->
+                Box {
+                    MatrizItemCard(item.comoMatrizParaUi(), viewModel.driveHelper, { itemToView = item }, { itemToDelete = item })
+                    IconButton(onClick = { itemGcr = item }, modifier = Modifier.align(Alignment.TopEnd)) {
+                        Icon(Icons.Default.Edit, contentDescription = "Editar CONTIEN y CAPITALES")
+                    }
                 }
             }
         }
-        FloatingActionButton(
-            onClick = { showCreateDialog = true },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
-        ) { Icon(Icons.Default.Add, contentDescription = "Nuevo registro en Pase") }
-        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+        Row(Modifier.align(Alignment.BottomEnd).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SmallFloatingActionButton(onClick = { picker.launch("image/*") }, enabled = !importando) {
+                Icon(Icons.Default.CameraAlt, contentDescription = "Importar Pase por foto")
+            }
+            FloatingActionButton(onClick = { showCreateDialog = true }) { Icon(Icons.Default.Add, contentDescription = "Nuevo registro en Pase") }
+        }
+        SnackbarHost(snackbarHostState, Modifier.align(Alignment.BottomCenter))
+    }
+
+    if (importando) AlertDialog(onDismissRequest = {}, title = { Text("Importando Pase") }, text = { Text("Leyendo fotos con OCR local…") }, confirmButton = {})
+
+    importResumen?.let { resumen ->
+        AlertDialog(
+            onDismissRequest = { importResumen = null },
+            title = { Text("Revisar importación") },
+            text = { Text("GCR=Flores detectados: ${resumen.detectadosFlores}\n\nCoincidencias con Matriz por CU: ${resumen.coincidenciasMatriz}\nNuevos registros en Pase: ${resumen.nuevosPase}\n\nSolo se aplicarán estas filas al confirmar.") },
+            confirmButton = { Button(onClick = {
+                importResumen = null
+                viewModel.aplicarImportacion(resumen) { mensaje -> scope.launch { snackbarHostState.showSnackbar(mensaje) } }
+            }) { Text("Aplicar") } },
+            dismissButton = { TextButton(onClick = { importResumen = null }) { Text("Cancelar") } }
+        )
+    }
+
+    itemGcr?.let { item ->
+        var contiene by remember(item.id) { mutableStateOf(item.contiene ?: "") }
+        var capitales by remember(item.id) { mutableStateOf(item.capitales ?: "") }
+        AlertDialog(
+            onDismissRequest = { itemGcr = null },
+            title = { Text("Campos GCR — ${item.nombre}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(contiene, { contiene = it }, label = { Text("CONTIEN") }, singleLine = true)
+                    OutlinedTextField(capitales, { capitales = it }, label = { Text("CAPITALES") }, singleLine = true)
+                }
+            },
+            confirmButton = { Button(onClick = {
+                viewModel.actualizarCamposGcr(item.id, contiene.ifBlank { null }, capitales.ifBlank { null }) { error ->
+                    if (error != null) Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                }
+                itemGcr = null
+            }) { Text("Guardar") } },
+            dismissButton = { TextButton(onClick = { itemGcr = null }) { Text("Cancelar") } }
+        )
     }
 
     itemToView?.let { item ->
-        MatrizDetailDialog(
-            item = item.comoMatrizParaUi(),
-            driveHelper = viewModel.driveHelper,
-            onDismiss = { itemToView = null },
-            onEditClick = {
-                itemToEdit = item
-                itemToView = null
-            }
-        )
+        MatrizDetailDialog(item.comoMatrizParaUi(), viewModel.driveHelper, { itemToView = null }, { itemToEdit = item; itemToView = null })
     }
-
     itemToEdit?.let { item ->
-        MatrizFullFormDialog(
-            item = item.comoMatrizParaUi(),
-            viewModel = null, // Pase no expone retomar-foto rápida desde el form -- edita el resto de campos igual
-            onDismiss = { itemToEdit = null },
-            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
-                viewModel.cambiarIdYGuardar(
-                    item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2,
-                    observaciones, estado, ubicacion, fecha, hora, ruta, folioP
-                ) { exito, error ->
-                    if (!exito) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
-                }
-                itemToEdit = null
+        MatrizFullFormDialog(item.comoMatrizParaUi(), null, { itemToEdit = null }, { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+            viewModel.cambiarIdYGuardar(item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { ok, error ->
+                if (!ok) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
             }
-        )
+            itemToEdit = null
+        })
     }
-
     if (showCreateDialog) {
-        MatrizFullFormDialog(
-            item = null,
-            viewModel = null,
-            onDismiss = { showCreateDialog = false },
-            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
-                viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP)
-                showCreateDialog = false
-            }
-        )
+        MatrizFullFormDialog(null, null, { showCreateDialog = false }, { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+            viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP)
+            showCreateDialog = false
+        })
     }
-
     itemToDelete?.let { item ->
-        AlertDialog(
-            onDismissRequest = { if (!deleteInProgress) itemToDelete = null },
-            title = { Text("Eliminar de Pase") },
-            text = { Text("¿Seguro que quieres eliminar a \"${item.nombre}\" de Pase? Esto NO afecta su registro en Matriz -- solo borra esta copia local.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.eliminarRegistro(item.id) { exito, error ->
-                            itemToDelete = null
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    if (exito) "Registro eliminado de Pase" else "No se pudo eliminar: ${error ?: "error"}"
-                                )
-                            }
-                        }
-                    },
-                    enabled = !deleteInProgress,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text(if (deleteInProgress) "Eliminando…" else "Eliminar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { itemToDelete = null }, enabled = !deleteInProgress) { Text("Cancelar") }
-            }
-        )
+        AlertDialog(onDismissRequest = { if (!deleteInProgress) itemToDelete = null }, title = { Text("Eliminar de Pase") },
+            text = { Text("¿Seguro que quieres eliminar a \"${item.nombre}\" de Pase? Esto NO afecta Matriz.") },
+            confirmButton = { Button(onClick = { viewModel.eliminarRegistro(item.id) { ok, error -> itemToDelete = null; scope.launch { snackbarHostState.showSnackbar(if (ok) "Registro eliminado de Pase" else error ?: "Error") } } }, enabled = !deleteInProgress) { Text(if (deleteInProgress) "Eliminando…" else "Eliminar") } },
+            dismissButton = { TextButton(onClick = { itemToDelete = null }) { Text("Cancelar") } })
     }
 }
