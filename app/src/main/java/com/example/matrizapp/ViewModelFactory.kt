@@ -8,40 +8,28 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
         return when {
             modelClass.isAssignableFrom(MatrizViewModel::class.java) ->
                 MatrizViewModel(container.repository, container.database.matrizDao(), container.workManager, container.driveHelper, container.notificacionesHelper) as T
-
             modelClass.isAssignableFrom(PaseCarteraViewModel::class.java) ->
-                PaseCarteraViewModel(container.database.paseDao(), container.driveHelper) as T
-
+                PaseCarteraViewModel(container.database.paseDao(), container.database.matrizDao(), container.driveHelper) as T
             modelClass.isAssignableFrom(SolicitudViewModel::class.java) ->
                 SolicitudViewModel(container.repository, container.database.solicitudDao(), container.audioHelper, container.workManager, container.driveHelper) as T
-
             modelClass.isAssignableFrom(FiltroFechaViewModel::class.java) ->
                 FiltroFechaViewModel(container.database.matrizDao(), container.driveHelper) as T
-
             modelClass.isAssignableFrom(FiltrarViewModel::class.java) ->
                 FiltrarViewModel(container.database.matrizDao(), container.workManager, container.driveHelper) as T
-
             modelClass.isAssignableFrom(ControlViewModel::class.java) ->
                 ControlViewModel(container.database.controlDao(), container.database.matrizDao()) as T
-
             modelClass.isAssignableFrom(Sem6ViewModel::class.java) ->
                 Sem6ViewModel(container.repository, container.sem6CacheStore, container.driveHelper) as T
-
             modelClass.isAssignableFrom(SmsViewModel::class.java) ->
                 SmsViewModel(container.database.matrizDao(), container.workManager) as T
-
             modelClass.isAssignableFrom(CallViewModel::class.java) ->
                 CallViewModel(container.database.matrizDao(), container.workManager) as T
-
             modelClass.isAssignableFrom(BloqueHorarioViewModel::class.java) ->
                 BloqueHorarioViewModel(container.database.bloqueHorarioDao(), container.llamadaAutomaticaScheduler, container.context, container.database.configuracionAutomatizacionDao(), container.database.reglaSemanaDao()) as T
-
             modelClass.isAssignableFrom(PlantillaSmsViewModel::class.java) ->
                 PlantillaSmsViewModel(container.database.plantillaSmsDao()) as T
-
             modelClass.isAssignableFrom(RutaIAViewModel::class.java) ->
                 RutaIAViewModel(container.database.rutaIADao(), container.database.rutaIAFiltroDao(), container.database.matrizDao(), container.repository, container.context) as T
-
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
     }
