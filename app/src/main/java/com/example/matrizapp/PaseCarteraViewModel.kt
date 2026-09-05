@@ -20,6 +20,16 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
     data class ImportResumen(val detectadosFlores: Int, val coincidenciasPase: Int, val noEncontradosPase: Int, val filas: List<PaseFotoFila>)
     private var preferenciasContext: Context? = null
 
+    // Se conserva aqui porque el parser OCR ahora detecta GCR por coordenadas,
+    // pero el ViewModel sigue usando CU como dato auxiliar para hacer match con Pase.
+    private fun normalizarCuPase(valor: String?): String =
+        valor.orEmpty().trim()
+            .replace(Regex("\\s+"), "-")
+            .replace(Regex("[^0-9-]"), "")
+            .split('-')
+            .filter { it.isNotBlank() }
+            .joinToString("-") { it.toLongOrNull()?.toString() ?: it }
+
     private fun normalizarNombreParaImportacion(valor: String?): String =
         quitarAcentos(valor.orEmpty()).uppercase(Locale.ROOT).replace("Ñ", "N")
             .replace(Regex("[^A-Z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
