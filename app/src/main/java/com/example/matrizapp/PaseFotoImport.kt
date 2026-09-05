@@ -12,7 +12,10 @@ import kotlin.coroutines.resume
 import java.text.Normalizer
 
 data class PaseFotoFila(val cu: String, val nombre: String, val gcr: String, val contiene: String?, val capitales: String?)
-private val REGEX_CU_PASE = Regex("""\b\d{1,3}(?:[-\s]\d{1,4}){2,3}\b""")
+// El bloque de sucursal/rango en el CU real (ej. "01-01-01627-26379") puede traer 5
+// digitos ("01627"), no solo 4 -- confirmado contra CUs reales de Matriz que antes no
+// matcheaban ningun regex y por eso ni siquiera se detectaba la fila.
+private val REGEX_CU_PASE = Regex("""\b\d{1,3}(?:[-\s]\d{1,5}){2,3}\b""")
 private val REGEX_CU_SOLO_DIGITOS = Regex("""\b\d{10,16}\b""")
 private fun limpiarOcr(texto: String): String = Normalizer.normalize(texto, Normalizer.Form.NFC).replace("\u00A0", " ").replace("|", " ").replace(Regex("\\s{2,}"), " ").trim()
 fun normalizarCuPase(valor: String?): String = valor.orEmpty().trim().replace(Regex("\\s+"), "-").replace(Regex("[^0-9-]"), "").split('-').filter { it.isNotBlank() }.joinToString("-") { it.toLongOrNull()?.toString() ?: it }
