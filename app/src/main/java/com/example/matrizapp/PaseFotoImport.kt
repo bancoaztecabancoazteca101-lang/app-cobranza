@@ -19,8 +19,6 @@ data class PaseFotoFila(
     val capitales: String?
 )
 
-// Los CU del reporte pueden venir como 1-1-673-33618, 1-1-1339-46633, etc.
-// En Matriz pueden conservar ceros a la izquierda: 01-01-00673-33618.
 private val REGEX_CU_PASE = Regex("""\b\d{1,3}(?:[-\s]\d{1,3}){2,3}\b""")
 private val REGEX_CU_SOLO_DIGITOS = Regex("""\b\d{10,16}\b""")
 
@@ -31,7 +29,6 @@ private fun limpiarOcr(texto: String): String =
         .replace(Regex("\\s{2,}"), " ")
         .trim()
 
-/** Canonicaliza cada bloque numérico para que 673 y 00673 sean el mismo CU. */
 fun normalizarCuPase(valor: String?): String =
     valor.orEmpty()
         .trim()
@@ -48,10 +45,6 @@ private fun cuDeLinea(linea: String): String? =
 
 private fun contieneFlores(texto: String): Boolean = coincideBusqueda(texto, "Flores")
 
-/**
- * ML Kit puede separar una fila de Excel en varias líneas. Construimos bloques
- * desde un CU hasta el siguiente CU y buscamos GCR=Flores en todo el bloque.
- */
 fun parsearFilasPaseFoto(textoOcr: String): List<PaseFotoFila> {
     val lineas = textoOcr.lines()
         .map(::limpiarOcr)
@@ -74,8 +67,6 @@ fun parsearFilasPaseFoto(textoOcr: String): List<PaseFotoFila> {
         val antesGcr = if (indiceFlores >= 0) textoBloque.substring(0, indiceFlores).trim() else textoBloque
         val tokensAntes = antesGcr.split(Regex("\\s+")).filter { it.isNotBlank() }
 
-        // El nombre normalmente ocupa la columna entre CU y PLAN; tomamos texto
-        // antes de los primeros campos claramente numéricos del resto de columnas.
         val indiceNumerico = tokensAntes.indexOfFirst { token ->
             token.matches(Regex("[A-Z]?\\d+(?:[.,]\\d+)?", RegexOption.IGNORE_CASE))
         }
