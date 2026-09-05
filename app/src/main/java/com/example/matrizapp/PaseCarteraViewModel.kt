@@ -17,15 +17,14 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
     val paseList: StateFlow<List<PaseEntity>> = paseDao.getAllPase().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _deleteInProgress = MutableStateFlow(false)
     val deleteInProgress: StateFlow<Boolean> = _deleteInProgress
-    data class ImportResumen(val detectadosFlores: Int, val coincidenciasMatriz: Int, val nuevosPase: Int, val filas: List<PaseFotoFila>)
+    data class ImportResumen(val detectadosFlores: Int, val coincidenciasPase: Int, val noEncontradosPase: Int, val filas: List<PaseFotoFila>)
     private var preferenciasContext: Context? = null
 
     private fun normalizarNombreParaImportacion(valor: String?): String =
         quitarAcentos(valor.orEmpty()).uppercase(Locale.ROOT).replace("Ñ", "N")
             .replace(Regex("[^A-Z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
 
-    private fun tokensNombre(valor: String?): List<String> =
-        normalizarNombreParaImportacion(valor).split(' ').filter { it.length >= 2 }
+    private fun tokensNombre(valor: String?): List<String> = normalizarNombreParaImportacion(valor).split(' ').filter { it.length >= 2 }
 
     private fun distanciaLevenshtein(a: String, b: String): Int {
         if (a == b) return 0
@@ -35,9 +34,7 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         for (i in a.indices) {
             val actual = IntArray(b.length + 1)
             actual[0] = i + 1
-            for (j in b.indices) {
-                actual[j + 1] = minOf(actual[j] + 1, anterior[j + 1] + 1, anterior[j] + if (a[i] == b[j]) 0 else 1)
-            }
+            for (j in b.indices) actual[j + 1] = minOf(actual[j] + 1, anterior[j + 1] + 1, anterior[j] + if (a[i] == b[j]) 0 else 1)
             anterior = actual
         }
         return anterior[b.length]
@@ -50,10 +47,9 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         return 1.0 - distanciaLevenshtein(a, b).toDouble() / maxLen
     }
 
-    /** Tolera errores OCR leves, pero exige varias palabras fuertes para evitar falsos positivos. */
-    private fun puntajeNombreOCR(ocr: String, matriz: String): Double {
+    private fun puntajeNombreOCR(ocr: String, pase: String): Double {
         val a = tokensNombre(ocr)
-        val b = tokensNombre(matriz)
+        val b = tokensNombre(pase)
         if (a.isEmpty() || b.isEmpty()) return 0.0
         val coincidencias = a.map { tokenA -> b.maxOf { tokenB ->
             if (tokenA == tokenB) 1.0
@@ -62,17 +58,19 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         }}
         val suficientes = coincidencias.count { it >= 0.82 }
         if (suficientes < maxOf(2, (a.size * 0.60).toInt())) return 0.0
-        val promedio = coincidencias.average()
-        val cobertura = suficientes.toDouble() / a.size
-        return promedio * 0.70 + cobertura * 0.30
+        return coincidencias.average() * 0.70 + suficientes.toDouble() / a.size * 0.30
     }
 
-    /** Nombre primero; CU solamente si el nombre no encuentra un candidato seguro. */
-    private fun buscarMatrizPorNombre(nombre: String, matriz: List<MatrizEntity>): MatrizEntity? {
-        val buscado = normalizarNombreParaImportacion(nombre)
-        if (buscado.isBlank()) return null
-        matriz.firstOrNull { normalizarNombreParaImportacion(it.nombre) == buscado }?.let { return it }
-        val candidatos = matriz.mapNotNull { item ->
+    /** Busca solamente dentro de los registros que ya existen en Pase. */
+    private fun buscarPaseParaFila(fila: PaseFotoFila, pase: List<PaseEntity>, idsExcluidos: Set<String> = emptySet()): PaseEntity? {
+        val disponibles = pase.filterNot { it.id in idsExcluidos }
+        val cu = normalizarCuPase(fila.cu)
+        if (cu.isNotBlank()) disponibles.firstOrNull { normalizarCuPase(it.folioP) == cu }?.let { return it }
+
+        val buscado = normalizarNombreParaImportacion(fila.nombre)
+        if (buscado.isNotBlank()) disponibles.firstOrNull { normalizarNombreParaImportacion(it.nombre) == buscado }?.let { return it }
+
+        val candidatos = disponibles.mapNotNull { item ->
             val score = puntajeNombreOCR(buscado, item.nombre)
             if (score >= 0.84) item to score else null
         }.sortedByDescending { it.second }
@@ -81,64 +79,37 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         return if (mejor.second - segundo >= 0.04) mejor.first else null
     }
 
-    private fun buscarMatrizPorNombreOCu(fila: PaseFotoFila, matriz: List<MatrizEntity>): MatrizEntity? {
-        buscarMatrizPorNombre(fila.nombre, matriz)?.let { return it }
-        val cu = normalizarCuPase(fila.cu)
-        if (cu.isBlank()) return null
-        return matriz.firstOrNull { normalizarCuPase(it.folioP) == cu }
-    }
-
     fun importarFotos(context: Context, uris: List<Uri>, onResult: (ImportResumen?, String?) -> Unit) = viewModelScope.launch {
         try {
             preferenciasContext = context.applicationContext
             val filas = uris.take(8).flatMap { extraerPaseDeFoto(context, it) }.distinctBy { normalizarCuPase(it.cu) }
-            val matriz = matrizDao.getAllMatriz().first()
-            val matches = filas.count { buscarMatrizPorNombreOCu(it, matriz) != null }
+            val pase = paseDao.getAllPase().first()
+            val matches = filas.count { buscarPaseParaFila(it, pase) != null }
             onResult(ImportResumen(filas.size, matches, filas.size - matches, filas), null)
         } catch (e: Exception) { onResult(null, e.message ?: "No se pudo procesar el reporte") }
     }
 
-    /** Match con Matriz => crea/actualiza Pase inmediatamente; contiene/capitales viven solo en Pase. */
+    /** Aplica solamente a registros existentes en Pase; nunca crea un cliente por OCR. */
     fun aplicarImportacion(resumen: ImportResumen, onResult: (String) -> Unit) = viewModelScope.launch {
         try {
-            val matriz = matrizDao.getAllMatriz().first()
-            var matches = 0
-            var nuevos = 0
+            val pase = paseDao.getAllPase().first()
+            val idsAplicados = mutableSetOf<String>()
+            var actualizados = 0
+            var noEncontrados = 0
             resumen.filas.forEach { fila ->
-                val match = buscarMatrizPorNombreOCu(fila, matriz)
-                if (match != null) {
-                    val existente = paseDao.getByOrigenMatrizId(match.id)
-                    if (existente == null) {
-                        paseDao.insertar(PaseEntity(
-                            id = UUID.randomUUID().toString().replace("-", "").take(12),
-                            nombre = match.nombre, semana = match.semana, requisito = match.requisito,
-                            numTT = match.numTT, ref1 = match.ref1, ref2 = match.ref2,
-                            observaciones = match.observaciones, estado = "PASE", ubicacion = match.ubicacion,
-                            imagenUrl = match.imagenUrl, imagenUrl2 = match.imagenUrl2, fecha = match.fecha,
-                            hora = match.hora, ruta = match.ruta, folioP = match.folioP,
-                            origenMatrizId = match.id, contiene = fila.contiene, capitales = fila.capitales,
-                            isDirty = true
-                        ))
-                        nuevos++
-                    } else {
-                        paseDao.updateCamposGcr(existente.id, fila.contiene, fila.capitales)
-                    }
-                    matrizDao.marcarComoPase(match.id)
-                    matches++
-                } else {
-                    paseDao.insertar(PaseEntity(
-                        UUID.randomUUID().toString(), fila.nombre, "", "", "", "", "", null,
-                        "PASE", null, null, null, System.currentTimeMillis(), null, null, fila.cu,
-                        "IMPORT_FOTO:${fila.cu}:${UUID.randomUUID()}", fila.contiene, fila.capitales, true
-                    ))
-                    nuevos++
+                val existente = buscarPaseParaFila(fila, pase, idsAplicados)
+                if (existente == null) noEncontrados++
+                else {
+                    // Filtros 2 y 3: CONTIENE y CAPITALES se asignan al Pase ya identificado.
+                    paseDao.updateCamposGcr(existente.id, fila.contiene, fila.capitales)
+                    idsAplicados += existente.id
+                    actualizados++
                 }
             }
-            onResult("Importación aplicada: $matches coincidencia(s) con Matriz y $nuevos registro(s) nuevo(s) en Pase.")
+            onResult("Importación aplicada: $actualizados registro(s) de Pase actualizados. " + if (noEncontrados > 0) "$noEncontrados fila(s) quedaron sin coincidencia y NO se agregaron." else "Todos coincidieron con Pase.")
         } catch (e: Exception) { onResult("No se pudo aplicar: ${e.message}") }
     }
 
-    /** Completa importaciones antiguas que quedaron en preferencias locales. */
     fun procesarPendientes() = viewModelScope.launch {
         val ctx = preferenciasContext ?: return@launch
         val prefs = ctx.getSharedPreferences("pase_import_gcr", Context.MODE_PRIVATE)
