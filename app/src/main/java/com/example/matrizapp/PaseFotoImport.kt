@@ -49,27 +49,17 @@ private fun esCabecera(valor: String, esperado: String): Boolean =
 
 private fun esFlores(valor: String): Boolean {
     val texto = normalizarTexto(valor)
-    return texto == "FLORES" ||
-        texto == "FL0RES" ||
-        texto == "FLORES0" ||
-        texto == "FLORES." ||
-        texto.matches(Regex("FL0?RES"))
+    return texto == "FLORES" || texto == "FL0RES" || texto == "FLORES0" ||
+        texto == "FLORES." || texto.matches(Regex("FL0?RES"))
 }
 
 private fun centroSeguro(bounds: Rect?): Float? = bounds?.let { it.left + it.width() / 2f }
-
 private fun puntoMedio(a: Float, b: Float): Float = (a + b) / 2f
 
 /** CU de cuatro bloques que el OCR suele leer como 01-01-00673-33618. */
 private val patronCu = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)")
 
-/**
- * Detecta exclusivamente las filas cuyo GCR es FLORES.
- *
- * La detección NO depende del apellido del cliente ni de CONTIENE/CAPITALES.
- * Usa las coordenadas de los elementos OCR para distinguir la columna GCR de la
- * columna NOMBRE; por eso "FLORES" dentro de un nombre no dispara la detección.
- */
+/** Detecta exclusivamente las filas cuyo GCR es FLORES usando coordenadas OCR. */
 fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val lineas = visionText.textBlocks.flatMap { it.lines }
     if (lineas.isEmpty()) return emptyList()
@@ -83,22 +73,14 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     }
     if (celdas.isEmpty()) return emptyList()
 
-    val encabezadoGcr = celdas
-        .filter { esCabecera(it.texto, "GCR") }
-        .minByOrNull { it.bounds.top }
-        ?: return emptyList()
-
+    val encabezadoGcr = celdas.filter { esCabecera(it.texto, "GCR") }.minByOrNull { it.bounds.top } ?: return emptyList()
     val lineaCabecera = lineas.firstOrNull { line ->
-        line.elements.any { element ->
-            element.boundingBox == encabezadoGcr.bounds && esCabecera(element.text, "GCR")
-        }
+        line.elements.any { element -> element.boundingBox == encabezadoGcr.bounds && esCabecera(element.text, "GCR") }
     }
 
     val cabeceras = mutableMapOf<String, Float>()
-    lineaCabecera?.elements?.forEach { element ->
-        val centro = centroSeguro(element.boundingBox) ?: return@forEach
-        val texto = normalizarTexto(element.text)
-        when (texto) {
+    fun registrarCabecera(textoOriginal: String, centro: Float) {
+        when (normalizarTexto(textoOriginal)) {
             "CU" -> cabeceras.putIfAbsent("CU", centro)
             "NOMBRE" -> cabeceras.putIfAbsent("NOMBRE", centro)
             "PLAN" -> cabeceras.putIfAbsent("PLAN", centro)
@@ -113,25 +95,16 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
         }
     }
 
+    lineaCabecera?.elements?.forEach { element ->
+        val centro = centroSeguro(element.boundingBox) ?: return@forEach
+        registrarCabecera(element.text, centro)
+    }
+
     val yCabecera = encabezadoGcr.centroY
     val toleranciaCabecera = maxOf(24f, encabezadoGcr.alto * 1.8f)
-    celdas.filter { kotlin.math.abs(it.centroY - yCabecera) <= toleranciaCabecera }
-        .forEach { celda ->
-            val centro = celda.centroX
-            when (normalizarTexto(celda.texto)) {
-                "CU" -> cabeceras.putIfAbsent("CU", centro)
-                "NOMBRE" -> cabeceras.putIfAbsent("NOMBRE", centro)
-                "PLAN" -> cabeceras.putIfAbsent("PLAN", centro)
-                "DIAS" -> cabeceras.putIfAbsent("DIAS", centro)
-                "DIA" -> cabeceras.putIfAbsent("DIA", centro)
-                "SALDO" -> cabeceras.putIfAbsent("SALDO", centro)
-                "MORA" -> cabeceras.putIfAbsent("MORA", centro)
-                "REQUE", "REQUERIMIENTO" -> cabeceras.putIfAbsent("REQUE", centro)
-                "GCR" -> cabeceras.putIfAbsent("GCR", centro)
-                "CONTIEN", "CONTIENE" -> cabeceras.putIfAbsent("CONTIENE", centro)
-                "CAPITALES", "CAPITAL" -> cabeceras.putIfAbsent("CAPITALES", centro)
-            }
-        }
+    celdas.filter { kotlin.math.abs(it.centroY - yCabecera) <= toleranciaCabecera }.forEach { celda ->
+        registrarCabecera(celda.texto, celda.centroX)
+    }
 
     val gcrX = cabeceras["GCR"] ?: encabezadoGcr.centroX
     val nombreX = cabeceras["NOMBRE"]
@@ -142,11 +115,8 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val capitalesX = cabeceras["CAPITALES"]
 
     val vecinoIzquierdo = listOfNotNull(requeX, cabeceras["MORA"], cabeceras["SALDO"], cabeceras["DIA"], cabeceras["DIAS"], planX)
-        .filter { it < gcrX }
-        .maxOrNull()
-    val vecinoDerecho = listOfNotNull(contieneX, capitalesX)
-        .filter { it > gcrX }
-        .minOrNull()
+        .filter { it < gcrX }.maxOrNull()
+    val vecinoDerecho = listOfNotNull(contieneX, capitalesX).filter { it > gcrX }.minOrNull()
 
     val pasoIzquierdo = vecinoIzquierdo?.let { gcrX - it }
     val pasoDerecho = vecinoDerecho?.let { it - gcrX }
@@ -169,18 +139,13 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val cuLeft = 0f
     val cuRight = if (cuX != null && nombreX != null) puntoMedio(cuX, nombreX) else nombreLeft
 
-    val contieneLeft = when {
-        contieneX != null -> puntoMedio(gcrX, contieneX)
-        else -> gcrRight
-    }
+    val contieneLeft = if (contieneX != null) puntoMedio(gcrX, contieneX) else gcrRight
     val contieneRight = when {
         contieneX != null && capitalesX != null -> puntoMedio(contieneX, capitalesX)
         contieneX != null -> contieneX + (contieneX - gcrX) / 2f
         else -> contieneLeft
     }
 
-    // Límites de la columna CAPITALES. Si existe la cabecera, se toma el espacio
-    // entre CONTIENE y CAPITALES y, después de CAPITALES, hasta el borde útil de la fila.
     val capitalesLeft = when {
         capitalesX != null && contieneX != null -> puntoMedio(contieneX, capitalesX)
         capitalesX != null -> capitalesX - (capitalesX - gcrX) / 2f
@@ -200,73 +165,36 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
 
     val flores = celdas.filter { celda ->
         celda.centroY > yCabecera + toleranciaCabecera &&
-            celda.centroX in gcrLeft..gcrRight &&
-            esFlores(celda.texto)
+            celda.centroX in gcrLeft..gcrRight && esFlores(celda.texto)
     }
     if (flores.isEmpty()) return emptyList()
 
     val resultado = mutableListOf<PaseFotoFila>()
-
     for (flor in flores) {
         val toleranciaFila = maxOf(18f, flor.alto * 1.35f)
-        val mismaFila = celdas.filter {
-            kotlin.math.abs(it.centroY - flor.centroY) <= toleranciaFila
-        }
+        val mismaFila = celdas.filter { kotlin.math.abs(it.centroY - flor.centroY) <= toleranciaFila }
 
-        val nombrePorColumna = mismaFila
-            .filter { it.centroX in nombreLeft..nombreRight }
-            .sortedBy { it.centroX }
-            .joinToString(" ") { it.texto }
-            .trim()
-
-        val cuPorColumna = mismaFila
-            .filter { it.centroX in cuLeft..cuRight }
-            .sortedBy { it.centroX }
-            .joinToString(" ") { it.texto }
-            .trim()
+        val nombrePorColumna = mismaFila.filter { it.centroX in nombreLeft..nombreRight }
+            .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim()
+        val cuPorColumna = mismaFila.filter { it.centroX in cuLeft..cuRight }
+            .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim()
 
         val textoFila = mismaFila.sortedBy { it.centroX }.joinToString(" ") { it.texto }
-        val cuDetectado = patronCu.find(textoFila)?.value
-            ?: patronCu.find(cuPorColumna)?.value
-            ?: ""
-
+        val cuDetectado = patronCu.find(textoFila)?.value ?: patronCu.find(cuPorColumna)?.value ?: ""
         val nombre = if (cuDetectado.isNotBlank()) {
-            nombrePorColumna
-                .replace(cuDetectado, " ", ignoreCase = true)
-                .replace(Regex("\\s+"), " ")
-                .trim()
-        } else {
-            nombrePorColumna
-        }
-
+            nombrePorColumna.replace(cuDetectado, " ", ignoreCase = true).replace(Regex("\\s+"), " ").trim()
+        } else nombrePorColumna
         val cu = cuDetectado.ifBlank { cuPorColumna }
 
-        val contiene = mismaFila
-            .filter { it.centroX in contieneLeft..contieneRight }
-            .sortedBy { it.centroX }
-            .joinToString(" ") { it.texto }
-            .trim()
-            .ifBlank { null }
+        val contiene = mismaFila.filter { it.centroX in contieneLeft..contieneRight }
+            .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim().ifBlank { null }
+        val capitales = mismaFila.filter { it.centroX in capitalesLeft..capitalesRight }
+            .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim().ifBlank { null }
 
-        val capitales = mismaFila
-            .filter { it.centroX in capitalesLeft..capitalesRight }
-            .sortedBy { it.centroX }
-            .joinToString(" ") { it.texto }
-            .trim()
-            .ifBlank { null }
-
-        resultado += PaseFotoFila(
-            cu = cu,
-            nombre = nombre,
-            gcr = "Flores",
-            contiene = contiene,
-            capitales = capitales
-        )
+        resultado += PaseFotoFila(cu, nombre, "Flores", contiene, capitales)
     }
 
-    return resultado.distinctBy {
-        "${normalizarTexto(it.cu)}|${normalizarTexto(it.nombre)}|${it.gcr}"
-    }
+    return resultado.distinctBy { "${normalizarTexto(it.cu)}|${normalizarTexto(it.nombre)}|${it.gcr}" }
 }
 
 suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> =
@@ -276,7 +204,7 @@ suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> =
             val image = InputImage.fromFilePath(context, uri)
             recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             recognizer.process(image)
-                .addOnSuccessListener { visionText: Text.Text ->
+                .addOnSuccessListener { visionText: Text ->
                     if (cont.isActive) cont.resume(parsearFilasPaseFoto(visionText))
                     recognizer?.close()
                 }
