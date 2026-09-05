@@ -58,8 +58,7 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
     }
 
     private fun guardarPendiente(matrizId: String, contiene: String?, capitales: String?) {
-        preferenciasContext?.getSharedPreferences("pase_import_gcr", Context.MODE_PRIVATE)?.edit()
-            ?.putString(matrizId, "${contiene ?: ""}\u001F${capitales ?: ""}")?.apply()
+        preferenciasContext?.getSharedPreferences("pase_import_gcr", Context.MODE_PRIVATE)?.edit()?.putString(matrizId, "${contiene ?: ""}\u001F${capitales ?: ""}")?.apply()
     }
 
     fun actualizarCamposGcr(id: String, contiene: String?, capitales: String?, onResult: (String?) -> Unit) = viewModelScope.launch {
