@@ -58,21 +58,19 @@ private fun puntoMedio(a: Float, b: Float): Float = (a + b) / 2f
 
 private val patronCu = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)")
 
-/** Detecta exclusivamente las filas cuyo GCR es FLORES usando coordenadas OCR. */
-fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
-    val lineas = visionText.textBlocks.flatMap { it.lines }
-    if (lineas.isEmpty()) return emptyList()
+/** Une columnas/cabeceras detectadas para una foto del reporte GCR (rangos X por columna). */
+private data class LayoutColumnas(
+    val yCabecera: Float,
+    val toleranciaCabecera: Float,
+    val nombreLeft: Float, val nombreRight: Float,
+    val cuLeft: Float, val cuRight: Float,
+    val gcrLeft: Float, val gcrRight: Float,
+    val contieneLeft: Float, val contieneRight: Float,
+    val capitalesLeft: Float, val capitalesRight: Float
+)
 
-    val celdas = lineas.flatMap { line ->
-        line.elements.mapNotNull { element ->
-            val bounds = element.boundingBox ?: return@mapNotNull null
-            val texto = limpiarOcr(element.text)
-            if (texto.isBlank()) null else CeldaOcr(texto, bounds)
-        }
-    }
-    if (celdas.isEmpty()) return emptyList()
-
-    val encabezadoGcr = celdas.filter { esCabecera(it.texto, "GCR") }.minByOrNull { it.bounds.top } ?: return emptyList()
+private fun detectarLayoutColumnas(celdas: List<CeldaOcr>, lineas: List<Text.Line>): LayoutColumnas? {
+    val encabezadoGcr = celdas.filter { esCabecera(it.texto, "GCR") }.minByOrNull { it.bounds.top } ?: return null
     val lineaCabecera = lineas.firstOrNull { line ->
         line.elements.any { element -> element.boundingBox == encabezadoGcr.bounds && esCabecera(element.text, "GCR") }
     }
@@ -162,14 +160,42 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
         else -> capitalesLeft
     }
 
+    return LayoutColumnas(
+        yCabecera, toleranciaCabecera,
+        nombreLeft, nombreRight, cuLeft, cuRight, gcrLeft, gcrRight,
+        contieneLeft, contieneRight, capitalesLeft, capitalesRight
+    )
+}
+
+/** Detecta exclusivamente las filas cuyo GCR es FLORES usando coordenadas OCR. */
+fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
+    val lineas = visionText.textBlocks.flatMap { it.lines }
+    if (lineas.isEmpty()) return emptyList()
+
+    val celdas = lineas.flatMap { line ->
+        line.elements.mapNotNull { element ->
+            val bounds = element.boundingBox ?: return@mapNotNull null
+            val texto = limpiarOcr(element.text)
+            if (texto.isBlank()) null else CeldaOcr(texto, bounds)
+        }
+    }
+    if (celdas.isEmpty()) return emptyList()
+
+    val layout = detectarLayoutColumnas(celdas, lineas) ?: return emptyList()
+
     val flores = celdas.filter { celda ->
-        celda.centroY > yCabecera + toleranciaCabecera &&
-            celda.centroX in gcrLeft..gcrRight && esFlores(celda.texto)
+        celda.centroY > layout.yCabecera + layout.toleranciaCabecera &&
+            celda.centroX in layout.gcrLeft..layout.gcrRight && esFlores(celda.texto)
     }.sortedBy { it.centroY }
     if (flores.isEmpty()) return emptyList()
 
     // Cada GCR=FLORES define una fila. Los limites se colocan a mitad de camino
     // entre dos celdas GCR consecutivas, evitando mezclar nombres/CU de filas vecinas.
+    // OJO: esto asume que las filas FLORES estan relativamente cerca unas de otras
+    // (como cuando el reporte viene ordenado por GCR). Si el reporte viene ordenado
+    // por otra columna (ej. Capitales) y las filas FLORES quedan dispersas, este
+    // punto medio puede abarcar muchas filas ajenas -- para ese caso usar
+    // parsearTodasLasFilasPorFila() en vez de esta funcion.
     val limitesY = flores.mapIndexed { index, flor ->
         val anterior = flores.getOrNull(index - 1)?.centroY
         val siguiente = flores.getOrNull(index + 1)?.centroY
@@ -187,10 +213,10 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
             it.centroY >= filaTop && it.centroY < filaBottom
         }
 
-        val nombrePorColumna = mismaFila.filter { it.centroX in nombreLeft..nombreRight }
+        val nombrePorColumna = mismaFila.filter { it.centroX in layout.nombreLeft..layout.nombreRight }
             .sortedWith(compareBy<CeldaOcr> { it.centroY }.thenBy { it.centroX })
             .joinToString(" ") { it.texto }.trim()
-        val cuPorColumna = mismaFila.filter { it.centroX in cuLeft..cuRight }
+        val cuPorColumna = mismaFila.filter { it.centroX in layout.cuLeft..layout.cuRight }
             .sortedWith(compareBy<CeldaOcr> { it.centroY }.thenBy { it.centroX })
             .joinToString(" ") { it.texto }.trim()
 
@@ -202,15 +228,71 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
         } else nombrePorColumna
         val cu = cuDetectado.ifBlank { cuPorColumna }
 
-        val contiene = mismaFila.filter { it.centroX in contieneLeft..contieneRight }
+        val contiene = mismaFila.filter { it.centroX in layout.contieneLeft..layout.contieneRight }
             .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim().ifBlank { null }
-        val capitales = mismaFila.filter { it.centroX in capitalesLeft..capitalesRight }
+        val capitales = mismaFila.filter { it.centroX in layout.capitalesLeft..layout.capitalesRight }
             .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim().ifBlank { null }
 
         resultado += PaseFotoFila(cu, nombre, "Flores", contiene, capitales)
     }
 
     return resultado.distinctBy { "${normalizarTexto(it.cu)}|${normalizarTexto(it.nombre)}|${it.gcr}" }
+}
+
+/**
+ * Segunda lectura, para la foto de "Contiene/Capitales" (que normalmente viene ordenada
+ * por Capitales, no por GCR, asi que las filas Flores quedan dispersas entre muchas
+ * otras). A diferencia de parsearFilasPaseFoto, aqui CADA fila se detecta de forma
+ * INDEPENDIENTE: su rango vertical sale de la altura de su propia celda de CU, nunca
+ * de la distancia a otra fila. Esto evita que filas ajenas se mezclen cuando el orden
+ * del reporte dispersa las filas que nos interesan. Devuelve TODAS las filas del
+ * reporte (no solo Flores) -- el filtrado por cliente ya conocido se hace despues,
+ * en el ViewModel, comparando contra los clientes que ya confirmamos en la foto 1.
+ */
+fun parsearTodasLasFilasPorFila(visionText: Text): List<PaseFotoFila> {
+    val lineas = visionText.textBlocks.flatMap { it.lines }
+    if (lineas.isEmpty()) return emptyList()
+
+    val celdas = lineas.flatMap { line ->
+        line.elements.mapNotNull { element ->
+            val bounds = element.boundingBox ?: return@mapNotNull null
+            val texto = limpiarOcr(element.text)
+            if (texto.isBlank()) null else CeldaOcr(texto, bounds)
+        }
+    }
+    if (celdas.isEmpty()) return emptyList()
+
+    val layout = detectarLayoutColumnas(celdas, lineas) ?: return emptyList()
+
+    val celdasCu = celdas.filter { celda ->
+        celda.centroY > layout.yCabecera + layout.toleranciaCabecera &&
+            celda.centroX in layout.cuLeft..layout.cuRight &&
+            patronCu.containsMatchIn(celda.texto)
+    }.sortedBy { it.centroY }
+    if (celdasCu.isEmpty()) return emptyList()
+
+    val resultado = mutableListOf<PaseFotoFila>()
+    celdasCu.forEach { celdaCu ->
+        // Rango vertical propio de esta fila -- solo depende de la altura de ESTA
+        // celda de CU, nunca de que tan lejos esta la siguiente celda de CU.
+        val margen = maxOf(22f, celdaCu.alto * 1.8f)
+        val filaTop = celdaCu.centroY - margen
+        val filaBottom = celdaCu.centroY + margen
+        val mismaFila = celdas.filter { it.centroY >= filaTop && it.centroY < filaBottom }
+
+        val nombre = mismaFila.filter { it.centroX in layout.nombreLeft..layout.nombreRight }
+            .sortedWith(compareBy<CeldaOcr> { it.centroY }.thenBy { it.centroX })
+            .joinToString(" ") { it.texto }.trim()
+        val cu = patronCu.find(celdaCu.texto)?.value ?: celdaCu.texto
+        val contiene = mismaFila.filter { it.centroX in layout.contieneLeft..layout.contieneRight }
+            .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim().ifBlank { null }
+        val capitales = mismaFila.filter { it.centroX in layout.capitalesLeft..layout.capitalesRight }
+            .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim().ifBlank { null }
+
+        resultado += PaseFotoFila(cu, nombre, "", contiene, capitales)
+    }
+
+    return resultado.distinctBy { "${normalizarTexto(it.cu)}|${normalizarTexto(it.nombre)}" }
 }
 
 suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> =
@@ -222,6 +304,29 @@ suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> =
             recognizer.process(image)
                 .addOnSuccessListener { visionText: Text ->
                     if (cont.isActive) cont.resume(parsearFilasPaseFoto(visionText))
+                    recognizer?.close()
+                }
+                .addOnFailureListener {
+                    if (cont.isActive) cont.resume(emptyList())
+                    recognizer?.close()
+                }
+        } catch (_: Exception) {
+            recognizer?.close()
+            if (cont.isActive) cont.resume(emptyList())
+        }
+    }
+
+/** Igual que extraerPaseDeFoto, pero para la foto de Contiene/Capitales -- lee TODAS
+ * las filas de forma independiente (ver parsearTodasLasFilasPorFila). */
+suspend fun extraerTodasLasFilasDeFoto(context: Context, uri: Uri): List<PaseFotoFila> =
+    suspendCancellableCoroutine { cont ->
+        var recognizer: TextRecognizer? = null
+        try {
+            val image = InputImage.fromFilePath(context, uri)
+            recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            recognizer.process(image)
+                .addOnSuccessListener { visionText: Text ->
+                    if (cont.isActive) cont.resume(parsearTodasLasFilasPorFila(visionText))
                     recognizer?.close()
                 }
                 .addOnFailureListener {

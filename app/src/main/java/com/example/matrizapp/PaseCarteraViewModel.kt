@@ -81,22 +81,25 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
 
     private fun buscarMatrizParaFila(fila: PaseFotoFila, matriz: List<MatrizEntity>, idsExcluidos: Set<String> = emptySet()): MatrizEntity? {
         val disponibles = matriz.filterNot { it.id in idsExcluidos }
-        val cu = normalizarCuPase(fila.cu)
-        if (cu.isNotBlank()) {
-            disponibles.firstOrNull {
-                normalizarCuPase(it.folioP) == cu || normalizarCuPase(it.id) == cu
-            }?.let { return it }
-        }
+        // Nombre PRIMERO -- no todos los registros de Matriz tienen CU (folioP), asi
+        // que depender de CU como primer criterio deja fuera a esos clientes.
         val buscado = normalizarNombreParaImportacion(fila.nombre)
-        if (buscado.isBlank()) return null
-        disponibles.firstOrNull { normalizarNombreParaImportacion(it.nombre) == buscado }?.let { return it }
-        val candidatos = disponibles.mapNotNull { item ->
-            val score = puntajeNombreOCR(buscado, item.nombre)
-            if (score >= 0.84) item to score else null
-        }.sortedByDescending { it.second }
-        val mejor = candidatos.firstOrNull() ?: return null
-        val segundo = candidatos.getOrNull(1)?.second ?: 0.0
-        return if (mejor.second - segundo >= 0.04) mejor.first else null
+        if (buscado.isNotBlank()) {
+            disponibles.firstOrNull { normalizarNombreParaImportacion(it.nombre) == buscado }?.let { return it }
+            val candidatos = disponibles.mapNotNull { item ->
+                val score = puntajeNombreOCR(buscado, item.nombre)
+                if (score >= 0.84) item to score else null
+            }.sortedByDescending { it.second }
+            val mejor = candidatos.firstOrNull()
+            if (mejor != null) {
+                val segundo = candidatos.getOrNull(1)?.second ?: 0.0
+                if (mejor.second - segundo >= 0.04) return mejor.first
+            }
+        }
+        // CU solo como ultimo recurso, cuando el nombre no dio un match confiable.
+        val cu = normalizarCuPase(fila.cu)
+        if (cu.isBlank()) return null
+        return disponibles.firstOrNull { normalizarCuPase(it.folioP) == cu || normalizarCuPase(it.id) == cu }
     }
 
     private fun textoDiagnostico(fila: PaseFotoFila): String =
@@ -132,6 +135,49 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
             }
             onResult(ImportResumen(filas.size, coincidenciasMatriz, yaEnPase, aAgregarPase, noEncontradosMatriz, filas, diagnostico), null)
         } catch (e: Exception) { onResult(null, e.message ?: "No se pudo procesar el reporte") }
+    }
+
+    /**
+     * Segundo paso opcional: foto del reporte de Contiene/Capitales (normalmente
+     * ordenado por Capitales, no por GCR -- por eso usa extraerTodasLasFilasDeFoto,
+     * que lee cada fila de forma independiente en vez de agrupar por cercania a otra
+     * fila Flores). Cruza esas filas contra los clientes YA CONFIRMADOS en el
+     * `resumen` de la foto 1 -- nombre primero, CU solo si el cliente ya tiene folioP
+     * en Matriz -- y regresa un ImportResumen con contiene/capitales completados.
+     * Nunca agrega clientes nuevos ni cambia los matches de Matriz ya hechos.
+     */
+    fun importarContieneCapitales(context: Context, uris: List<Uri>, resumen: ImportResumen, onResult: (ImportResumen?, String?) -> Unit) = viewModelScope.launch {
+        try {
+            val filasReporte = uris.take(8).flatMap { extraerTodasLasFilasDeFoto(context, it) }
+            val matriz = matrizDao.getAllMatriz().first()
+            val idsUsados = mutableSetOf<String>()
+            // Recalcula, en el mismo orden, a que cliente de Matriz corresponde cada
+            // fila de la foto 1 -- para saber su nombre real y si tiene folioP.
+            val objetivos = resumen.filas.map { fila ->
+                val item = buscarMatrizParaFila(fila, matriz, idsUsados)
+                item?.let { idsUsados += it.id }
+                fila to item
+            }
+
+            var actualizados = 0
+            val filasActualizadas = objetivos.map { (fila, matrizItem) ->
+                if (matrizItem == null) return@map fila
+                val nombreObjetivo = normalizarNombreParaImportacion(matrizItem.nombre)
+                val cuObjetivo = normalizarCuPase(matrizItem.folioP)
+                val filaReporte = filasReporte.firstOrNull { r ->
+                    normalizarNombreParaImportacion(r.nombre) == nombreObjetivo
+                } ?: filasReporte.firstOrNull { r ->
+                    puntajeNombreOCR(nombreObjetivo, r.nombre) >= 0.84
+                } ?: (if (cuObjetivo.isNotBlank()) filasReporte.firstOrNull { r -> normalizarCuPase(r.cu) == cuObjetivo } else null)
+                if (filaReporte == null) return@map fila
+                actualizados++
+                fila.copy(
+                    contiene = filaReporte.contiene?.takeIf { it.isNotBlank() } ?: fila.contiene,
+                    capitales = filaReporte.capitales?.takeIf { it.isNotBlank() } ?: fila.capitales
+                )
+            }
+            onResult(resumen.copy(filas = filasActualizadas), if (actualizados == 0) "No se encontró Contiene/Capitales para ninguno de los clientes ya confirmados" else null)
+        } catch (e: Exception) { onResult(null, e.message ?: "No se pudo procesar el reporte de Contiene/Capitales") }
     }
 
     fun aplicarImportacion(resumen: ImportResumen, onResult: (String) -> Unit) = viewModelScope.launch {

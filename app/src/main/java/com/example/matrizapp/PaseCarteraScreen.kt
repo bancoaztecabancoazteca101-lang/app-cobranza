@@ -51,6 +51,19 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         }
     }
 
+    // Paso 2 opcional: foto del reporte de Contiene/Capitales, para completar esos
+    // dos datos en los clientes que ya se confirmaron con la foto de Flores.
+    val pickerContieneCapitales = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        val resumenActual = importResumen
+        if (uris.isEmpty() || resumenActual == null) return@rememberLauncherForActivityResult
+        importando = true
+        viewModel.importarContieneCapitales(context, uris.take(8), resumenActual) { resumen, error ->
+            importando = false
+            if (error != null) Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+            if (resumen != null) importResumen = resumen
+        }
+    }
+
     LaunchedEffect(allItems.size) { viewModel.procesarPendientes() }
 
     val filtered = remember(allItems, searchQuery) {
@@ -111,6 +124,13 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
                         Text(linea, style = MaterialTheme.typography.bodySmall)
                     }
                     Text("Se copiarán a Pase únicamente registros que ya existan en Matriz. No se crearán clientes nuevos por OCR.")
+                    Text(
+                        "Contiene/Capitales completados: ${resumen.filas.count { it.contiene != null || it.capitales != null }} de ${resumen.filas.size}.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedButton(onClick = { if (!importando) pickerContieneCapitales.launch("image/*") }) {
+                        Text("Agregar foto de Contiene/Capitales")
+                    }
                 }
             },
             confirmButton = { Button(onClick = {
