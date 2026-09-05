@@ -34,7 +34,6 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
     val deleteInProgress by viewModel.deleteInProgress.collectAsState()
     var itemToEdit by remember { mutableStateOf<PaseEntity?>(null) }
     var itemToView by remember { mutableStateOf<PaseEntity?>(null) }
-    var itemGcr by remember { mutableStateOf<PaseEntity?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<PaseEntity?>(null) }
     var importando by remember { mutableStateOf(false) }
@@ -77,8 +76,8 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
                         contiene = item.contiene,
                         capitales = item.capitales
                     )
-                    IconButton(onClick = { itemGcr = item }, modifier = Modifier.align(Alignment.TopEnd)) {
-                        Icon(Icons.Default.Edit, contentDescription = "Editar CONTIENE y CAPITALES")
+                    IconButton(onClick = { itemToEdit = item }, modifier = Modifier.align(Alignment.TopEnd)) {
+                        Icon(Icons.Default.Edit, contentDescription = "Editar registro de Pase")
                     }
                 }
             }
@@ -122,38 +121,24 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         )
     }
 
-    itemGcr?.let { item ->
-        var contiene by remember(item.id) { mutableStateOf(item.contiene ?: "") }
-        var capitales by remember(item.id) { mutableStateOf(item.capitales ?: "") }
-        AlertDialog(
-            onDismissRequest = { itemGcr = null },
-            title = { Text("Importes de Pase — ${item.nombre}") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(value = contiene, onValueChange = { contiene = it }, label = { Text("CONTIENE") }, prefix = { Text("$ ") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                    OutlinedTextField(value = capitales, onValueChange = { capitales = it }, label = { Text("CAPITALES") }, prefix = { Text("$ ") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-                    Text("Estos importes son editables y se guardan en Pase aunque la foto no los detecte.", style = MaterialTheme.typography.bodySmall)
+    itemToView?.let { item -> MatrizDetailDialog(item.comoMatrizParaUi(), viewModel.driveHelper, { itemToView = null }, { itemToEdit = item; itemToView = null }) }
+
+    itemToEdit?.let { item ->
+        PaseFullFormDialog(
+            item = item,
+            onDismiss = { itemToEdit = null },
+            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, contiene, capitales ->
+                viewModel.cambiarIdYGuardar(item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { ok, error ->
+                    if (!ok) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
+                    else viewModel.actualizarCamposGcr(item.id, contiene, capitales) { gcrError ->
+                        if (gcrError != null) Toast.makeText(context, gcrError, Toast.LENGTH_LONG).show()
+                    }
                 }
-            },
-            confirmButton = { Button(onClick = {
-                viewModel.actualizarCamposGcr(item.id, contiene.ifBlank { null }, capitales.ifBlank { null }) { error ->
-                    if (error != null) Toast.makeText(context, error, Toast.LENGTH_LONG).show()
-                }
-                itemGcr = null
-            }) { Text("Guardar") } },
-            dismissButton = { TextButton(onClick = { itemGcr = null }) { Text("Cancelar") } }
+                itemToEdit = null
+            }
         )
     }
 
-    itemToView?.let { item -> MatrizDetailDialog(item.comoMatrizParaUi(), viewModel.driveHelper, { itemToView = null }, { itemToEdit = item; itemToView = null }) }
-    itemToEdit?.let { item ->
-        MatrizFullFormDialog(item.comoMatrizParaUi(), null, { itemToEdit = null }, { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
-            viewModel.cambiarIdYGuardar(item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { ok, error ->
-                if (!ok) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
-            }
-            itemToEdit = null
-        })
-    }
     if (showCreateDialog) {
         MatrizFullFormDialog(null, null, { showCreateDialog = false }, { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
             viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP)
