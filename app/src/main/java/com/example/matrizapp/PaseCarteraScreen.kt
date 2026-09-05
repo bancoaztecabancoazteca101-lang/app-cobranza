@@ -15,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -69,7 +71,7 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
                 Box {
                     MatrizItemCard(item.comoMatrizParaUi(), viewModel.driveHelper, { itemToView = item }, { itemToDelete = item })
                     IconButton(onClick = { itemGcr = item }, modifier = Modifier.align(Alignment.TopEnd)) {
-                        Icon(Icons.Default.Edit, contentDescription = "Editar CONTIEN y CAPITALES")
+                        Icon(Icons.Default.Edit, contentDescription = "Editar CONTIENE y CAPITALES")
                     }
                 }
             }
@@ -89,7 +91,7 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         AlertDialog(
             onDismissRequest = { importResumen = null },
             title = { Text("Revisar importación") },
-            text = { Text("GCR=Flores detectados: ${resumen.detectadosFlores}\n\nCoincidencias con Matriz por CU: ${resumen.coincidenciasMatriz}\nNuevos registros en Pase: ${resumen.nuevosPase}\n\nSolo se aplicarán estas filas al confirmar.") },
+            text = { Text("GCR=Flores detectados: ${resumen.detectadosFlores}\n\nCoincidencias con Matriz por nombre/CU: ${resumen.coincidenciasMatriz}\nNuevos registros en Pase: ${resumen.nuevosPase}\n\nSolo se aplicarán estas filas al confirmar.") },
             confirmButton = { Button(onClick = {
                 importResumen = null
                 viewModel.aplicarImportacion(resumen) { mensaje -> scope.launch { snackbarHostState.showSnackbar(mensaje) } }
@@ -103,11 +105,26 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         var capitales by remember(item.id) { mutableStateOf(item.capitales ?: "") }
         AlertDialog(
             onDismissRequest = { itemGcr = null },
-            title = { Text("Campos GCR — ${item.nombre}") },
+            title = { Text("Importes de Pase — ${item.nombre}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(contiene, { contiene = it }, label = { Text("CONTIEN") }, singleLine = true)
-                    OutlinedTextField(capitales, { capitales = it }, label = { Text("CAPITALES") }, singleLine = true)
+                    OutlinedTextField(
+                        value = contiene,
+                        onValueChange = { contiene = it },
+                        label = { Text("CONTIENE") },
+                        prefix = { Text("$ ") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                    OutlinedTextField(
+                        value = capitales,
+                        onValueChange = { capitales = it },
+                        label = { Text("CAPITALES") },
+                        prefix = { Text("$ ") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                    Text("Estos importes son editables y se guardan en Pase aunque la foto no los detecte.", style = MaterialTheme.typography.bodySmall)
                 }
             },
             confirmButton = { Button(onClick = {
