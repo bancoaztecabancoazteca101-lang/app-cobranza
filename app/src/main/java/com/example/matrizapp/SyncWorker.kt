@@ -77,6 +77,9 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
      *
      * Los importes se mandan como texto con USER_ENTERED y prefijo $, de modo que Sheets
      * los interpreta como números con formato de moneda. Ejemplo: "$4,463.00".
+     *
+     * Si un registro de Pase todavía no existe en Sheets, se agrega una fila completa.
+     * Esto evita dejar isDirty=1 para siempre en registros creados/importados desde la app.
      */
     private suspend fun syncPase() {
         // Crea los encabezados si la hoja todavía no tiene las nuevas columnas.
@@ -89,6 +92,33 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                 repository.updateSheetCell(Constants.SHEET_PASE, "S", idx, item.estado)
                 repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CONTIENE, idx, formatoMoneda(item.contiene))
                 repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CAPITALES, idx, formatoMoneda(item.capitales))
+                repository.markPaseAsClean(item.id)
+            } else {
+                // Layout conservador: conserva las columnas conocidas de Pase y deja vacías
+                // las columnas históricas cuyo significado no está modelado en PaseEntity.
+                repository.appendRow(Constants.SHEET_PASE, listOf(
+                    item.id,
+                    item.folioP ?: "",
+                    item.nombre,
+                    item.numTT,
+                    "",
+                    item.ref1,
+                    "",
+                    item.ref2,
+                    "",
+                    "",
+                    "",
+                    "",
+                    item.imagenUrl?.takeUnless { it.startsWith("content://") } ?: "",
+                    item.imagenUrl2?.takeUnless { it.startsWith("content://") } ?: "",
+                    "",
+                    "",
+                    item.ubicacion ?: "",
+                    "",
+                    item.estado,
+                    formatoMoneda(item.contiene),
+                    formatoMoneda(item.capitales)
+                ))
                 repository.markPaseAsClean(item.id)
             }
         }
