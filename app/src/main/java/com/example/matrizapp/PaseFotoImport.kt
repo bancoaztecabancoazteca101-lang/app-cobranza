@@ -271,13 +271,23 @@ fun parsearTodasLasFilasPorFila(visionText: Text): List<PaseFotoFila> {
     }.sortedBy { it.centroY }
     if (celdasCu.isEmpty()) return emptyList()
 
+    // Limite vertical de cada fila = punto medio hasta la celda de CU anterior/
+    // siguiente (igual que con Flores), no un multiplo de la altura de la propia
+    // celda -- esa estimacion fallaba cuando las filas estan mas pegadas de lo
+    // normal y terminaba mezclando Contiene/Capitales de la fila de al lado.
+    val limitesY = celdasCu.mapIndexed { index, cu ->
+        val anterior = celdasCu.getOrNull(index - 1)?.centroY
+        val siguiente = celdasCu.getOrNull(index + 1)?.centroY
+        val top = if (anterior != null) puntoMedio(anterior, cu.centroY)
+        else cu.centroY - maxOf(22f, cu.alto * 1.8f)
+        val bottom = if (siguiente != null) puntoMedio(cu.centroY, siguiente)
+        else cu.centroY + maxOf(22f, cu.alto * 1.8f)
+        top to bottom
+    }
+
     val resultado = mutableListOf<PaseFotoFila>()
-    celdasCu.forEach { celdaCu ->
-        // Rango vertical propio de esta fila -- solo depende de la altura de ESTA
-        // celda de CU, nunca de que tan lejos esta la siguiente celda de CU.
-        val margen = maxOf(22f, celdaCu.alto * 1.8f)
-        val filaTop = celdaCu.centroY - margen
-        val filaBottom = celdaCu.centroY + margen
+    celdasCu.forEachIndexed { index, celdaCu ->
+        val (filaTop, filaBottom) = limitesY[index]
         val mismaFila = celdas.filter { it.centroY >= filaTop && it.centroY < filaBottom }
 
         val nombre = mismaFila.filter { it.centroX in layout.nombreLeft..layout.nombreRight }
