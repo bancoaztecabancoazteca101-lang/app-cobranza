@@ -56,7 +56,6 @@ private fun esFlores(valor: String): Boolean {
 private fun centroSeguro(bounds: Rect?): Float? = bounds?.let { it.left + it.width() / 2f }
 private fun puntoMedio(a: Float, b: Float): Float = (a + b) / 2f
 
-/** CU de cuatro bloques que el OCR suele leer como 01-01-00673-33618. */
 private val patronCu = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)")
 
 /** Detecta exclusivamente las filas cuyo GCR es FLORES usando coordenadas OCR. */
@@ -166,20 +165,37 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val flores = celdas.filter { celda ->
         celda.centroY > yCabecera + toleranciaCabecera &&
             celda.centroX in gcrLeft..gcrRight && esFlores(celda.texto)
-    }
+    }.sortedBy { it.centroY }
     if (flores.isEmpty()) return emptyList()
 
+    // Cada GCR=FLORES define una fila. Los limites se colocan a mitad de camino
+    // entre dos celdas GCR consecutivas, evitando mezclar nombres/CU de filas vecinas.
+    val limitesY = flores.mapIndexed { index, flor ->
+        val anterior = flores.getOrNull(index - 1)?.centroY
+        val siguiente = flores.getOrNull(index + 1)?.centroY
+        val top = if (anterior != null) puntoMedio(anterior, flor.centroY)
+        else flor.centroY - maxOf(22f, flor.alto * 1.8f)
+        val bottom = if (siguiente != null) puntoMedio(flor.centroY, siguiente)
+        else flor.centroY + maxOf(22f, flor.alto * 1.8f)
+        top to bottom
+    }
+
     val resultado = mutableListOf<PaseFotoFila>()
-    for (flor in flores) {
-        val toleranciaFila = maxOf(18f, flor.alto * 1.35f)
-        val mismaFila = celdas.filter { kotlin.math.abs(it.centroY - flor.centroY) <= toleranciaFila }
+    flores.forEachIndexed { index, flor ->
+        val (filaTop, filaBottom) = limitesY[index]
+        val mismaFila = celdas.filter {
+            it.centroY >= filaTop && it.centroY < filaBottom
+        }
 
         val nombrePorColumna = mismaFila.filter { it.centroX in nombreLeft..nombreRight }
-            .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim()
+            .sortedWith(compareBy<CeldaOcr> { it.centroY }.thenBy { it.centroX })
+            .joinToString(" ") { it.texto }.trim()
         val cuPorColumna = mismaFila.filter { it.centroX in cuLeft..cuRight }
-            .sortedBy { it.centroX }.joinToString(" ") { it.texto }.trim()
+            .sortedWith(compareBy<CeldaOcr> { it.centroY }.thenBy { it.centroX })
+            .joinToString(" ") { it.texto }.trim()
 
-        val textoFila = mismaFila.sortedBy { it.centroX }.joinToString(" ") { it.texto }
+        val textoFila = mismaFila.sortedWith(compareBy<CeldaOcr> { it.centroY }.thenBy { it.centroX })
+            .joinToString(" ") { it.texto }
         val cuDetectado = patronCu.find(textoFila)?.value ?: patronCu.find(cuPorColumna)?.value ?: ""
         val nombre = if (cuDetectado.isNotBlank()) {
             nombrePorColumna.replace(cuDetectado, " ", ignoreCase = true).replace(Regex("\\s+"), " ").trim()
