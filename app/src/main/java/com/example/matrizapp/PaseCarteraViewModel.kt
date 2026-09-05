@@ -85,9 +85,13 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         val disponibles = matriz.filterNot { it.id in idsExcluidos }
 
         // CU es auxiliar para hacer match, nunca para detectar GCR=Flores.
+        // Primero se compara contra folioP (columna CU) y tambien contra id,
+        // porque el identificador local de Matriz puede contener el mismo CU.
         val cu = normalizarCuPase(fila.cu)
         if (cu.isNotBlank()) {
-            disponibles.firstOrNull { normalizarCuPase(it.folioP) == cu }?.let { return it }
+            disponibles.firstOrNull {
+                normalizarCuPase(it.folioP) == cu || normalizarCuPase(it.id) == cu
+            }?.let { return it }
         }
 
         val buscado = normalizarNombreParaImportacion(fila.nombre)
@@ -109,7 +113,7 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
             val filas = uris.take(8)
                 .flatMap { extraerPaseDeFoto(context, it) }
                 .distinctBy {
-                    // CU no es requisito para detectar GCR=Flores y puede venir vacío.
+                    // CU no es requisito para detectar GCR=Flores y puede venir vacio.
                     // La clave usa CU cuando existe y, si no, el nombre detectado.
                     val cu = normalizarCuPase(it.cu)
                     if (cu.isNotBlank()) "CU:$cu" else "NOMBRE:${normalizarNombreParaImportacion(it.nombre)}|GCR:${normalizarNombreParaImportacion(it.gcr)}"
