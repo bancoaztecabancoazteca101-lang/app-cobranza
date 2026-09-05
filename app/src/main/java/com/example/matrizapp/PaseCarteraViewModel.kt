@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.UUID
 
 class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matrizDao: MatrizDao, val driveHelper: DriveHelper) : ViewModel() {
@@ -20,24 +21,68 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
     private var preferenciasContext: Context? = null
 
     private fun normalizarNombreParaImportacion(valor: String?): String =
-        quitarAcentos(valor.orEmpty())
-            .uppercase()
-            .replace(Regex("[^A-Z0-9Ñ ]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
+        quitarAcentos(valor.orEmpty()).uppercase(Locale.ROOT).replace("Ñ", "N")
+            .replace(Regex("[^A-Z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
 
-    /** Primera búsqueda: nombre. Solo si no encuentra, se intenta el CU normalizado. */
+    private fun tokensNombre(valor: String?): List<String> =
+        normalizarNombreParaImportacion(valor).split(' ').filter { it.length >= 2 }
+
+    private fun distanciaLevenshtein(a: String, b: String): Int {
+        if (a == b) return 0
+        if (a.isEmpty()) return b.length
+        if (b.isEmpty()) return a.length
+        var anterior = IntArray(b.length + 1) { it }
+        for (i in a.indices) {
+            val actual = IntArray(b.length + 1)
+            actual[0] = i + 1
+            for (j in b.indices) {
+                actual[j + 1] = minOf(actual[j] + 1, anterior[j + 1] + 1, anterior[j] + if (a[i] == b[j]) 0 else 1)
+            }
+            anterior = actual
+        }
+        return anterior[b.length]
+    }
+
+    private fun similitudTexto(a: String, b: String): Double {
+        if (a == b) return 1.0
+        val maxLen = maxOf(a.length, b.length)
+        if (maxLen == 0) return 0.0
+        return 1.0 - distanciaLevenshtein(a, b).toDouble() / maxLen
+    }
+
+    /** Tolera errores OCR leves, pero exige varias palabras fuertes para evitar falsos positivos. */
+    private fun puntajeNombreOCR(ocr: String, matriz: String): Double {
+        val a = tokensNombre(ocr)
+        val b = tokensNombre(matriz)
+        if (a.isEmpty() || b.isEmpty()) return 0.0
+        val coincidencias = a.map { tokenA -> b.maxOf { tokenB ->
+            if (tokenA == tokenB) 1.0
+            else if (tokenA.length <= 3 || tokenB.length <= 3) 0.0
+            else similitudTexto(tokenA, tokenB)
+        }}
+        val suficientes = coincidencias.count { it >= 0.82 }
+        if (suficientes < maxOf(2, (a.size * 0.60).toInt())) return 0.0
+        val promedio = coincidencias.average()
+        val cobertura = suficientes.toDouble() / a.size
+        return promedio * 0.70 + cobertura * 0.30
+    }
+
+    /** Nombre primero; CU solamente si el nombre no encuentra un candidato seguro. */
     private fun buscarMatrizPorNombre(nombre: String, matriz: List<MatrizEntity>): MatrizEntity? {
         val buscado = normalizarNombreParaImportacion(nombre)
         if (buscado.isBlank()) return null
-        return matriz.firstOrNull { normalizarNombreParaImportacion(it.nombre) == buscado }
-            ?: matriz.firstOrNull { coincideBusqueda(it.nombre, nombre) }
+        matriz.firstOrNull { normalizarNombreParaImportacion(it.nombre) == buscado }?.let { return it }
+        val candidatos = matriz.mapNotNull { item ->
+            val score = puntajeNombreOCR(buscado, item.nombre)
+            if (score >= 0.84) item to score else null
+        }.sortedByDescending { it.second }
+        val mejor = candidatos.firstOrNull() ?: return null
+        val segundo = candidatos.getOrNull(1)?.second ?: 0.0
+        return if (mejor.second - segundo >= 0.04) mejor.first else null
     }
 
     private fun buscarMatrizPorNombreOCu(fila: PaseFotoFila, matriz: List<MatrizEntity>): MatrizEntity? {
-        val porNombre = buscarMatrizPorNombre(fila.nombre, matriz)
-        if (porNombre != null) return porNombre
-
+        buscarMatrizPorNombre(fila.nombre, matriz)?.let { return it }
         val cu = normalizarCuPase(fila.cu)
         if (cu.isBlank()) return null
         return matriz.firstOrNull { normalizarCuPase(it.folioP) == cu }
@@ -53,17 +98,39 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         } catch (e: Exception) { onResult(null, e.message ?: "No se pudo procesar el reporte") }
     }
 
+    /** Match con Matriz => crea/actualiza Pase inmediatamente; contiene/capitales viven solo en Pase. */
     fun aplicarImportacion(resumen: ImportResumen, onResult: (String) -> Unit) = viewModelScope.launch {
         try {
-            val matriz = matrizDao.getAllMatriz().first(); var matches = 0; var nuevos = 0
+            val matriz = matrizDao.getAllMatriz().first()
+            var matches = 0
+            var nuevos = 0
             resumen.filas.forEach { fila ->
                 val match = buscarMatrizPorNombreOCu(fila, matriz)
                 if (match != null) {
-                    guardarPendiente(match.id, fila.contiene, fila.capitales)
+                    val existente = paseDao.getByOrigenMatrizId(match.id)
+                    if (existente == null) {
+                        paseDao.insertar(PaseEntity(
+                            id = UUID.randomUUID().toString().replace("-", "").take(12),
+                            nombre = match.nombre, semana = match.semana, requisito = match.requisito,
+                            numTT = match.numTT, ref1 = match.ref1, ref2 = match.ref2,
+                            observaciones = match.observaciones, estado = "PASE", ubicacion = match.ubicacion,
+                            imagenUrl = match.imagenUrl, imagenUrl2 = match.imagenUrl2, fecha = match.fecha,
+                            hora = match.hora, ruta = match.ruta, folioP = match.folioP,
+                            origenMatrizId = match.id, contiene = fila.contiene, capitales = fila.capitales,
+                            isDirty = true
+                        ))
+                        nuevos++
+                    } else {
+                        paseDao.updateCamposGcr(existente.id, fila.contiene, fila.capitales)
+                    }
                     matrizDao.marcarComoPase(match.id)
                     matches++
                 } else {
-                    paseDao.insertar(PaseEntity(UUID.randomUUID().toString(), fila.nombre, "", "", "", "", "", null, "PASE", null, null, null, System.currentTimeMillis(), null, null, fila.cu, "IMPORT_FOTO:${fila.cu}:${UUID.randomUUID()}", fila.contiene, fila.capitales, true))
+                    paseDao.insertar(PaseEntity(
+                        UUID.randomUUID().toString(), fila.nombre, "", "", "", "", "", null,
+                        "PASE", null, null, null, System.currentTimeMillis(), null, null, fila.cu,
+                        "IMPORT_FOTO:${fila.cu}:${UUID.randomUUID()}", fila.contiene, fila.capitales, true
+                    ))
                     nuevos++
                 }
             }
@@ -71,6 +138,7 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         } catch (e: Exception) { onResult("No se pudo aplicar: ${e.message}") }
     }
 
+    /** Completa importaciones antiguas que quedaron en preferencias locales. */
     fun procesarPendientes() = viewModelScope.launch {
         val ctx = preferenciasContext ?: return@launch
         val prefs = ctx.getSharedPreferences("pase_import_gcr", Context.MODE_PRIVATE)
