@@ -99,6 +99,10 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         return if (mejor.second - segundo >= 0.04) mejor.first else null
     }
 
+    private fun textoDiagnostico(fila: PaseFotoFila): String =
+        "OCR NOMBRE=[${fila.nombre.ifBlank { "(vacío)" }}] | OCR CU=[${fila.cu.ifBlank { "(vacío)" }}] | " +
+            "OCR CONTIENE=[${fila.contiene ?: "(vacío)" }] | OCR CAPITALES=[${fila.capitales ?: "(vacío)" }]"
+
     fun importarFotos(context: Context, uris: List<Uri>, onResult: (ImportResumen?, String?) -> Unit) = viewModelScope.launch {
         try {
             preferenciasContext = context.applicationContext
@@ -118,12 +122,12 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
                 val matrizItem = buscarMatrizParaFila(fila, matriz, idsMatrizUsados)
                 if (matrizItem == null) {
                     noEncontradosMatriz++
-                    diagnostico += "${index + 1}. OCR NOMBRE=[${fila.nombre.ifBlank { "(vacío)" }}] | OCR CU=[${fila.cu.ifBlank { "(vacío)" }}] | OCR CONTIENE=[${fila.contiene ?: "(vacío)"}] | MATRIZ=NO ENCONTRADO"
+                    diagnostico += "${index + 1}. ${textoDiagnostico(fila)} | MATRIZ=NO ENCONTRADO"
                 } else {
                     idsMatrizUsados += matrizItem.id
                     coincidenciasMatriz++
                     if (pase.any { it.origenMatrizId == matrizItem.id }) yaEnPase++ else aAgregarPase++
-                    diagnostico += "${index + 1}. OCR NOMBRE=[${fila.nombre.ifBlank { "(vacío)" }}] | OCR CU=[${fila.cu.ifBlank { "(vacío)" }}] | OCR CONTIENE=[${fila.contiene ?: "(vacío)" }] | MATRIZ=OK → [${matrizItem.nombre}] CU=[${matrizItem.folioP ?: matrizItem.id}]"
+                    diagnostico += "${index + 1}. ${textoDiagnostico(fila)} | MATRIZ=OK → [${matrizItem.nombre}] CU=[${matrizItem.folioP ?: matrizItem.id}]"
                 }
             }
             onResult(ImportResumen(filas.size, coincidenciasMatriz, yaEnPase, aAgregarPase, noEncontradosMatriz, filas, diagnostico), null)
@@ -140,21 +144,52 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
             var noEncontrados = 0
             resumen.filas.forEach { fila ->
                 val matrizItem = buscarMatrizParaFila(fila, matriz, idsMatrizAplicados)
-                if (matrizItem == null) noEncontrados++ else {
+                if (matrizItem == null) {
+                    noEncontrados++
+                } else {
                     idsMatrizAplicados += matrizItem.id
                     val yaEnPase = pase.firstOrNull { it.origenMatrizId == matrizItem.id }
                     if (yaEnPase != null) {
-                        if (!fila.contiene.isNullOrBlank()) {
-                            paseDao.updateCamposGcr(yaEnPase.id, fila.contiene, yaEnPase.capitales)
+                        val contieneFinal = fila.contiene?.takeIf { it.isNotBlank() } ?: yaEnPase.contiene
+                        val capitalesFinal = fila.capitales?.takeIf { it.isNotBlank() } ?: yaEnPase.capitales
+                        if (fila.contiene != null || fila.capitales != null) {
+                            paseDao.updateCamposGcr(yaEnPase.id, contieneFinal, capitalesFinal)
                         }
                         yaExistian++
                     } else {
-                        paseDao.insertar(PaseEntity(UUID.randomUUID().toString().replace("-", "").take(12), matrizItem.nombre, matrizItem.semana, matrizItem.requisito, matrizItem.numTT, matrizItem.ref1, matrizItem.ref2, matrizItem.observaciones, "PASE", matrizItem.ubicacion, matrizItem.imagenUrl, matrizItem.imagenUrl2, matrizItem.fecha, matrizItem.hora, matrizItem.ruta, matrizItem.folioP, matrizItem.id, fila.contiene, null, isDirty = true))
+                        paseDao.insertar(
+                            PaseEntity(
+                                UUID.randomUUID().toString().replace("-", "").take(12),
+                                matrizItem.nombre,
+                                matrizItem.semana,
+                                matrizItem.requisito,
+                                matrizItem.numTT,
+                                matrizItem.ref1,
+                                matrizItem.ref2,
+                                matrizItem.observaciones,
+                                "PASE",
+                                matrizItem.ubicacion,
+                                matrizItem.imagenUrl,
+                                matrizItem.imagenUrl2,
+                                matrizItem.fecha,
+                                matrizItem.hora,
+                                matrizItem.ruta,
+                                matrizItem.folioP,
+                                matrizItem.id,
+                                fila.contiene,
+                                fila.capitales,
+                                isDirty = true
+                            )
+                        )
                         agregados++
                     }
                 }
             }
-            onResult("Importación aplicada: $agregados registro(s) de Matriz fueron llevados a Pase. " + if (yaExistian > 0) "$yaExistian ya existían en Pase. " else "" + if (noEncontrados > 0) "$noEncontrados fila(s) no se encontraron en Matriz y NO se agregaron." else "Todas las filas detectadas coincidieron con Matriz.")
+            onResult(
+                "Importación aplicada: $agregados registro(s) de Matriz fueron llevados a Pase. " +
+                    if (yaExistian > 0) "$yaExistian ya existían en Pase. " else "" +
+                    if (noEncontrados > 0) "$noEncontrados fila(s) no se encontraron en Matriz y NO se agregaron." else "Todas las filas detectadas coincidieron con Matriz."
+            )
         } catch (e: Exception) { onResult("No se pudo aplicar: ${e.message}") }
     }
 
