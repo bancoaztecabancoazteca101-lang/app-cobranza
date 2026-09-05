@@ -18,27 +18,59 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
     val deleteInProgress: StateFlow<Boolean> = _deleteInProgress
     data class ImportResumen(val detectadosFlores: Int, val coincidenciasMatriz: Int, val nuevosPase: Int, val filas: List<PaseFotoFila>)
     private var preferenciasContext: Context? = null
+
+    private fun normalizarNombreParaImportacion(valor: String?): String =
+        quitarAcentos(valor.orEmpty())
+            .uppercase()
+            .replace(Regex("[^A-Z0-9Ñ ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    /** Primera búsqueda: nombre. Solo si no encuentra, se intenta el CU normalizado. */
+    private fun buscarMatrizPorNombre(nombre: String, matriz: List<MatrizEntity>): MatrizEntity? {
+        val buscado = normalizarNombreParaImportacion(nombre)
+        if (buscado.isBlank()) return null
+        return matriz.firstOrNull { normalizarNombreParaImportacion(it.nombre) == buscado }
+            ?: matriz.firstOrNull { coincideBusqueda(it.nombre, nombre) }
+    }
+
+    private fun buscarMatrizPorNombreOCu(fila: PaseFotoFila, matriz: List<MatrizEntity>): MatrizEntity? {
+        val porNombre = buscarMatrizPorNombre(fila.nombre, matriz)
+        if (porNombre != null) return porNombre
+
+        val cu = normalizarCuPase(fila.cu)
+        if (cu.isBlank()) return null
+        return matriz.firstOrNull { normalizarCuPase(it.folioP) == cu }
+    }
+
     fun importarFotos(context: Context, uris: List<Uri>, onResult: (ImportResumen?, String?) -> Unit) = viewModelScope.launch {
         try {
             preferenciasContext = context.applicationContext
             val filas = uris.take(8).flatMap { extraerPaseDeFoto(context, it) }.distinctBy { normalizarCuPase(it.cu) }
             val matriz = matrizDao.getAllMatriz().first()
-            val matches = filas.count { fila -> val cu = normalizarCuPase(fila.cu); matriz.any { normalizarCuPase(it.folioP) == cu && cu.isNotBlank() } }
+            val matches = filas.count { buscarMatrizPorNombreOCu(it, matriz) != null }
             onResult(ImportResumen(filas.size, matches, filas.size - matches, filas), null)
         } catch (e: Exception) { onResult(null, e.message ?: "No se pudo procesar el reporte") }
     }
+
     fun aplicarImportacion(resumen: ImportResumen, onResult: (String) -> Unit) = viewModelScope.launch {
         try {
             val matriz = matrizDao.getAllMatriz().first(); var matches = 0; var nuevos = 0
             resumen.filas.forEach { fila ->
-                val cu = normalizarCuPase(fila.cu)
-                val match = matriz.firstOrNull { normalizarCuPase(it.folioP) == cu && cu.isNotBlank() }
-                if (match != null) { guardarPendiente(match.id, fila.contiene, fila.capitales); matrizDao.marcarComoPase(match.id); matches++ }
-                else { paseDao.insertar(PaseEntity(UUID.randomUUID().toString(), fila.nombre, "", "", "", "", "", null, "PASE", null, null, null, System.currentTimeMillis(), null, null, fila.cu, "IMPORT_FOTO:${fila.cu}:${UUID.randomUUID()}", fila.contiene, fila.capitales, true)); nuevos++ }
+                val match = buscarMatrizPorNombreOCu(fila, matriz)
+                if (match != null) {
+                    guardarPendiente(match.id, fila.contiene, fila.capitales)
+                    matrizDao.marcarComoPase(match.id)
+                    matches++
+                } else {
+                    paseDao.insertar(PaseEntity(UUID.randomUUID().toString(), fila.nombre, "", "", "", "", "", null, "PASE", null, null, null, System.currentTimeMillis(), null, null, fila.cu, "IMPORT_FOTO:${fila.cu}:${UUID.randomUUID()}", fila.contiene, fila.capitales, true))
+                    nuevos++
+                }
             }
             onResult("Importación aplicada: $matches coincidencia(s) con Matriz y $nuevos registro(s) nuevo(s) en Pase.")
         } catch (e: Exception) { onResult("No se pudo aplicar: ${e.message}") }
     }
+
     fun procesarPendientes() = viewModelScope.launch {
         val ctx = preferenciasContext ?: return@launch
         val prefs = ctx.getSharedPreferences("pase_import_gcr", Context.MODE_PRIVATE)
@@ -49,11 +81,32 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
             prefs.edit().remove(matrizId).apply()
         }
     }
+
     private fun guardarPendiente(matrizId: String, contiene: String?, capitales: String?) {
         preferenciasContext?.getSharedPreferences("pase_import_gcr", Context.MODE_PRIVATE)?.edit()?.putString(matrizId, "${contiene ?: ""}\u001F${capitales ?: ""}")?.apply()
     }
-    fun actualizarCamposGcr(id: String, contiene: String?, capitales: String?, onResult: (String?) -> Unit) = viewModelScope.launch { try { paseDao.updateCamposGcr(id, contiene, capitales); onResult(null) } catch (e: Exception) { onResult(e.message ?: "No se pudo guardar") } }
-    fun cambiarIdYGuardar(idAnterior: String, idNuevo: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?, fecha: Long?, hora: String?, ruta: String?, folioP: String?, onResult: (Boolean, String?) -> Unit) = viewModelScope.launch { val existente = paseList.value.find { it.id == idAnterior }; if (existente == null) { onResult(false, "El registro ya no existe"); return@launch }; paseDao.actualizar(existente.copy(nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true)); onResult(true, null) }
-    fun crearRegistro(id: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?, fecha: Long, hora: String?, ruta: String?, folioP: String?) { val idFinal = id.trim().ifBlank { UUID.randomUUID().toString().replace("-", "").take(12) }; viewModelScope.launch { paseDao.insertar(PaseEntity(idFinal, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, null, null, fecha, hora, ruta, folioP, "", isDirty = true)) } }
-    fun eliminarRegistro(id: String, onResult: (Boolean, String?) -> Unit) = viewModelScope.launch { _deleteInProgress.value = true; paseDao.eliminar(id); _deleteInProgress.value = false; onResult(true, null) }
+
+    fun actualizarCamposGcr(id: String, contiene: String?, capitales: String?, onResult: (String?) -> Unit) = viewModelScope.launch {
+        try { paseDao.updateCamposGcr(id, contiene, capitales); onResult(null) }
+        catch (e: Exception) { onResult(e.message ?: "No se pudo guardar") }
+    }
+
+    fun cambiarIdYGuardar(idAnterior: String, idNuevo: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?, fecha: Long?, hora: String?, ruta: String?, folioP: String?, onResult: (Boolean, String?) -> Unit) = viewModelScope.launch {
+        val existente = paseList.value.find { it.id == idAnterior }
+        if (existente == null) { onResult(false, "El registro ya no existe"); return@launch }
+        paseDao.actualizar(existente.copy(nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true))
+        onResult(true, null)
+    }
+
+    fun crearRegistro(id: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?, fecha: Long, hora: String?, ruta: String?, folioP: String?) {
+        val idFinal = id.trim().ifBlank { UUID.randomUUID().toString().replace("-", "").take(12) }
+        viewModelScope.launch { paseDao.insertar(PaseEntity(idFinal, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, null, null, fecha, hora, ruta, folioP, "", isDirty = true)) }
+    }
+
+    fun eliminarRegistro(id: String, onResult: (Boolean, String?) -> Unit) = viewModelScope.launch {
+        _deleteInProgress.value = true
+        paseDao.eliminar(id)
+        _deleteInProgress.value = false
+        onResult(true, null)
+    }
 }
