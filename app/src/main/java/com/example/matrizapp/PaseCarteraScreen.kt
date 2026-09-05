@@ -92,14 +92,20 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
             onDismissRequest = { importResumen = null },
             title = { Text("Revisar importación") },
             text = {
-                Text(
-                    "Filtro 1 — FLORES: ${resumen.detectadosFlores} fila(s) detectada(s)\n\n" +
-                        "Filtro 2 — Encontrados en Matriz: ${resumen.coincidenciasMatriz}\n" +
-                        "Ya existentes en Pase: ${resumen.yaEnPase}\n" +
-                        "Se agregarán a Pase: ${resumen.aAgregarPase}\n" +
-                        "Sin coincidencia en Matriz: ${resumen.noEncontradosMatriz}\n\n" +
-                        "Se copiarán a Pase únicamente registros que ya existan en Matriz. No se crearán clientes nuevos por OCR."
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Filtro 1 — FLORES: ${resumen.detectadosFlores} fila(s) detectada(s)\n\n" +
+                            "Filtro 2 — Encontrados en Matriz: ${resumen.coincidenciasMatriz}\n" +
+                            "Ya existentes en Pase: ${resumen.yaEnPase}\n" +
+                            "Se agregarán a Pase: ${resumen.aAgregarPase}\n" +
+                            "Sin coincidencia en Matriz: ${resumen.noEncontradosMatriz}"
+                    )
+                    Text("Diagnóstico OCR", style = MaterialTheme.typography.titleMedium)
+                    resumen.diagnostico.forEach { linea ->
+                        Text(linea, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("Se copiarán a Pase únicamente registros que ya existan en Matriz. No se crearán clientes nuevos por OCR.")
+                }
             },
             confirmButton = { Button(onClick = {
                 importResumen = null
