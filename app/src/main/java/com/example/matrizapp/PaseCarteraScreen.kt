@@ -94,9 +94,11 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
             text = {
                 Text(
                     "Filtro 1 — FLORES: ${resumen.detectadosFlores} fila(s) detectada(s)\n\n" +
-                        "Filtro 2/3 — Registros existentes en Pase: ${resumen.coincidenciasPase}\n" +
-                        "Sin coincidencia en Pase: ${resumen.noEncontradosPase}\n\n" +
-                        "Solo se actualizarán registros que ya existen en Pase. No se crearán clientes nuevos por OCR."
+                        "Filtro 2 — Encontrados en Matriz: ${resumen.coincidenciasMatriz}\n" +
+                        "Ya existentes en Pase: ${resumen.yaEnPase}\n" +
+                        "Se agregarán a Pase: ${resumen.aAgregarPase}\n" +
+                        "Sin coincidencia en Matriz: ${resumen.noEncontradosMatriz}\n\n" +
+                        "Se copiarán a Pase únicamente registros que ya existan en Matriz. No se crearán clientes nuevos por OCR."
                 )
             },
             confirmButton = { Button(onClick = {
