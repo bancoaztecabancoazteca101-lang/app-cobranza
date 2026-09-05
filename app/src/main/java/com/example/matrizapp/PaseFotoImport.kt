@@ -27,36 +27,28 @@ fun normalizarCuPase(valor: String?): String = valor.orEmpty().trim()
 private fun cuDeLinea(linea: String): String? = REGEX_CU_PASE.find(linea)?.value?.let(::normalizarCuPase)
     ?: REGEX_CU_SOLO_DIGITOS.find(linea)?.value?.let(::normalizarCuPase)
 
-private fun extraerNombreAntesDeFlores(textoBloque: String, cu: String): String {
-    val indiceFlores = textoBloque.indexOf("Flores", ignoreCase = true)
-    val antes = if (indiceFlores >= 0) textoBloque.substring(0, indiceFlores) else textoBloque
+private fun extraerNombreAntesDeFlores(bloque: String, cu: String): String {
+    val indiceFlores = bloque.indexOf("Flores", ignoreCase = true)
+    val antes = if (indiceFlores >= 0) bloque.substring(0, indiceFlores) else bloque
     val sinCu = antes.replace(cu, " ").trim()
     val tokens = sinCu.split(Regex("\\s+")).filter { it.isNotBlank() }
-    // En una fila OCR: CU, NOMBRE, PLAN, DIAS, DIA, SALDO, MORA, REQUE, GCR.
-    // El nombre es el bloque de texto antes del primer campo numérico de PLAN/DIAS.
     val primerNumero = tokens.indexOfFirst { it.matches(Regex("[A-Z]?\\d+(?:[.,]\\d+)?", RegexOption.IGNORE_CASE)) }
-    return when {
-        primerNumero > 0 -> tokens.take(primerNumero).joinToString(" ")
-        tokens.size >= 2 -> tokens.take(tokens.size.coerceAtMost(8)).joinToString(" ")
-        else -> ""
-    }
+    return if (primerNumero > 0) tokens.take(primerNumero).joinToString(" ") else tokens.takeLast(minOf(8, tokens.size)).joinToString(" ")
 }
 
 fun parsearFilasPaseFoto(textoOcr: String): List<PaseFotoFila> {
     val lineas = textoOcr.lines().map(::limpiarOcr).filter { it.isNotBlank() }
     val posicionesCu = lineas.mapIndexedNotNull { indice, linea -> cuDeLinea(linea)?.let { indice to it } }
     val resultado = mutableListOf<PaseFotoFila>()
-
     for ((posicion, cuDetectado) in posicionesCu) {
         val fin = posicionesCu.firstOrNull { it.first > posicion }?.first ?: lineas.size
         val bloque = lineas.subList(posicion, fin).joinToString(" ")
         if (!coincideBusqueda(bloque, "Flores")) continue
         val nombre = extraerNombreAntesDeFlores(bloque, cuDetectado)
         if (nombre.isBlank()) continue
-
         val indiceFlores = bloque.indexOf("Flores", ignoreCase = true)
-        val despuesGcr = if (indiceFlores >= 0) bloque.substring(indiceFlores + "Flores".length).trim() else ""
-        val finales = despuesGcr.split(Regex("\\s+")).filter { it.isNotBlank() }
+        val despues = if (indiceFlores >= 0) bloque.substring(indiceFlores + "Flores".length).trim() else ""
+        val finales = despues.split(Regex("\\s+")).filter { it.isNotBlank() }
         resultado += PaseFotoFila(cuDetectado, nombre, "Flores", finales.getOrNull(0)?.takeIf { it.length <= 40 }, finales.getOrNull(1)?.takeIf { it.length <= 40 })
     }
     return resultado.distinctBy { it.cu }
@@ -68,7 +60,14 @@ suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> = 
         val image = InputImage.fromFilePath(context, uri)
         recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         recognizer.process(image).addOnSuccessListener { visionText: Text ->
-            if (cont.isActive) cont.resume(parsearFilasPaseFoto(visionText.text)); recognizer?.close()
-        }.addOnFailureListener { if (cont.isActive) cont.resume(emptyList()); recognizer?.close() }
-    } catch (_: Exception) { recognizer?.close(); if (cont.isActive) cont.resume(emptyList()) }
+            if (cont.isActive) cont.resume(parsearFilasPaseFoto(visionText.text))
+            recognizer?.close()
+        }.addOnFailureListener {
+            if (cont.isActive) cont.resume(emptyList())
+            recognizer?.close()
+        }
+    } catch (_: Exception) {
+        recognizer?.close()
+        if (cont.isActive) cont.resume(emptyList())
+    }
 }
