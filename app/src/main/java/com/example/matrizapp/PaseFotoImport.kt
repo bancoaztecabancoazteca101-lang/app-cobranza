@@ -60,6 +60,9 @@ private fun centroSeguro(bounds: Rect?): Float? = bounds?.let { it.left + it.wid
 
 private fun puntoMedio(a: Float, b: Float): Float = (a + b) / 2f
 
+/** CU de cuatro bloques que el OCR suele leer como 01-01-00673-33618. */
+private val patronCu = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)")
+
 /**
  * Detecta exclusivamente las filas cuyo GCR es FLORES.
  *
@@ -80,8 +83,6 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     }
     if (celdas.isEmpty()) return emptyList()
 
-    // Tomamos el GCR más alto de la imagen: en este reporte el encabezado GCR
-    // está antes de las filas de clientes y evita confundir datos con la cabecera.
     val encabezadoGcr = celdas
         .filter { esCabecera(it.texto, "GCR") }
         .minByOrNull { it.bounds.top }
@@ -112,8 +113,6 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
         }
     }
 
-    // Si algún encabezado no quedó dentro de la misma Line, lo recuperamos
-    // únicamente cerca de la coordenada Y del encabezado GCR.
     val yCabecera = encabezadoGcr.centroY
     val toleranciaCabecera = maxOf(24f, encabezadoGcr.alto * 1.8f)
     celdas.filter { kotlin.math.abs(it.centroY - yCabecera) <= toleranciaCabecera }
@@ -142,8 +141,6 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val contieneX = cabeceras["CONTIENE"]
     val capitalesX = cabeceras["CAPITALES"]
 
-    // Límites horizontales de GCR. Preferimos los centros de las columnas
-    // vecinas; si una cabecera falta, usamos la separación disponible.
     val vecinoIzquierdo = listOfNotNull(requeX, cabeceras["MORA"], cabeceras["SALDO"], cabeceras["DIA"], cabeceras["DIAS"], planX)
         .filter { it < gcrX }
         .maxOrNull()
@@ -157,8 +154,6 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val gcrLeft = vecinoIzquierdo?.let { puntoMedio(it, gcrX) } ?: (gcrX - gcrAncho / 2f)
     val gcrRight = vecinoDerecho?.let { puntoMedio(gcrX, it) } ?: (gcrX + gcrAncho / 2f)
 
-    // Límite de NOMBRE. Es importante que el nombre termine antes de PLAN;
-    // así "FLORES" en un nombre queda fuera de la columna GCR.
     val nombreLeft = when {
         cuX != null && nombreX != null -> puntoMedio(cuX, nombreX)
         nombreX != null -> nombreX - 250f
@@ -189,20 +184,37 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
             kotlin.math.abs(it.centroY - flor.centroY) <= toleranciaFila
         }
 
-        val nombre = mismaFila
+        // Primero intentamos la separación por coordenadas. En la prueba real
+        // el OCR colocó el CU dentro del elemento que cayó en NOMBRE, así que
+        // usamos además el patrón de CU como fuente de verdad para esa fila.
+        val nombrePorColumna = mismaFila
             .filter { it.centroX in nombreLeft..nombreRight }
             .sortedBy { it.centroX }
             .joinToString(" ") { it.texto }
             .trim()
 
-        val cu = mismaFila
+        val cuPorColumna = mismaFila
             .filter { it.centroX in cuLeft..cuRight }
             .sortedBy { it.centroX }
             .joinToString(" ") { it.texto }
             .trim()
 
-        // Si el OCR no entregó nombre o CU por separado, la fila sigue siendo
-        // válida: GCR=Flores es el criterio de detección. CU solo es metadato.
+        val textoFila = mismaFila.sortedBy { it.centroX }.joinToString(" ") { it.texto }
+        val cuDetectado = patronCu.find(textoFila)?.value
+            ?: patronCu.find(cuPorColumna)?.value
+            ?: ""
+
+        val nombre = if (cuDetectado.isNotBlank()) {
+            nombrePorColumna
+                .replace(cuDetectado, " ", ignoreCase = true)
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        } else {
+            nombrePorColumna
+        }
+
+        val cu = cuDetectado.ifBlank { cuPorColumna }
+
         resultado += PaseFotoFila(
             cu = cu,
             nombre = nombre,
