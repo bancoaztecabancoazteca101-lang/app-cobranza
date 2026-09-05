@@ -118,12 +118,12 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
                 val matrizItem = buscarMatrizParaFila(fila, matriz, idsMatrizUsados)
                 if (matrizItem == null) {
                     noEncontradosMatriz++
-                    diagnostico += "${index + 1}. OCR NOMBRE=[${fila.nombre.ifBlank { "(vacío)" }}] | OCR CU=[${fila.cu.ifBlank { "(vacío)" }}] | MATRIZ=NO ENCONTRADO"
+                    diagnostico += "${index + 1}. OCR NOMBRE=[${fila.nombre.ifBlank { "(vacío)" }}] | OCR CU=[${fila.cu.ifBlank { "(vacío)" }}] | OCR CONTIENE=[${fila.contiene ?: "(vacío)"}] | MATRIZ=NO ENCONTRADO"
                 } else {
                     idsMatrizUsados += matrizItem.id
                     coincidenciasMatriz++
                     if (pase.any { it.origenMatrizId == matrizItem.id }) yaEnPase++ else aAgregarPase++
-                    diagnostico += "${index + 1}. OCR NOMBRE=[${fila.nombre.ifBlank { "(vacío)" }}] | OCR CU=[${fila.cu.ifBlank { "(vacío)" }}] | MATRIZ=OK → [${matrizItem.nombre}] CU=[${matrizItem.folioP ?: matrizItem.id}]"
+                    diagnostico += "${index + 1}. OCR NOMBRE=[${fila.nombre.ifBlank { "(vacío)" }}] | OCR CU=[${fila.cu.ifBlank { "(vacío)" }}] | OCR CONTIENE=[${fila.contiene ?: "(vacío)" }] | MATRIZ=OK → [${matrizItem.nombre}] CU=[${matrizItem.folioP ?: matrizItem.id}]"
                 }
             }
             onResult(ImportResumen(filas.size, coincidenciasMatriz, yaEnPase, aAgregarPase, noEncontradosMatriz, filas, diagnostico), null)
@@ -143,8 +143,13 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
                 if (matrizItem == null) noEncontrados++ else {
                     idsMatrizAplicados += matrizItem.id
                     val yaEnPase = pase.firstOrNull { it.origenMatrizId == matrizItem.id }
-                    if (yaEnPase != null) yaExistian++ else {
-                        paseDao.insertar(PaseEntity(UUID.randomUUID().toString().replace("-", "").take(12), matrizItem.nombre, matrizItem.semana, matrizItem.requisito, matrizItem.numTT, matrizItem.ref1, matrizItem.ref2, matrizItem.observaciones, "PASE", matrizItem.ubicacion, matrizItem.imagenUrl, matrizItem.imagenUrl2, matrizItem.fecha, matrizItem.hora, matrizItem.ruta, matrizItem.folioP, matrizItem.id, null, null, isDirty = true))
+                    if (yaEnPase != null) {
+                        if (!fila.contiene.isNullOrBlank()) {
+                            paseDao.updateCamposGcr(yaEnPase.id, fila.contiene, yaEnPase.capitales)
+                        }
+                        yaExistian++
+                    } else {
+                        paseDao.insertar(PaseEntity(UUID.randomUUID().toString().replace("-", "").take(12), matrizItem.nombre, matrizItem.semana, matrizItem.requisito, matrizItem.numTT, matrizItem.ref1, matrizItem.ref2, matrizItem.observaciones, "PASE", matrizItem.ubicacion, matrizItem.imagenUrl, matrizItem.imagenUrl2, matrizItem.fecha, matrizItem.hora, matrizItem.ruta, matrizItem.folioP, matrizItem.id, fila.contiene, null, isDirty = true))
                         agregados++
                     }
                 }
