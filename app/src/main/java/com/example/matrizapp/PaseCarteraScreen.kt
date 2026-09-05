@@ -91,7 +91,14 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         AlertDialog(
             onDismissRequest = { importResumen = null },
             title = { Text("Revisar importación") },
-            text = { Text("GCR=Flores detectados: ${resumen.detectadosFlores}\n\nCoincidencias con Matriz por nombre/CU: ${resumen.coincidenciasMatriz}\nNuevos registros en Pase: ${resumen.nuevosPase}\n\nSolo se aplicarán estas filas al confirmar.") },
+            text = {
+                Text(
+                    "Filtro 1 — FLORES: ${resumen.detectadosFlores} fila(s) detectada(s)\n\n" +
+                        "Filtro 2/3 — Registros existentes en Pase: ${resumen.coincidenciasPase}\n" +
+                        "Sin coincidencia en Pase: ${resumen.noEncontradosPase}\n\n" +
+                        "Solo se actualizarán registros que ya existen en Pase. No se crearán clientes nuevos por OCR."
+                )
+            },
             confirmButton = { Button(onClick = {
                 importResumen = null
                 viewModel.aplicarImportacion(resumen) { mensaje -> scope.launch { snackbarHostState.showSnackbar(mensaje) } }
@@ -108,22 +115,8 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
             title = { Text("Importes de Pase — ${item.nombre}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = contiene,
-                        onValueChange = { contiene = it },
-                        label = { Text("CONTIENE") },
-                        prefix = { Text("$ ") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                    )
-                    OutlinedTextField(
-                        value = capitales,
-                        onValueChange = { capitales = it },
-                        label = { Text("CAPITALES") },
-                        prefix = { Text("$ ") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                    )
+                    OutlinedTextField(value = contiene, onValueChange = { contiene = it }, label = { Text("CONTIENE") }, prefix = { Text("$ ") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                    OutlinedTextField(value = capitales, onValueChange = { capitales = it }, label = { Text("CAPITALES") }, prefix = { Text("$ ") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                     Text("Estos importes son editables y se guardan en Pase aunque la foto no los detecte.", style = MaterialTheme.typography.bodySmall)
                 }
             },
@@ -137,9 +130,7 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         )
     }
 
-    itemToView?.let { item ->
-        MatrizDetailDialog(item.comoMatrizParaUi(), viewModel.driveHelper, { itemToView = null }, { itemToEdit = item; itemToView = null })
-    }
+    itemToView?.let { item -> MatrizDetailDialog(item.comoMatrizParaUi(), viewModel.driveHelper, { itemToView = null }, { itemToEdit = item; itemToView = null }) }
     itemToEdit?.let { item ->
         MatrizFullFormDialog(item.comoMatrizParaUi(), null, { itemToEdit = null }, { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
             viewModel.cambiarIdYGuardar(item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { ok, error ->
