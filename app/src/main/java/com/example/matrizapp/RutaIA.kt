@@ -43,7 +43,11 @@ data class RutaIAFiltroEntity(
 enum class CampoOrdenRutaIA(val etiqueta: String) {
     DISTANCIA("Distancia/Cercanía"),
     DIAS_ATRASO("Días de atraso"),
-    PAGO_REQUERIDO("Pago requerido")
+    PAGO_REQUERIDO("Pago requerido"),
+    // No aparece en el diálogo de filtro (se excluye ahí a propósito): se activa solo cuando
+    // Diego reordena la lista a mano con las flechas. Cualquier criterio que vuelva a marcar
+    // en el diálogo de filtro reemplaza este modo.
+    PERSONALIZADO("Personalizado (orden manual)")
 }
 
 enum class DireccionOrdenRutaIA(val etiqueta: String) {
@@ -69,14 +73,62 @@ fun parsearCriteriosRutaIA(texto: String?): List<CriterioOrdenRutaIA> {
     return resultado.ifEmpty { listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.DISTANCIA, DireccionOrdenRutaIA.ASC)) }
 }
 
+/** Arma la ruta real (no solo ordena por distancia al punto de partida) con el algoritmo del
+ * vecino más cercano: parte de `inicio` (la ubicación actual), busca el cliente sin visitar
+ * más cercano a ESE punto, lo agrega, y repite tomando como nuevo punto de partida al cliente
+ * recién agregado -- así la ruta va encadenando parada tras parada en vez de solo ordenar por
+ * distancia al punto de arranque (que puede dejar zigzag si dos clientes cercanos entre sí
+ * quedan lejos uno del otro en la lista). Es un algoritmo goloso (greedy), no el óptimo global
+ * -- para 4-8 fotos (10-25 clientes aprox.) es más que suficiente y corre instantáneo. Los
+ * clientes sin coordenada (geocodificación falló) se agregan al final, en el orden en que
+ * llegaron, porque no hay forma de ubicarlos en la ruta. */
+fun construirRutaVecinoMasCercano(
+    items: List<RutaIAEntity>,
+    inicio: Pair<Double, Double>?
+): List<RutaIAEntity> {
+    val pendientes = items.filter { it.lat != null && it.lng != null }.toMutableList()
+    val sinUbicar = items.filter { it.lat == null || it.lng == null }
+    if (pendientes.isEmpty()) return sinUbicar
+
+    val resultado = mutableListOf<RutaIAEntity>()
+    // Si no hay ubicación actual (permiso de GPS negado, sin señal), arranca del primer
+    // cliente de la lista en vez de fallar -- sigue encadenando por cercanía entre ellos.
+    var puntoActual = inicio ?: (pendientes.first().lat!! to pendientes.first().lng!!)
+    while (pendientes.isNotEmpty()) {
+        val siguiente = pendientes.minByOrNull { distanciaKm(puntoActual, it.lat!! to it.lng!!) }!!
+        resultado.add(siguiente)
+        pendientes.remove(siguiente)
+        puntoActual = siguiente.lat!! to siguiente.lng!!
+    }
+    return resultado + sinUbicar
+}
+
 /** Orden compuesto: aplica los criterios en el orden de prioridad dado (el primero manda,
  * los siguientes solo desempatan). Los registros sin coordenada quedan al final cuando el
- * criterio activo es Distancia (no hay forma de saber qué tan lejos están). */
+ * criterio activo es Distancia (no hay forma de saber qué tan lejos están).
+ *
+ * Dos criterios se resuelven aparte porque no son un simple sort de un campo:
+ * - PERSONALIZADO (arrastró/reordenó a mano con las flechas): usa tal cual el campo `orden`
+ *   guardado en Room, ignora cualquier otro criterio en la lista.
+ * - DISTANCIA como criterio de mayor prioridad: en vez de ordenar por distancia al punto de
+ *   arranque, arma la ruta real encadenada con `construirRutaVecinoMasCercano`. Los demás
+ *   criterios (días de atraso, pago requerido) no se pueden combinar como desempate de una
+ *   ruta encadenada -- si Diego los quiere como criterio principal, tiene que desactivar
+ *   Distancia o subirlos de prioridad. */
 fun ordenarRutaIA(
     items: List<RutaIAEntity>,
     criterios: List<CriterioOrdenRutaIA>,
     ubicacionActual: Pair<Double, Double>?
 ): List<RutaIAEntity> {
+    val principal = criterios.firstOrNull()
+    if (principal?.campo == CampoOrdenRutaIA.PERSONALIZADO) {
+        return items.sortedBy { it.orden }
+    }
+    if (principal?.campo == CampoOrdenRutaIA.DISTANCIA) {
+        val ruta = construirRutaVecinoMasCercano(items, ubicacionActual)
+        return if (principal.direccion == DireccionOrdenRutaIA.DESC) ruta.reversed() else ruta
+    }
+
     var comparator: Comparator<RutaIAEntity>? = null
     for (c in criterios) {
         val base: Comparator<RutaIAEntity> = when (c.campo) {
@@ -84,6 +136,7 @@ fun ordenarRutaIA(
                 val ll = if (item.lat != null && item.lng != null) item.lat to item.lng else null
                 if (ll != null && ubicacionActual != null) distanciaKm(ubicacionActual, ll) else Double.MAX_VALUE
             }
+            CampoOrdenRutaIA.PERSONALIZADO -> compareBy { it.orden }
             CampoOrdenRutaIA.DIAS_ATRASO -> compareBy { it.diasAtraso ?: 0 }
             CampoOrdenRutaIA.PAGO_REQUERIDO -> compareBy { it.pagoRequerido ?: 0.0 }
         }

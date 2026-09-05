@@ -125,10 +125,15 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                     itemsIndexed(rutaOrdenada, key = { _, item -> item.id }) { idx, item ->
                         RutaIAItemCard(
                             item = item, posicion = idx + 1,
+                            puedeSubir = idx > 0,
+                            puedeBajar = idx < rutaOrdenada.size - 1,
                             onMarcarVisitado = {
-                                viewModel.marcarVisitado(item.id)
-                                Toast.makeText(context, "Marcado como visitado", Toast.LENGTH_SHORT).show()
+                                val yaVisitado = item.estado.equals("Visitado", ignoreCase = true)
+                                viewModel.alternarVisitado(item)
+                                Toast.makeText(context, if (yaVisitado) "Quitado de visitado" else "Marcado como visitado", Toast.LENGTH_SHORT).show()
                             },
+                            onMoverArriba = { viewModel.moverManualmente(item.id, -1) },
+                            onMoverAbajo = { viewModel.moverManualmente(item.id, 1) },
                             onVerFoto = { item.fotoOrigenUrl?.let { fotoAmpliada = Uri.parse(it) } },
                             onAbrirEnMatriz = { abrirEnMatriz(item) }
                         )
@@ -265,7 +270,11 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
 private fun RutaIAItemCard(
     item: RutaIAEntity,
     posicion: Int,
+    puedeSubir: Boolean,
+    puedeBajar: Boolean,
     onMarcarVisitado: () -> Unit,
+    onMoverArriba: () -> Unit,
+    onMoverAbajo: () -> Unit,
     onVerFoto: () -> Unit,
     onAbrirEnMatriz: () -> Unit
 ) {
@@ -277,10 +286,22 @@ private fun RutaIAItemCard(
         colors = CardDefaults.cardColors(containerColor = if (visitado) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface)
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-                Alignment.Center
-            ) { Text("$posicion", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+            // Número de posición + flechas para reordenar la ruta a mano. Al tocar una flecha
+            // la lista pasa a modo "Personalizado" (ver moverManualmente en el ViewModel), así
+            // que a partir de ahí ese orden manda hasta que Diego vuelva a elegir un criterio
+            // en el diálogo de filtro.
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = onMoverArriba, enabled = puedeSubir, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.ArrowDropUp, contentDescription = "Subir en la ruta", modifier = Modifier.size(20.dp))
+                }
+                Box(
+                    Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                    Alignment.Center
+                ) { Text("$posicion", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+                IconButton(onClick = onMoverAbajo, enabled = puedeBajar, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Bajar en la ruta", modifier = Modifier.size(20.dp))
+                }
+            }
             Spacer(Modifier.width(8.dp))
             // Miniatura de la foto de origen (la foto completa de esa mañana, no un recorte del
             // cliente): recortar la carita redonda de cada cliente no sale confiable porque las
@@ -328,10 +349,12 @@ private fun RutaIAItemCard(
                     }
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = onMarcarVisitado, enabled = !visitado, modifier = Modifier.size(32.dp)) {
+                    // Ya no se deshabilita al marcar -- el mismo botón alterna entre Visitado
+                    // y Pendiente, para poder deshacer un toque accidental.
+                    IconButton(onClick = onMarcarVisitado, modifier = Modifier.size(32.dp)) {
                         Icon(
                             if (visitado) Icons.Default.CheckCircle else Icons.Default.CheckCircleOutline,
-                            contentDescription = "Marcar como visitado",
+                            contentDescription = if (visitado) "Quitar marca de visitado" else "Marcar como visitado",
                             tint = if (visitado) Color(0xFF4CAF50) else LocalContentColor.current
                         )
                     }
@@ -359,7 +382,10 @@ private fun RutaIAFiltroDialog(
     onDismiss: () -> Unit,
     onAplicar: (List<CriterioOrdenRutaIA>) -> Unit
 ) {
-    var seleccion by remember { mutableStateOf(criteriosActuales) }
+    // Si la ruta estaba en modo Personalizado (reordenada a mano), el diálogo arranca sin nada
+    // marcado -- PERSONALIZADO no vive aquí como opción, solo se llega a él con las flechas de
+    // la lista. Si Diego marca cualquier criterio y aplica, reemplaza el orden manual.
+    var seleccion by remember { mutableStateOf(criteriosActuales.filter { it.campo != CampoOrdenRutaIA.PERSONALIZADO }) }
 
     fun estaActivo(campo: CampoOrdenRutaIA) = seleccion.any { it.campo == campo }
     fun direccionDe(campo: CampoOrdenRutaIA) = seleccion.find { it.campo == campo }?.direccion ?: DireccionOrdenRutaIA.ASC
@@ -389,7 +415,10 @@ private fun RutaIAFiltroDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text("Marca uno o varios criterios. El orden en que los marques define la prioridad (el primero manda, los demás solo desempatan).", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                CampoOrdenRutaIA.values().forEach { campo ->
+                // PERSONALIZADO no se ofrece aquí como checkbox -- se activa solo al reordenar
+                // la lista a mano con las flechas (ver RutaIAItemCard / moverManualmente).
+                // Marcar cualquier criterio de este diálogo lo reemplaza.
+                listOf(CampoOrdenRutaIA.DISTANCIA, CampoOrdenRutaIA.DIAS_ATRASO, CampoOrdenRutaIA.PAGO_REQUERIDO).forEach { campo ->
                     val activo = estaActivo(campo)
                     val prioridad = seleccion.indexOfFirst { it.campo == campo } + 1
                     Surface(

@@ -64,10 +64,20 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
         })
     }
     if (showCreateDialog) {
-        MatrizFullFormDialog(null, viewModel, onDismiss = { showCreateDialog = false }, onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
-            viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP)
-            showCreateDialog = false
-        })
+        MatrizFullFormDialog(
+            item = null,
+            viewModel = viewModel,
+            onDismiss = { showCreateDialog = false },
+            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+                viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { creado ->
+                    // Abre de una vez la vista previa (llamar/SMS/ruta) del cliente recién
+                    // registrado, en vez de solo cerrar el formulario sin más -- así Diego no
+                    // tiene que buscarlo de nuevo en la lista para poder contactarlo.
+                    itemToView = creado
+                }
+                showCreateDialog = false
+            }
+        )
     }
     itemToDelete?.let { item ->
         AlertDialog(

@@ -152,22 +152,27 @@ class MatrizViewModel(
     /** Crea un registro nuevo (no existe aun en el Sheet). El ID lo sugiere generarIdMatriz()
      * (hex corto), pero el formulario permite editarlo antes de guardar por si choca con uno
      * que ya haya generado AppSheet. */
+    /** Al crear, además de guardar, devuelve el registro recién creado via `onCreado` -- la
+     * pantalla lo usa para abrir de una vez la vista previa (MatrizDetailDialog) con los
+     * botones de llamar/SMS/ruta, en vez de solo cerrar el formulario sin dar ninguna acción
+     * rápida sobre el cliente que se acaba de dar de alta. */
     fun crearRegistro(
         id: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
-        fecha: Long, hora: String?, ruta: String?, folioP: String?
+        fecha: Long, hora: String?, ruta: String?, folioP: String?,
+        onCreado: (MatrizEntity) -> Unit = {}
     ) {
         val idFinal = id.trim().ifBlank { java.util.UUID.randomUUID().toString().replace("-", "").take(8) }
+        val nuevo = MatrizEntity(
+            id = idFinal, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT,
+            ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado,
+            ubicacion = ubicacion, imagenUrl = null, imagenUrl2 = null, fecha = fecha,
+            hora = hora, ruta = ruta, folioP = folioP, isDirty = true
+        )
         viewModelScope.launch {
-            matrizDao.insertOne(
-                MatrizEntity(
-                    id = idFinal, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT,
-                    ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado,
-                    ubicacion = ubicacion, imagenUrl = null, imagenUrl2 = null, fecha = fecha,
-                    hora = hora, ruta = ruta, folioP = folioP, isDirty = true
-                )
-            )
+            matrizDao.insertOne(nuevo)
             triggerSync()
+            onCreado(nuevo)
         }
     }
 
