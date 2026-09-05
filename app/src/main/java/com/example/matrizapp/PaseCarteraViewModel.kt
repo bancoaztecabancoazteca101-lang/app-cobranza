@@ -82,7 +82,14 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
     fun importarFotos(context: Context, uris: List<Uri>, onResult: (ImportResumen?, String?) -> Unit) = viewModelScope.launch {
         try {
             preferenciasContext = context.applicationContext
-            val filas = uris.take(8).flatMap { extraerPaseDeFoto(context, it) }.distinctBy { normalizarCuPase(it.cu) }
+            val filas = uris.take(8)
+                .flatMap { extraerPaseDeFoto(context, it) }
+                .distinctBy {
+                    // CU no es requisito para detectar GCR=Flores y puede venir vacío.
+                    // La clave usa CU cuando existe y, si no, el nombre detectado.
+                    val cu = normalizarCuPase(it.cu)
+                    if (cu.isNotBlank()) "CU:$cu" else "NOMBRE:${normalizarNombreParaImportacion(it.nombre)}|GCR:${normalizarNombreParaImportacion(it.gcr)}"
+                }
             val pase = paseDao.getAllPase().first()
             val matches = filas.count { buscarPaseParaFila(it, pase) != null }
             onResult(ImportResumen(filas.size, matches, filas.size - matches, filas), null)
