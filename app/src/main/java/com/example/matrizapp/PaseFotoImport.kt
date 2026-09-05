@@ -66,7 +66,7 @@ private val patronCu = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)
 /**
  * Detecta exclusivamente las filas cuyo GCR es FLORES.
  *
- * La detección NO depende del CU, del apellido del cliente ni de CONTIENE/CAPITALES.
+ * La detección NO depende del apellido del cliente ni de CONTIENE/CAPITALES.
  * Usa las coordenadas de los elementos OCR para distinguir la columna GCR de la
  * columna NOMBRE; por eso "FLORES" dentro de un nombre no dispara la detección.
  */
@@ -169,6 +169,18 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val cuLeft = 0f
     val cuRight = if (cuX != null && nombreX != null) puntoMedio(cuX, nombreX) else nombreLeft
 
+    // Límites de la columna CONTIENE. Se calculan a partir de las cabeceras
+    // vecinas para evitar confundir el valor con GCR o CAPITALES.
+    val contieneLeft = when {
+        contieneX != null -> puntoMedio(gcrX, contieneX)
+        else -> gcrRight
+    }
+    val contieneRight = when {
+        contieneX != null && capitalesX != null -> puntoMedio(contieneX, capitalesX)
+        contieneX != null -> contieneX + (contieneX - gcrX) / 2f
+        else -> contieneLeft
+    }
+
     val flores = celdas.filter { celda ->
         celda.centroY > yCabecera + toleranciaCabecera &&
             celda.centroX in gcrLeft..gcrRight &&
@@ -184,9 +196,6 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
             kotlin.math.abs(it.centroY - flor.centroY) <= toleranciaFila
         }
 
-        // Primero intentamos la separación por coordenadas. En la prueba real
-        // el OCR colocó el CU dentro del elemento que cayó en NOMBRE, así que
-        // usamos además el patrón de CU como fuente de verdad para esa fila.
         val nombrePorColumna = mismaFila
             .filter { it.centroX in nombreLeft..nombreRight }
             .sortedBy { it.centroX }
@@ -215,11 +224,18 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
 
         val cu = cuDetectado.ifBlank { cuPorColumna }
 
+        val contiene = mismaFila
+            .filter { it.centroX in contieneLeft..contieneRight }
+            .sortedBy { it.centroX }
+            .joinToString(" ") { it.texto }
+            .trim()
+            .ifBlank { null }
+
         resultado += PaseFotoFila(
             cu = cu,
             nombre = nombre,
             gcr = "Flores",
-            contiene = null,
+            contiene = contiene,
             capitales = null
         )
     }
