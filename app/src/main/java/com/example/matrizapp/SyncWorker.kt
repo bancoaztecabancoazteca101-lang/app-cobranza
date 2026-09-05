@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 class SyncWorker(appContext: Context, workerParams: WorkerParameters) : CoroutineWorker(appContext, workerParams) {
     private val container = (appContext as MainApplication).container
@@ -33,7 +34,6 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
             }
             val idx = repository.findRowIndexById(Constants.SHEET_MATRIZ, item.id, Constants.MatrizCols.COL_ID)
             if (idx != -1) {
-                // Registro existente: actualizar solo las columnas editables.
                 repository.updateSheetCell(Constants.SHEET_MATRIZ, "A", idx, item.nombre)
                 repository.updateSheetCell(Constants.SHEET_MATRIZ, "B", idx, item.semana)
                 repository.updateSheetCell(Constants.SHEET_MATRIZ, "C", idx, item.requisito)
@@ -50,8 +50,6 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                 repository.updateSheetCell(Constants.SHEET_MATRIZ, "O", idx, item.ruta)
                 repository.updateSheetCell(Constants.SHEET_MATRIZ, "P", idx, item.folioP)
             } else {
-                // Registro nuevo creado desde la app: agregar fila al final.
-                // Orden de columnas A..P: Nombre,Sem,Req,NumTT,Ref1,Ref2,Obs,Estado,Ubicacion,Imagen,Imagen2,Fecha,Id,Hora,Ruta,FolioP
                 repository.appendRow(Constants.SHEET_MATRIZ, listOf(
                     item.nombre, item.semana, item.requisito, item.numTT, item.ref1, item.ref2,
                     item.observaciones, item.estado, item.ubicacion, remoteImg, remoteImg2 ?: "",
@@ -64,8 +62,6 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
 
     private suspend fun syncFiltroFecha() {
         repository.getDirtyFiltroFechaItems().forEach { item ->
-            // Filtro Fecha comparte el mismo layout de columnas que Matriz (columna H = Estado,
-            // columna N = Hora, columna M = Id), porque se alimenta de ahí vía Apps Script.
             val idx = repository.findRowIndexById(Constants.SHEET_FILTRO, item.id, "M")
             if (idx != -1) {
                 repository.updateSheetCell(Constants.SHEET_FILTRO, "H", idx, item.estado)
@@ -75,14 +71,43 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
         }
     }
 
+    /**
+     * Pase conserva el layout existente y agrega CONTIENE/CAPITALES al final, en T/U.
+     * No desplazamos ninguna columna histórica de la hoja.
+     *
+     * Los importes se mandan como texto con USER_ENTERED y prefijo $, de modo que Sheets
+     * los interpreta como números con formato de moneda. Ejemplo: "$4,463.00".
+     */
     private suspend fun syncPase() {
+        // Crea los encabezados si la hoja todavía no tiene las nuevas columnas.
+        repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CONTIENE, 1, "CONTIENE")
+        repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CAPITALES, 1, "CAPITALES")
+
         repository.getDirtyPaseItems().forEach { item ->
             val idx = repository.findRowIndexById(Constants.SHEET_PASE, item.id, Constants.PaseCols.COL_ID)
             if (idx != -1) {
                 repository.updateSheetCell(Constants.SHEET_PASE, "S", idx, item.estado)
+                repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CONTIENE, idx, formatoMoneda(item.contiene))
+                repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CAPITALES, idx, formatoMoneda(item.capitales))
                 repository.markPaseAsClean(item.id)
             }
         }
+    }
+
+    private fun formatoMoneda(valor: String?): String {
+        val limpio = valor?.trim()?.removePrefix("$")?.replace(" ", "") ?: return ""
+        if (limpio.isBlank()) return ""
+
+        val normalizado = when {
+            limpio.contains(".") && limpio.contains(",") && limpio.lastIndexOf(',') > limpio.lastIndexOf('.') ->
+                limpio.replace(".", "").replace(",", ".")
+            limpio.contains(",") && limpio.substringAfterLast(',').length == 2 ->
+                limpio.replace(".", "").replace(",", ".")
+            else -> limpio.replace(",", "")
+        }
+
+        val numero = normalizado.toDoubleOrNull() ?: return limpio
+        return String.format(Locale.US, "$%,.2f", numero)
     }
 
     private suspend fun syncSolicitud() {
@@ -128,8 +153,6 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                 repository.updateSheetCell(Constants.SHEET_SOLICITUD, "R", idx, DateUtils.toSheetsSerial(item.fechaHora))
                 repository.markSolicitudAsClean(item.id, remoteAudio, remoteImg, remoteImg2, remoteImg3, remoteImg4)
             } else {
-                // Registro nuevo creado desde la app: agregar fila al final.
-                // Orden A..R: Id,Nombre,Numero,Sucursal,Ubicacion,Imagen,Imagen2,NombreRef1,Ref1,NombreRef2,Ref2,Observaciones,Audio,Estado,Imagen3,Imagen4,GestorAsignado,FechaYHora
                 repository.appendRow(Constants.SHEET_SOLICITUD, listOf(
                     item.id, item.nombre, item.numero ?: "", item.sucursal ?: "", item.ubicacionRaw ?: "",
                     remoteImg ?: "", remoteImg2 ?: "", item.nombreRef1 ?: "", item.ref1 ?: "",
