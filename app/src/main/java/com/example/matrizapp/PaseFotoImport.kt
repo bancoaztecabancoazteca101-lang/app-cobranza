@@ -13,7 +13,7 @@ import java.text.Normalizer
 
 data class PaseFotoFila(val cu: String, val nombre: String, val gcr: String, val contiene: String?, val capitales: String?)
 
-private val REGEX_CU_PASE = Regex("""\b\d{1,3}(?:[-\s]\d{1,3}){2,3}\b""")
+private val REGEX_CU_PASE = Regex("""\b\d{1,3}(?:[-\s]\d{1,4}){2,3}\b""")
 private val REGEX_CU_SOLO_DIGITOS = Regex("""\b\d{10,16}\b""")
 
 private fun limpiarOcr(texto: String): String = Normalizer.normalize(texto, Normalizer.Form.NFC)
