@@ -69,7 +69,14 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(filtered, key = { it.id }) { item ->
                 Box {
-                    MatrizItemCard(item.comoMatrizParaUi(), viewModel.driveHelper, { itemToView = item }, { itemToDelete = item })
+                    MatrizItemCard(
+                        item = item.comoMatrizParaUi(),
+                        driveHelper = viewModel.driveHelper,
+                        onCardClick = { itemToView = item },
+                        onDeleteClick = { itemToDelete = item },
+                        contiene = item.contiene,
+                        capitales = item.capitales
+                    )
                     IconButton(onClick = { itemGcr = item }, modifier = Modifier.align(Alignment.TopEnd)) {
                         Icon(Icons.Default.Edit, contentDescription = "Editar CONTIENE y CAPITALES")
                     }
