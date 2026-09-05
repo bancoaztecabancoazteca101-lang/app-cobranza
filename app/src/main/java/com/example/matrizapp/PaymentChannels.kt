@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.io.OutputStream
 import java.net.HttpURLConnection
@@ -67,35 +68,41 @@ suspend fun resolverUbicacionCliente(context: Context, ubicacion: String?): Pair
     return geocodificarDireccion(context, ubicacion)
 }
 
-suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): PaymentChannelSearchResult {
-    val coords = resolverUbicacionCliente(context, ubicacion)
-        ?: return PaymentChannelSearchResult(emptyList(), "No se pudo ubicar el domicilio del cliente.")
-    return withContext(Dispatchers.IO) {
-        try {
-            val query = """
-                [out:json][timeout:20];
-                (
-                  nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["name"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
-                  nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["brand"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
-                );
-                out center tags;
-            """.trimIndent()
-            val c = (URL(OVERPASS_URL).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"; connectTimeout = 12000; readTimeout = 25000; doOutput = true
-                setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                setRequestProperty("User-Agent", "MatrizApp/1.0")
+/** Le pone límite de 15s a TODO el flujo (geocodificar + Overpass) -- Geocoder.getFromLocationName
+ * es una llamada bloqueante sin timeout propio, y en equipos MIUI con señal débil se puede
+ * quedar colgada para siempre en vez de tronar, dejando el diálogo pegado en "Buscando...".
+ * Con withTimeoutOrNull, si no resuelve a tiempo se cancela y se regresa un error en vez de
+ * quedarse cargando indefinidamente. */
+suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): PaymentChannelSearchResult =
+    withTimeoutOrNull(15000) {
+        val coords = resolverUbicacionCliente(context, ubicacion)
+            ?: return@withTimeoutOrNull PaymentChannelSearchResult(emptyList(), "No se pudo ubicar el domicilio del cliente.")
+        withContext(Dispatchers.IO) {
+            try {
+                val query = """
+                    [out:json][timeout:20];
+                    (
+                      nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["name"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
+                      nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["brand"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
+                    );
+                    out center tags;
+                """.trimIndent()
+                val c = (URL(OVERPASS_URL).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"; connectTimeout = 12000; readTimeout = 12000; doOutput = true
+                    setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+                    setRequestProperty("User-Agent", "MatrizApp/1.0")
+                }
+                c.outputStream.use { it.write(("data=" + URLEncoder.encode(query, "UTF-8")).toByteArray(Charsets.UTF_8)) }
+                val code = c.responseCode
+                if (code !in 200..299) return@withContext PaymentChannelSearchResult(emptyList(), "No se pudo consultar el catálogo de lugares de pago ($code).")
+                val body = c.inputStream.bufferedReader().use { it.readText() }
+                c.disconnect()
+                parseOverpassChannels(body, coords)
+            } catch (e: Exception) {
+                PaymentChannelSearchResult(emptyList(), "No fue posible consultar lugares de pago: ${e.message ?: "error de red"}")
             }
-            c.outputStream.use { it.write(("data=" + URLEncoder.encode(query, "UTF-8")).toByteArray(Charsets.UTF_8)) }
-            val code = c.responseCode
-            if (code !in 200..299) return@withContext PaymentChannelSearchResult(emptyList(), "No se pudo consultar el catálogo de lugares de pago ($code).")
-            val body = c.inputStream.bufferedReader().use { it.readText() }
-            c.disconnect()
-            parseOverpassChannels(body, coords)
-        } catch (e: Exception) {
-            PaymentChannelSearchResult(emptyList(), "No fue posible consultar lugares de pago: ${e.message ?: "error de red"}")
         }
-    }
-}
+    } ?: PaymentChannelSearchResult(emptyList(), "La búsqueda tardó demasiado (posible señal débil). Cierra e inténtalo de nuevo.")
 
 private fun parseOverpassChannels(json: String, origin: Pair<Double, Double>): PaymentChannelSearchResult {
     val elements = JSONObject(json).optJSONArray("elements") ?: return PaymentChannelSearchResult(emptyList(), "La consulta no devolvió lugares de pago.")
@@ -175,8 +182,12 @@ fun PaymentChannelsDialog(customerName: String, ubicacion: String?, onDismiss: (
             permissionLauncher.launch(arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN))
         else printers = pairedPrinters(context)
     }
+    // Antes refreshPrinters() corría al final del mismo LaunchedEffect que la búsqueda de
+    // sucursales -- si esa búsqueda se colgaba (ver buscarCanalesPagoCercanos), la impresora
+    // nunca se detectaba aunque estuviera emparejada. Ahora corre aparte, de inmediato.
+    LaunchedEffect(Unit) { refreshPrinters() }
     LaunchedEffect(ubicacion) {
-        loading = true; result = buscarCanalesPagoCercanos(context, ubicacion); loading = false; refreshPrinters()
+        loading = true; result = buscarCanalesPagoCercanos(context, ubicacion); loading = false
     }
 
     AlertDialog(
