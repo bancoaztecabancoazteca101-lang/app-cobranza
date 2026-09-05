@@ -169,8 +169,6 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val cuLeft = 0f
     val cuRight = if (cuX != null && nombreX != null) puntoMedio(cuX, nombreX) else nombreLeft
 
-    // Límites de la columna CONTIENE. Se calculan a partir de las cabeceras
-    // vecinas para evitar confundir el valor con GCR o CAPITALES.
     val contieneLeft = when {
         contieneX != null -> puntoMedio(gcrX, contieneX)
         else -> gcrRight
@@ -179,6 +177,25 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
         contieneX != null && capitalesX != null -> puntoMedio(contieneX, capitalesX)
         contieneX != null -> contieneX + (contieneX - gcrX) / 2f
         else -> contieneLeft
+    }
+
+    // Límites de la columna CAPITALES. Si existe la cabecera, se toma el espacio
+    // entre CONTIENE y CAPITALES y, después de CAPITALES, hasta el borde útil de la fila.
+    val capitalesLeft = when {
+        capitalesX != null && contieneX != null -> puntoMedio(contieneX, capitalesX)
+        capitalesX != null -> capitalesX - (capitalesX - gcrX) / 2f
+        else -> contieneRight
+    }
+    val capitalesRight = when {
+        capitalesX != null -> {
+            val paso = when {
+                contieneX != null -> capitalesX - contieneX
+                vecinoIzquierdo != null -> capitalesX - gcrX
+                else -> 100f
+            }
+            capitalesX + paso / 2f
+        }
+        else -> capitalesLeft
     }
 
     val flores = celdas.filter { celda ->
@@ -231,12 +248,19 @@ fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
             .trim()
             .ifBlank { null }
 
+        val capitales = mismaFila
+            .filter { it.centroX in capitalesLeft..capitalesRight }
+            .sortedBy { it.centroX }
+            .joinToString(" ") { it.texto }
+            .trim()
+            .ifBlank { null }
+
         resultado += PaseFotoFila(
             cu = cu,
             nombre = nombre,
             gcr = "Flores",
             contiene = contiene,
-            capitales = null
+            capitales = capitales
         )
     }
 
@@ -252,7 +276,7 @@ suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> =
             val image = InputImage.fromFilePath(context, uri)
             recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             recognizer.process(image)
-                .addOnSuccessListener { visionText: Text ->
+                .addOnSuccessListener { visionText: Text.Text ->
                     if (cont.isActive) cont.resume(parsearFilasPaseFoto(visionText))
                     recognizer?.close()
                 }
