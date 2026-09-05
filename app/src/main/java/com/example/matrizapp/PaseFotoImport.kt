@@ -12,43 +12,115 @@ import kotlin.coroutines.resume
 import java.text.Normalizer
 
 data class PaseFotoFila(val cu: String, val nombre: String, val gcr: String, val contiene: String?, val capitales: String?)
-// El bloque de sucursal/rango en el CU real (ej. "01-01-01627-26379") puede traer 5
-// digitos ("01627"), no solo 4 -- confirmado contra CUs reales de Matriz que antes no
-// matcheaban ningun regex y por eso ni siquiera se detectaba la fila.
-private val REGEX_CU_PASE = Regex("""\b\d{1,3}(?:[-\s]\d{1,5}){2,3}\b""")
-private val REGEX_CU_SOLO_DIGITOS = Regex("""\b\d{10,16}\b""")
-private fun limpiarOcr(texto: String): String = Normalizer.normalize(texto, Normalizer.Form.NFC).replace("\u00A0", " ").replace("|", " ").replace(Regex("\\s{2,}"), " ").trim()
-fun normalizarCuPase(valor: String?): String = valor.orEmpty().trim().replace(Regex("\\s+"), "-").replace(Regex("[^0-9-]"), "").split('-').filter { it.isNotBlank() }.joinToString("-") { it.toLongOrNull()?.toString() ?: it }
-private fun cuDeLinea(linea: String): String? = REGEX_CU_PASE.find(linea)?.value?.let(::normalizarCuPase) ?: REGEX_CU_SOLO_DIGITOS.find(linea)?.value?.let(::normalizarCuPase)
-private fun extraerNombre(bloque: String, cu: String): String {
-    val f = bloque.indexOf("Flores", ignoreCase = true)
-    val antes = if (f >= 0) bloque.substring(0, f) else bloque
-    val tokens = antes.replace(cu, " ").trim().split(Regex("\\s+")).filter { it.isNotBlank() }
-    val numero = tokens.indexOfFirst { it.matches(Regex("[A-Z]?\\d+(?:[.,]\\d+)?", RegexOption.IGNORE_CASE)) }
-    return if (numero > 0) tokens.take(numero).joinToString(" ") else tokens.takeLast(minOf(8, tokens.size)).joinToString(" ")
+
+private fun limpiarOcr(texto: String): String =
+    Normalizer.normalize(texto, Normalizer.Form.NFC)
+        .replace("\u00A0", " ")
+        .replace("|", " ")
+        .replace(Regex("\\s{2,}"), " ")
+        .trim()
+
+private fun normalizarTexto(valor: String): String =
+    Normalizer.normalize(valor, Normalizer.Form.NFD)
+        .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+        .uppercase()
+        .replace(Regex("[^A-Z0-9 ]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+private fun esFlores(valor: String): Boolean {
+    val texto = normalizarTexto(valor)
+    return texto == "FLORES" ||
+        texto == "FL0RES" ||
+        texto == "FLORES." ||
+        texto == "FLORES-" ||
+        texto.matches(Regex("FLO?RES"))
 }
+
+/**
+ * Parser temporal enfocado exclusivamente en la columna GCR.
+ * No depende de CU, CONTIENE ni CAPITALES para detectar una fila.
+ *
+ * La prioridad es localizar el encabezado GCR y, desde las líneas OCR
+ * posteriores, detectar una celda cuyo contenido sea FLORES. De esta forma
+ * un cliente cuyo nombre/apellido sea Flores no se toma como GCR Flores
+ * solamente por aparecer en cualquier parte de la fotografía.
+ */
 fun parsearFilasPaseFoto(textoOcr: String): List<PaseFotoFila> {
-    val lineas = textoOcr.lines().map(::limpiarOcr).filter { it.isNotBlank() }
-    val posicionesCu = lineas.mapIndexedNotNull { i, linea -> cuDeLinea(linea)?.let { i to it } }
-    val resultado = mutableListOf<PaseFotoFila>()
-    for ((posicion, cu) in posicionesCu) {
-        val fin = posicionesCu.firstOrNull { it.first > posicion }?.first ?: lineas.size
-        val bloque = lineas.subList(posicion, fin).joinToString(" ")
-        if (!coincideBusqueda(bloque, "Flores")) continue
-        val nombre = extraerNombre(bloque, cu)
-        if (nombre.isBlank()) continue
-        val f = bloque.indexOf("Flores", ignoreCase = true)
-        val despues = if (f >= 0) bloque.substring(f + "Flores".length).trim() else ""
-        val finales = despues.split(Regex("\\s+")).filter { it.isNotBlank() }
-        resultado += PaseFotoFila(cu, nombre, "Flores", finales.getOrNull(0)?.takeIf { it.length <= 40 }, finales.getOrNull(1)?.takeIf { it.length <= 40 })
+    val lineas = textoOcr.lines()
+        .map(::limpiarOcr)
+        .filter { it.isNotBlank() }
+
+    if (lineas.isEmpty()) return emptyList()
+
+    val indiceGcr = lineas.indexOfFirst {
+        normalizarTexto(it).split(' ').any { token -> token == "GCR" }
     }
-    return resultado.distinctBy { it.cu }
+
+    if (indiceGcr < 0) return emptyList()
+
+    val resultado = mutableListOf<PaseFotoFila>()
+
+    // Buscamos FLORES solamente después de haber localizado el encabezado GCR.
+    // Cada línea OCR que contiene una celda GCR independiente se considera
+    // una posible fila; se excluyen coincidencias embebidas en nombres.
+    for (i in indiceGcr + 1 until lineas.size) {
+        val linea = lineas[i]
+        val tokens = linea.split(Regex("\\s+"))
+
+        tokens.forEachIndexed { indice, token ->
+            if (!esFlores(token)) return@forEachIndexed
+
+            // Si OCR entregó una línea tabular, GCR suele aparecer como una
+            // celda independiente. No aceptamos "FLORES" dentro de una cadena
+            // que claramente parece nombre completo.
+            val contexto = tokens.joinToString(" ")
+            val cantidadTokens = tokens.size
+            val pareceCeldaGcr = cantidadTokens <= 8 ||
+                contexto.equals("FLORES", ignoreCase = true)
+
+            if (!pareceCeldaGcr) return@forEachIndexed
+
+            // En esta fase todavía no dependemos del CU. Dejamos identificador
+            // vacío; el cruce posterior se hará contra Pase por nombre/posición
+            // cuando corresponda.
+            val antes = tokens.take(indice)
+            val nombre = antes
+                .filter { it.length >= 2 && !it.matches(Regex("\\d+")) }
+                .takeLast(6)
+                .joinToString(" ")
+                .trim()
+
+            resultado += PaseFotoFila(
+                cu = "",
+                nombre = nombre,
+                gcr = "Flores",
+                contiene = null,
+                capitales = null
+            )
+        }
+    }
+
+    return resultado.distinctBy { "${it.nombre}|${it.gcr}" }
 }
-suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> = suspendCancellableCoroutine { cont ->
-    var recognizer: TextRecognizer? = null
-    try {
-        val image = InputImage.fromFilePath(context, uri)
-        recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        recognizer.process(image).addOnSuccessListener { visionText: Text -> if (cont.isActive) cont.resume(parsearFilasPaseFoto(visionText.text)); recognizer?.close() }.addOnFailureListener { if (cont.isActive) cont.resume(emptyList()); recognizer?.close() }
-    } catch (_: Exception) { recognizer?.close(); if (cont.isActive) cont.resume(emptyList()) }
-}
+
+suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> =
+    suspendCancellableCoroutine { cont ->
+        var recognizer: TextRecognizer? = null
+        try {
+            val image = InputImage.fromFilePath(context, uri)
+            recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            recognizer.process(image)
+                .addOnSuccessListener { visionText: Text ->
+                    if (cont.isActive) cont.resume(parsearFilasPaseFoto(visionText.text))
+                    recognizer?.close()
+                }
+                .addOnFailureListener {
+                    if (cont.isActive) cont.resume(emptyList())
+                    recognizer?.close()
+                }
+        } catch (_: Exception) {
+            recognizer?.close()
+            if (cont.isActive) cont.resume(emptyList())
+        }
+    }
