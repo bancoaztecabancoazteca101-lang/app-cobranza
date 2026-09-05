@@ -24,7 +24,8 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         val yaEnPase: Int,
         val aAgregarPase: Int,
         val noEncontradosMatriz: Int,
-        val filas: List<PaseFotoFila>
+        val filas: List<PaseFotoFila>,
+        val diagnostico: List<String>
     )
 
     private var preferenciasContext: Context? = null
@@ -112,15 +113,20 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
             var yaEnPase = 0
             var aAgregarPase = 0
             var noEncontradosMatriz = 0
-            filas.forEach { fila ->
+            val diagnostico = mutableListOf<String>()
+            filas.forEachIndexed { index, fila ->
                 val matrizItem = buscarMatrizParaFila(fila, matriz, idsMatrizUsados)
-                if (matrizItem == null) noEncontradosMatriz++ else {
+                if (matrizItem == null) {
+                    noEncontradosMatriz++
+                    diagnostico += "${index + 1}. OCR NOMBRE=[${fila.nombre.ifBlank { "(vacío)" }}] | OCR CU=[${fila.cu.ifBlank { "(vacío)" }}] | MATRIZ=NO ENCONTRADO"
+                } else {
                     idsMatrizUsados += matrizItem.id
                     coincidenciasMatriz++
                     if (pase.any { it.origenMatrizId == matrizItem.id }) yaEnPase++ else aAgregarPase++
+                    diagnostico += "${index + 1}. OCR NOMBRE=[${fila.nombre.ifBlank { "(vacío)" }}] | OCR CU=[${fila.cu.ifBlank { "(vacío)" }}] | MATRIZ=OK → [${matrizItem.nombre}] CU=[${matrizItem.folioP ?: matrizItem.id}]"
                 }
             }
-            onResult(ImportResumen(filas.size, coincidenciasMatriz, yaEnPase, aAgregarPase, noEncontradosMatriz, filas), null)
+            onResult(ImportResumen(filas.size, coincidenciasMatriz, yaEnPase, aAgregarPase, noEncontradosMatriz, filas, diagnostico), null)
         } catch (e: Exception) { onResult(null, e.message ?: "No se pudo procesar el reporte") }
     }
 
