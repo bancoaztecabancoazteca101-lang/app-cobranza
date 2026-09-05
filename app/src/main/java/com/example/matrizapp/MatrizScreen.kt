@@ -70,9 +70,6 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
             onDismiss = { showCreateDialog = false },
             onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
                 viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { creado ->
-                    // Abre de una vez la vista previa (llamar/SMS/ruta) del cliente recién
-                    // registrado, en vez de solo cerrar el formulario sin más -- así Diego no
-                    // tiene que buscarlo de nuevo en la lista para poder contactarlo.
                     itemToView = creado
                 }
                 showCreateDialog = false
@@ -183,7 +180,14 @@ fun MatrizDetailDialog(item: MatrizEntity, driveHelper: DriveHelper, onDismiss: 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatrizItemCard(item: MatrizEntity, driveHelper: DriveHelper, onCardClick: () -> Unit, onDeleteClick: () -> Unit = {}) {
+fun MatrizItemCard(
+    item: MatrizEntity,
+    driveHelper: DriveHelper,
+    onCardClick: () -> Unit,
+    onDeleteClick: () -> Unit = {},
+    contiene: String? = null,
+    capitales: String? = null
+) {
     Card(onClick = onCardClick, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PortadaThumbnail(item.imagenUrl, driveHelper)
@@ -195,6 +199,15 @@ fun MatrizItemCard(item: MatrizEntity, driveHelper: DriveHelper, onCardClick: ()
                 }
                 if (!item.folioP.isNullOrBlank()) Text("CU: ${item.folioP}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 ColoniaLabel(item.ubicacion)
+                if (!contiene.isNullOrBlank() || !capitales.isNullOrBlank()) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (!contiene.isNullOrBlank()) Text("Contiene: ${formatearMontoMatriz(contiene)}", style = MaterialTheme.typography.bodySmall)
+                        if (!capitales.isNullOrBlank()) Text("Capitales: ${formatearMontoMatriz(capitales)}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ubicacion = item.ubicacion)
                     Spacer(Modifier.weight(1f))
