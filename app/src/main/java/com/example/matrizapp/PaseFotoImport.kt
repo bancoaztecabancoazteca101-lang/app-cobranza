@@ -18,33 +18,33 @@ private val REGEX_CU_SOLO_DIGITOS = Regex("""\b\d{10,16}\b""")
 
 private fun limpiarOcr(texto: String): String = Normalizer.normalize(texto, Normalizer.Form.NFC).replace("\u00A0", " ").replace("|", " ").replace(Regex("\\s{2,}"), " ").trim()
 
-fun normalizarCuPase(valor: String?): String = valor.orEmpty().trim().replace(Regex("\\s+"), "-").replace(Regex("[^0-9-]"), "").split('-').filter { it.isNotBlank() }.joinToString("-") { bloque -> bloque.toLongOrNull()?.toString() ?: bloque }
+fun normalizarCuPase(valor: String?): String = valor.orEmpty().trim().replace(Regex("\\s+"), "-").replace(Regex("[^0-9-]"), "").split('-').filter { it.isNotBlank() }.joinToString("-") { it.toLongOrNull()?.toString() ?: it }
 
 private fun cuDeLinea(linea: String): String? = REGEX_CU_PASE.find(linea)?.value?.let(::normalizarCuPase) ?: REGEX_CU_SOLO_DIGITOS.find(linea)?.value?.let(::normalizarCuPase)
 
-private fun extraerNombreAntesDeFlores(bloque: String, cu: String): String {
-    val indiceFlores = bloque.indexOf("Flores", ignoreCase = true)
-    val antes = if (indiceFlores >= 0) bloque.substring(0, indiceFlores) else bloque
+private fun extraerNombre(bloque: String, cu: String): String {
+    val flores = bloque.indexOf("Flores", ignoreCase = true)
+    val antes = if (flores >= 0) bloque.substring(0, flores) else bloque
     val sinCu = antes.replace(cu, " ").trim()
     val tokens = sinCu.split(Regex("\\s+")).filter { it.isNotBlank() }
-    val primerNumero = tokens.indexOfFirst { it.matches(Regex("[A-Z]?\\d+(?:[.,]\\d+)?", RegexOption.IGNORE_CASE)) }
-    return if (primerNumero > 0) tokens.take(primerNumero).joinToString(" ") else tokens.takeLast(minOf(8, tokens.size)).joinToString(" ")
+    val numero = tokens.indexOfFirst { it.matches(Regex("[A-Z]?\\d+(?:[.,]\\d+)?", RegexOption.IGNORE_CASE)) }
+    return if (numero > 0) tokens.take(numero).joinToString(" ") else tokens.takeLast(minOf(8, tokens.size)).joinToString(" ")
 }
 
 fun parsearFilasPaseFoto(textoOcr: String): List<PaseFotoFila> {
     val lineas = textoOcr.lines().map(::limpiarOcr).filter { it.isNotBlank() }
-    val posicionesCu = lineas.mapIndexedNotNull { indice, linea -> cuDeLinea(linea)?.let { indice to it } }
+    val posicionesCu = lineas.mapIndexedNotNull { i, linea -> cuDeLinea(linea)?.let { i to it } }
     val resultado = mutableListOf<PaseFotoFila>()
-    for ((posicion, cuDetectado) in posicionesCu) {
+    for ((posicion, cu) in posicionesCu) {
         val fin = posicionesCu.firstOrNull { it.first > posicion }?.first ?: lineas.size
         val bloque = lineas.subList(posicion, fin).joinToString(" ")
         if (!coincideBusqueda(bloque, "Flores")) continue
-        val nombre = extraerNombreAntesDeFlores(bloque, cuDetectado)
+        val nombre = extraerNombre(bloque, cu)
         if (nombre.isBlank()) continue
-        val indiceFlores = bloque.indexOf("Flores", ignoreCase = true)
-        val despues = if (indiceFlores >= 0) bloque.substring(indiceFlores + "Flores".length).trim() else ""
+        val f = bloque.indexOf("Flores", ignoreCase = true)
+        val despues = if (f >= 0) bloque.substring(f + "Flores".length).trim() else ""
         val finales = despues.split(Regex("\\s+")).filter { it.isNotBlank() }
-        resultado += PaseFotoFila(cuDetectado, nombre, "Flores", finales.getOrNull(0)?.takeIf { it.length <= 40 }, finales.getOrNull(1)?.takeIf { it.length <= 40 })
+        resultado += PaseFotoFila(cu, nombre, "Flores", finales.getOrNull(0)?.takeIf { it.length <= 40 }, finales.getOrNull(1)?.takeIf { it.length <= 40 })
     }
     return resultado.distinctBy { it.cu }
 }
