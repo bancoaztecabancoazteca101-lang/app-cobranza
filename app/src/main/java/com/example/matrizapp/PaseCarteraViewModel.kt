@@ -180,6 +180,40 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         } catch (e: Exception) { onResult(null, e.message ?: "No se pudo procesar el reporte de Contiene/Capitales") }
     }
 
+    /**
+     * Actualiza Contiene/Capitales directamente sobre los registros que YA EXISTEN en
+     * Pase (sin pasar por el flujo de importacion/Matriz). Se usa cuando el registro
+     * ya se aplico a Pase antes y solo falta completar estos dos datos con una foto
+     * nueva -- por ejemplo si la primera vez no se alcanzo a subir la foto de
+     * Contiene/Capitales, o si esos valores cambiaron. Nombre primero, CU de
+     * respaldo solo si el registro ya tiene folioP. Nunca crea registros nuevos ni
+     * toca Matriz -- solo hace UPDATE sobre PaseEntity existentes.
+     */
+    fun actualizarContieneCapitalesDesdeFoto(context: Context, uris: List<Uri>, onResult: (String?) -> Unit) = viewModelScope.launch {
+        try {
+            val filasReporte = uris.take(8).flatMap { extraerTodasLasFilasDeFoto(context, it) }
+            val pase = paseDao.getAllPase().first()
+            var actualizados = 0
+            pase.forEach { registro ->
+                val nombreObjetivo = normalizarNombreParaImportacion(registro.nombre)
+                val cuObjetivo = normalizarCuPase(registro.folioP)
+                val filaReporte = filasReporte.firstOrNull { r ->
+                    normalizarNombreParaImportacion(r.nombre) == nombreObjetivo
+                } ?: filasReporte.firstOrNull { r ->
+                    puntajeNombreOCR(nombreObjetivo, r.nombre) >= 0.84
+                } ?: (if (cuObjetivo.isNotBlank()) filasReporte.firstOrNull { r -> normalizarCuPase(r.cu) == cuObjetivo } else null)
+                if (filaReporte == null) return@forEach
+                val contieneFinal = filaReporte.contiene?.takeIf { it.isNotBlank() } ?: registro.contiene
+                val capitalesFinal = filaReporte.capitales?.takeIf { it.isNotBlank() } ?: registro.capitales
+                if (filaReporte.contiene != null || filaReporte.capitales != null) {
+                    paseDao.updateCamposGcr(registro.id, contieneFinal, capitalesFinal)
+                    actualizados++
+                }
+            }
+            onResult(if (actualizados > 0) "Contiene/Capitales actualizado en $actualizados registro(s) de Pase" else "No se encontró coincidencia para ningún registro de Pase existente")
+        } catch (e: Exception) { onResult(e.message ?: "No se pudo procesar el reporte de Contiene/Capitales") }
+    }
+
     fun aplicarImportacion(resumen: ImportResumen, onResult: (String) -> Unit) = viewModelScope.launch {
         try {
             val matriz = matrizDao.getAllMatriz().first()

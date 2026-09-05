@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -64,6 +65,17 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         }
     }
 
+    // Boton independiente: actualiza Contiene/Capitales sobre registros que YA
+    // existen en Pase (no requiere tener abierto el dialogo de importacion).
+    val pickerActualizarContieneCapitales = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        importando = true
+        viewModel.actualizarContieneCapitalesDesdeFoto(context, uris.take(8)) { mensaje ->
+            importando = false
+            if (mensaje != null) scope.launch { snackbarHostState.showSnackbar(mensaje) }
+        }
+    }
+
     LaunchedEffect(allItems.size) { viewModel.procesarPendientes() }
 
     val filtered = remember(allItems, searchQuery) {
@@ -98,6 +110,9 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         Row(Modifier.align(Alignment.BottomEnd).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SmallFloatingActionButton(onClick = { if (!importando) picker.launch("image/*") }) {
                 Icon(Icons.Default.CameraAlt, contentDescription = "Importar Pase por foto")
+            }
+            SmallFloatingActionButton(onClick = { if (!importando) pickerActualizarContieneCapitales.launch("image/*") }) {
+                Icon(Icons.Default.AttachMoney, contentDescription = "Actualizar Contiene/Capitales por foto")
             }
             FloatingActionButton(onClick = { showCreateDialog = true }) { Icon(Icons.Default.Add, contentDescription = "Nuevo registro en Pase") }
         }
