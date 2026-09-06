@@ -98,11 +98,17 @@ class RutaIAViewModel(
                     )
                 }
 
-                _progreso.value = "Construyendo ruta..."
+                _progreso.value = "Aplicando filtros y construyendo ruta..."
+                val filtros = FiltrosRutaIA(
+                    minimoDiasAtraso = null,
+                    minimoRequerido = null,
+                    exigirDireccion = true
+                )
                 val ordenados = construirRutaIAInteligente(
                     nuevos,
                     ubicacion ?: _ubicacionActual.value,
-                    estrategia
+                    estrategia,
+                    filtros
                 ).mapIndexed { idx, item -> item.copy(orden = idx) }
 
                 _progreso.value = "Guardando ruta..."
