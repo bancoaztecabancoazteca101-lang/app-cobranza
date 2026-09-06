@@ -5,11 +5,6 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.coroutines.suspendCancellableCoroutine
 
-/** Un cliente extraído de una foto de la app de trabajo (Clientes de cobranza) y ubicado
- * en el mapa para armar la ruta del día. Tabla 100% independiente de Matriz: `cuMatrizMatch`
- * solo guarda la referencia si hubo cruce por CU, nunca sincroniza cambios de vuelta a Matriz.
- * `fechaDia` es la medianoche del día en que se generó, para poder limpiar por día si algún
- * día se necesita conservar más de uno. */
 @Entity(tableName = "ruta_ia_table")
 data class RutaIAEntity(
     @PrimaryKey val id: String,
@@ -31,9 +26,6 @@ data class RutaIAEntity(
     val lastSync: Long = System.currentTimeMillis()
 )
 
-/** Config de orden/filtro de Ruta IA -- una sola fila local (id fijo = 1), nunca se sube a
- * Sheets. `criteriosOrden` guarda la lista de criterios activos, en orden de prioridad,
- * serializada como "CAMPO:DIRECCION,CAMPO:DIRECCION,...". */
 @Entity(tableName = "ruta_ia_filtro_table")
 data class RutaIAFiltroEntity(
     @PrimaryKey val id: Int = 1,
@@ -55,8 +47,7 @@ enum class DireccionOrdenRutaIA(val etiqueta: String) {
 data class CriterioOrdenRutaIA(val campo: CampoOrdenRutaIA, val direccion: DireccionOrdenRutaIA)
 
 fun serializarCriteriosRutaIA(lista: List<CriterioOrdenRutaIA>): String =
-    if (lista.isEmpty()) "DISTANCIA:ASC"
-    else lista.joinToString(",") { "${it.campo.name}:${it.direccion.name}" }
+    if (lista.isEmpty()) "DISTANCIA:ASC" else lista.joinToString(",") { "${it.campo.name}:${it.direccion.name}" }
 
 fun parsearCriteriosRutaIA(texto: String?): List<CriterioOrdenRutaIA> {
     if (texto.isNullOrBlank()) return listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.DISTANCIA, DireccionOrdenRutaIA.ASC))
@@ -70,15 +61,10 @@ fun parsearCriteriosRutaIA(texto: String?): List<CriterioOrdenRutaIA> {
     return resultado.ifEmpty { listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.DISTANCIA, DireccionOrdenRutaIA.ASC)) }
 }
 
-/** Arma la ruta real con vecino más cercano. */
-fun construirRutaVecinoMasCercano(
-    items: List<RutaIAEntity>,
-    inicio: Pair<Double, Double>?
-): List<RutaIAEntity> {
+fun construirRutaVecinoMasCercano(items: List<RutaIAEntity>, inicio: Pair<Double, Double>?): List<RutaIAEntity> {
     val pendientes = items.filter { it.lat != null && it.lng != null }.toMutableList()
     val sinUbicar = items.filter { it.lat == null || it.lng == null }
     if (pendientes.isEmpty()) return sinUbicar
-
     val resultado = mutableListOf<RutaIAEntity>()
     var puntoActual = inicio ?: (pendientes.first().lat!! to pendientes.first().lng!!)
     while (pendientes.isNotEmpty()) {
@@ -90,94 +76,31 @@ fun construirRutaVecinoMasCercano(
     return resultado + sinUbicar
 }
 
-/** Filtros duros de negocio. */
-data class FiltrosRutaIA(
-    val minimoDiasAtraso: Int? = null,
-    val minimoRequerido: Double? = null,
-    val exigirDireccion: Boolean = true
-)
-
-fun aplicarFiltrosRutaIA(
-    items: List<RutaIAEntity>,
-    filtros: FiltrosRutaIA = FiltrosRutaIA()
-): List<RutaIAEntity> = items.filter { item ->
-    val cumpleDias = filtros.minimoDiasAtraso == null ||
-        (item.diasAtraso != null && item.diasAtraso >= filtros.minimoDiasAtraso)
-    val cumpleRequerido = filtros.minimoRequerido == null ||
-        (item.pagoRequerido != null && item.pagoRequerido >= filtros.minimoRequerido)
-    val cumpleDireccion = !filtros.exigirDireccion || item.direccion.isNotBlank()
-    cumpleDias && cumpleRequerido && cumpleDireccion
-}
-
-/** Construye el orden final de la ruta aplicando primero todos los filtros activos. */
-fun construirRutaIAInteligente(
-    items: List<RutaIAEntity>,
-    inicio: Pair<Double, Double>?,
-    estrategia: EstrategiaRutaIA,
-    filtros: FiltrosRutaIA = FiltrosRutaIA()
-): List<RutaIAEntity> {
-    val filtrados = aplicarFiltrosRutaIA(items, filtros)
-    val pendientes = filtrados.filter { it.lat != null && it.lng != null }.toMutableList()
-    val sinUbicar = filtrados.filter { it.lat == null || it.lng == null }
-    if (pendientes.isEmpty()) return sinUbicar
-
-    fun distanciaDesde(punto: Pair<Double, Double>, item: RutaIAEntity): Double =
-        distanciaKm(punto, item.lat!! to item.lng!!)
-
-    fun prioridadSinGps(): RutaIAEntity = when (estrategia) {
-        EstrategiaRutaIA.INTELIGENTE,
-        EstrategiaRutaIA.MAYOR_ATRASO,
-        EstrategiaRutaIA.PRIORIDAD_COBRANZA -> pendientes.maxWithOrNull(
-            compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
-                .thenBy { it.pagoRequerido ?: 0.0 }
-        )!!
-        EstrategiaRutaIA.MAYOR_REQUERIDO -> pendientes.maxWithOrNull(
-            compareBy<RutaIAEntity> { it.pagoRequerido ?: 0.0 }
-                .thenBy { it.diasAtraso ?: 0 }
-        )!!
+fun ordenarRutaIA(items: List<RutaIAEntity>, criterios: List<CriterioOrdenRutaIA>, ubicacionActual: Pair<Double, Double>?): List<RutaIAEntity> {
+    val principal = criterios.firstOrNull()
+    if (principal?.campo == CampoOrdenRutaIA.PERSONALIZADO) return items.sortedBy { it.orden }
+    if (principal?.campo == CampoOrdenRutaIA.DISTANCIA) {
+        val ruta = construirRutaVecinoMasCercano(items, ubicacionActual)
+        return if (principal.direccion == DireccionOrdenRutaIA.DESC) ruta.reversed() else ruta
     }
-
-    val resultado = mutableListOf<RutaIAEntity>()
-    var punto: Pair<Double, Double>? = inicio
-    while (pendientes.isNotEmpty()) {
-        val siguiente = when {
-            punto == null -> prioridadSinGps()
-            estrategia == EstrategiaRutaIA.INTELIGENTE -> pendientes.minWithOrNull(
-                compareBy<RutaIAEntity> { distanciaDesde(punto!!, it) }
-                    .thenByDescending { it.diasAtraso ?: 0 }
-                    .thenByDescending { it.pagoRequerido ?: 0.0 }
-            )!!
-            estrategia == EstrategiaRutaIA.MAYOR_ATRASO -> pendientes.maxWithOrNull(
-                compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
-                    .thenBy { -distanciaDesde(punto!!, it) }
-                    .thenBy { it.pagoRequerido ?: 0.0 }
-            )!!
-            estrategia == EstrategiaRutaIA.MAYOR_REQUERIDO -> pendientes.maxWithOrNull(
-                compareBy<RutaIAEntity> { it.pagoRequerido ?: 0.0 }
-                    .thenBy { -distanciaDesde(punto!!, it) }
-                    .thenBy { it.diasAtraso ?: 0 }
-            )!!
-            else -> pendientes.maxWithOrNull(
-                compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
-                    .thenBy { it.pagoRequerido ?: 0.0 }
-                    .thenBy { -distanciaDesde(punto!!, it) }
-            )!!
+    var comparator: Comparator<RutaIAEntity>? = null
+    for (c in criterios) {
+        val base: Comparator<RutaIAEntity> = when (c.campo) {
+            CampoOrdenRutaIA.DISTANCIA -> compareBy { item ->
+                val ll = if (item.lat != null && item.lng != null) item.lat to item.lng else null
+                if (ll != null && ubicacionActual != null) distanciaKm(ubicacionActual, ll) else Double.MAX_VALUE
+            }
+            CampoOrdenRutaIA.PERSONALIZADO -> compareBy { it.orden }
+            CampoOrdenRutaIA.DIAS_ATRASO -> compareBy { it.diasAtraso ?: 0 }
+            CampoOrdenRutaIA.PAGO_REQUERIDO -> compareBy { it.pagoRequerido ?: 0.0 }
         }
-        resultado += siguiente
-        pendientes.remove(siguiente)
-        punto = siguiente.lat!! to siguiente.lng!!
+        val orientado = if (c.direccion == DireccionOrdenRutaIA.DESC) base.reversed() else base
+        comparator = comparator?.then(orientado) ?: orientado
     }
-    return resultado + sinUbicar
+    return items.sortedWith(comparator ?: compareBy { 0 })
 }
 
-/** Compatibilidad con el flujo OCR antiguo; Ruta IA nueva usa JSON. */
-data class ClienteRutaIAExtraido(
-    val nombre: String,
-    val cu: String?,
-    val direccion: String,
-    val diasAtraso: Int?,
-    val pagoRequerido: Double?
-)
+data class ClienteRutaIAExtraido(val nombre: String, val cu: String?, val direccion: String, val diasAtraso: Int?, val pagoRequerido: Double?)
 
 private val REGEX_CU_RUTA = Regex("""\d{2}-\d{2,}-\d{5}-\d+""")
 private val REGEX_DIAS_RUTA = Regex("""D[ií]as?\s+atraso\D{0,25}?(\d+)""", RegexOption.IGNORE_CASE)
@@ -212,8 +135,7 @@ fun parsearClientesRutaIA(textoOcr: String): List<ClienteRutaIAExtraido> {
             val nombre = if (i > 0) lineas[i - 1] else ""
             val bloque = mutableListOf<String>()
             var j = i + 1
-            while (j < lineas.size && REGEX_CU_RUTA.find(lineas[j]) == null &&
-                !lineas[j].contains("Ver mapa", ignoreCase = true)) {
+            while (j < lineas.size && REGEX_CU_RUTA.find(lineas[j]) == null && !lineas[j].contains("Ver mapa", ignoreCase = true)) {
                 bloque.add(lineas[j]); j++
             }
             val bloqueTexto = bloque.joinToString(" ")
@@ -224,9 +146,7 @@ fun parsearClientesRutaIA(textoOcr: String): List<ClienteRutaIAExtraido> {
             val idxCorte = listOf(idxDias, idxPago).filter { it >= 0 }.minOrNull() ?: -1
             val direccionCruda = (if (idxCorte > 0) bloque.subList(0, idxCorte) else bloque).joinToString(" ")
             val direccion = limpiarEtiquetasResiduales(direccionCruda)
-            if (nombre.isNotBlank() && nombre.replace(" ", "").any { it.isLetter() }) {
-                resultados.add(ClienteRutaIAExtraido(nombre, cu, direccion, dias, pago))
-            }
+            if (nombre.isNotBlank() && nombre.replace(" ", "").any { it.isLetter() }) resultados.add(ClienteRutaIAExtraido(nombre, cu, direccion, dias, pago))
             i = j
         } else i++
     }
@@ -236,30 +156,27 @@ fun parsearClientesRutaIA(textoOcr: String): List<ClienteRutaIAExtraido> {
 suspend fun extraerClientesDeFoto(context: Context, uri: Uri): List<ClienteRutaIAExtraido> = suspendCancellableCoroutine { cont ->
     try {
         val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
-        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
-            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
-        )
+        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
                 val texto = java.text.Normalizer.normalize(visionText.text, java.text.Normalizer.Form.NFC)
                 if (cont.isActive) cont.resume(parsearClientesRutaIA(texto)) {}
             }
             .addOnFailureListener { if (cont.isActive) cont.resume(emptyList()) {} }
-    } catch (_: Exception) {
-        if (cont.isActive) cont.resume(emptyList()) {}
-    }
+    } catch (e: Exception) { if (cont.isActive) cont.resume(emptyList()) {} }
 }
 
-suspend fun geocodificarDireccion(context: Context, direccion: String): Pair<Double, Double>? = suspendCancellableCoroutine { cont ->
+suspend fun geocodificarDireccion(context: Context, direccion: String): Pair<Double, Double>? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    if (direccion.isBlank()) return@withContext null
     try {
-        val geocoder = android.location.Geocoder(context)
+        if (!android.location.Geocoder.isPresent()) return@withContext null
+        val geocoder = android.location.Geocoder(context, java.util.Locale("es", "MX"))
+        val query = if (direccion.contains("México", true) || direccion.contains("CDMX", true)) direccion else "$direccion, Ciudad de México"
         @Suppress("DEPRECATION")
-        geocoder.getFromLocationName(direccion, 1) { resultados ->
-            if (cont.isActive) cont.resume(resultados.firstOrNull()?.let { it.latitude to it.longitude }) {}
-        }
-    } catch (_: Exception) {
-        if (cont.isActive) cont.resume(null) {}
-    }
+        val resultados = geocoder.getFromLocationName(query, 1)
+        val r = resultados?.firstOrNull() ?: return@withContext null
+        r.latitude to r.longitude
+    } catch (e: Exception) { null }
 }
 
 fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
@@ -268,7 +185,6 @@ fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
     val dLon = Math.toRadians(b.second - a.second)
     val lat1 = Math.toRadians(a.first)
     val lat2 = Math.toRadians(b.first)
-    val h = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
-        kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2) * kotlin.math.cos(lat1) * kotlin.math.cos(lat2)
+    val h = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) + kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2) * kotlin.math.cos(lat1) * kotlin.math.cos(lat2)
     return 2 * radio * kotlin.math.asin(kotlin.math.sqrt(h.coerceIn(0.0, 1.0)))
 }
