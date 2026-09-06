@@ -17,11 +17,8 @@ class RutaIAViewModel(
     private val repository: SheetsRepository,
     private val context: Context
 ) : ViewModel() {
-
-    val rutaList: StateFlow<List<RutaIAEntity>> = rutaIADao.getAll()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _criterios = MutableStateFlow(listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.DISTANCIA, DireccionOrdenRutaIA.ASC)))
+    val rutaList: StateFlow<List<RutaIAEntity>> = rutaIADao.getAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _criterios = MutableStateFlow(listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC)))
     val criterios: StateFlow<List<CriterioOrdenRutaIA>> = _criterios
     private val _procesando = MutableStateFlow(false)
     val procesando: StateFlow<Boolean> = _procesando
@@ -35,22 +32,17 @@ class RutaIAViewModel(
         viewModelScope.launch { parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it } }
     }
 
-    val rutaOrdenada: StateFlow<List<RutaIAEntity>> = kotlinx.coroutines.flow.combine(
-        rutaList, _criterios, _ubicacionActual
-    ) { lista, crit, ubic -> ordenarRutaIA(lista, crit, ubic) }
+    val rutaOrdenada: StateFlow<List<RutaIAEntity>> = kotlinx.coroutines.flow.combine(rutaList, _criterios, _ubicacionActual) { lista, crit, ubic -> ordenarRutaIA(lista, crit, ubic) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun actualizarCriterios(nuevos: List<CriterioOrdenRutaIA>) {
-        _criterios.value = nuevos.ifEmpty { listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.DISTANCIA, DireccionOrdenRutaIA.ASC)) }
+        _criterios.value = nuevos.ifEmpty { listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC)) }
         viewModelScope.launch { filtroDao.guardar(RutaIAFiltroEntity(id = 1, criteriosOrden = serializarCriteriosRutaIA(_criterios.value))) }
     }
 
-    fun refrescarUbicacion() {
-        viewModelScope.launch { parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it } }
-    }
+    fun refrescarUbicacion() { viewModelScope.launch { parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it } } }
 
-    /** Nuevo punto de entrada: importa el JSON generado externamente (Gemini) y NO ejecuta OCR en la app. */
-    fun importarJson(uri: Uri, onResult: (exito: Boolean, mensaje: String?, advertencias: List<String>) -> Unit) {
+    fun importarJson(uri: Uri, estrategia: EstrategiaRutaIA, onResult: (exito: Boolean, mensaje: String?, advertencias: List<String>) -> Unit) {
         if (_procesando.value) return
         viewModelScope.launch {
             _procesando.value = true
@@ -58,18 +50,14 @@ class RutaIAViewModel(
                 val importado = leerClientesRutaIAJson(context, uri)
                 val ubicacion = parseLatLngOrden(obtenerUbicacionActual(context))
                 if (ubicacion != null) _ubicacionActual.value = ubicacion
-
                 val matrizActual = matrizDao.getAllMatriz().first()
-                fun buscarEnMatriz(nombre: String): MatrizEntity? = matrizActual.find {
-                    coincideBusqueda(it.nombre, nombre) || coincideBusqueda(nombre, it.nombre)
-                }
+                fun buscarEnMatriz(nombre: String): MatrizEntity? = matrizActual.find { coincideBusqueda(it.nombre, nombre) || coincideBusqueda(nombre, it.nombre) }
 
                 _progreso.value = "Validando ${importado.clientes.size} clientes..."
                 val fechaHoy = inicioDeHoy()
                 val nuevos = importado.clientes.mapIndexed { idx, cliente ->
                     _progreso.value = "Ubicando ${idx + 1}/${importado.clientes.size}: ${cliente.nombre}"
-                    val direccionCompleta = listOf(cliente.direccion, cliente.colonia, cliente.cp)
-                        .filterNot { it.isNullOrBlank() }.joinToString(", ")
+                    val direccionCompleta = listOf(cliente.direccion, cliente.colonia, cliente.cp).filterNot { it.isNullOrBlank() }.joinToString(", ")
                     val coords = geocodificarDireccion(context, direccionCompleta)
                     val matchMatriz = buscarEnMatriz(cliente.nombre)
                     RutaIAEntity(
@@ -90,17 +78,18 @@ class RutaIAViewModel(
                     )
                 }
 
-                val ordenados = ordenarRutaIA(nuevos, _criterios.value, ubicacion ?: _ubicacionActual.value)
+                _progreso.value = "Construyendo ruta..."
+                val ordenados = construirRutaIAInteligente(nuevos, ubicacion ?: _ubicacionActual.value, estrategia)
                     .mapIndexed { idx, item -> item.copy(orden = idx) }
 
                 _progreso.value = "Guardando ruta..."
                 rutaIADao.deleteAll()
                 rutaIADao.insertAll(ordenados)
+                actualizarCriterios(listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC)))
                 try {
                     repository.reemplazarRutaIAEnSheet(ordenados)
                     ordenados.forEach { repository.markRutaIAAsClean(it.id) }
                 } catch (_: Exception) { }
-
                 onResult(true, "Ruta generada con ${ordenados.size} clientes", importado.advertencias)
             } catch (e: Exception) {
                 onResult(false, e.message ?: "No se pudo importar el JSON", emptyList())
@@ -111,10 +100,7 @@ class RutaIAViewModel(
         }
     }
 
-    /** Compatibilidad temporal con el flujo anterior. No se usa en la nueva pantalla. */
-    fun procesarFotos(uris: List<Uri>, onResult: (exito: Boolean, error: String?) -> Unit) {
-        onResult(false, "Ruta IA ahora usa un archivo JSON generado externamente. Usa 'Importar JSON'.")
-    }
+    fun procesarFotos(uris: List<Uri>, onResult: (exito: Boolean, error: String?) -> Unit) = onResult(false, "Ruta IA ahora usa un archivo JSON generado externamente. Usa 'Importar JSON'.")
 
     fun alternarVisitado(item: RutaIAEntity) {
         val nuevoEstado = if (item.estado.equals("Visitado", ignoreCase = true)) "Pendiente" else "Visitado"
@@ -137,16 +123,12 @@ class RutaIAViewModel(
     suspend fun buscarMatrizPorId(id: String): MatrizEntity? = matrizDao.getById(id)
 
     fun limpiarRutaAhora() {
-        viewModelScope.launch {
-            rutaIADao.deleteAll()
-            try { repository.reemplazarRutaIAEnSheet(emptyList()) } catch (_: Exception) { }
-        }
+        viewModelScope.launch { rutaIADao.deleteAll(); try { repository.reemplazarRutaIAEnSheet(emptyList()) } catch (_: Exception) { } }
     }
 
     private fun inicioDeHoy(): Long {
         val cal = java.util.Calendar.getInstance()
-        cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0)
-        cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0); cal.set(java.util.Calendar.MINUTE, 0); cal.set(java.util.Calendar.SECOND, 0); cal.set(java.util.Calendar.MILLISECOND, 0)
         return cal.timeInMillis
     }
 }
