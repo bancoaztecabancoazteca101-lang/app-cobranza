@@ -31,6 +31,7 @@ import java.util.Date
 import java.util.Locale
 
 private val ESTADOS_PASE = listOf(
+    "",
     "Pagado",
     "Susceptible",
     "No susceptible",
@@ -135,7 +136,7 @@ fun PaseFullFormDialog(
                     ) {
                         ESTADOS_PASE.forEach { opcion ->
                             DropdownMenuItem(
-                                text = { Text(opcion) },
+                                text = { Text(if (opcion.isBlank()) "Sin status" else opcion) },
                                 onClick = {
                                     estado = opcion
                                     menuStatusAbierto = false
