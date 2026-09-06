@@ -38,10 +38,29 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     var selectorEstrategia by remember { mutableStateOf(false) }
     var mostrarMapa by remember { mutableStateOf(false) }
     var mostrarAyuda by remember { mutableStateOf(false) }
+    var minimoDiasTexto by remember { mutableStateOf("") }
+    var minimoRequeridoTexto by remember { mutableStateOf("") }
+    var exigirDireccion by remember { mutableStateOf(true) }
 
     val importarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
-        viewModel.importarJson(uri, estrategia) { exito, mensaje, advertencias ->
+        val minimoDias = minimoDiasTexto.trim().toIntOrNull()
+        val minimoRequerido = minimoRequeridoTexto.trim().replace(",", ".").toDoubleOrNull()
+        if (minimoDiasTexto.isNotBlank() && (minimoDias == null || minimoDias < 0)) {
+            Toast.makeText(context, "Mínimo de atraso inválido", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        if (minimoRequeridoTexto.isNotBlank() && (minimoRequerido == null || minimoRequerido < 0)) {
+            Toast.makeText(context, "Mínimo requerido inválido", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        viewModel.importarJson(
+            uri = uri,
+            estrategia = estrategia,
+            minimoDiasAtraso = minimoDias,
+            minimoRequerido = minimoRequerido,
+            exigirDireccion = exigirDireccion
+        ) { exito, mensaje, advertencias ->
             if (exito) {
                 val texto = buildString {
                     append(mensaje ?: "Ruta generada")
@@ -97,6 +116,35 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                             EstrategiaRutaIA.PRIORIDAD_COBRANZA -> "Combina días de atraso y requerido como prioridad económica."
                         }, style = MaterialTheme.typography.bodySmall, color = Color.Gray
                     )
+
+                    Spacer(Modifier.height(12.dp))
+                    Text("Filtros", fontWeight = FontWeight.Bold)
+                    Text("Puedes activar varios filtros al mismo tiempo. Se aplican antes de ordenar la ruta.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = minimoDiasTexto,
+                            onValueChange = { minimoDiasTexto = it.filter { c -> c.isDigit() } },
+                            label = { Text("Atraso mínimo (días)") },
+                            placeholder = { Text("Opcional") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = minimoRequeridoTexto,
+                            onValueChange = { minimoRequeridoTexto = it.filter { c -> c.isDigit() || c == '.' || c == ',' } },
+                            label = { Text("Requerido mínimo") },
+                            placeholder = { Text("Opcional") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = exigirDireccion, onCheckedChange = { exigirDireccion = it })
+                        Text("Excluir registros sin dirección válida")
+                    }
+                    Text("Los filtros se combinan con AND: un cliente debe cumplir todos los filtros activos.", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+
                     Spacer(Modifier.height(10.dp))
                     Button(
                         onClick = { importarLauncher.launch(arrayOf("application/json", "text/plain", "text/*")) },
@@ -155,7 +203,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
         AlertDialog(
             onDismissRequest = { mostrarAyuda = false },
             title = { Text("Cómo funciona") },
-            text = { Text("1. Sube las fotos a Gemini.\n2. Pide el JSON con el formato de Ruta IA.\n3. Guarda el archivo.\n4. Selecciona la estrategia y pulsa Importar JSON.\n5. La app valida, cruza con Matriz, geocodifica y construye la ruta.\n\nGemini extrae los datos; la app decide el orden.") },
+            text = { Text("1. Sube las fotos a Gemini.\n2. Pide el JSON con el formato de Ruta IA.\n3. Guarda el archivo.\n4. Selecciona la estrategia y configura uno o varios filtros.\n5. Pulsa Importar JSON.\n6. La app valida, cruza con Matriz, geocodifica, aplica todos los filtros activos y construye la ruta.\n\nGemini extrae los datos; la app decide qué registros pasan los filtros y el orden.") },
             confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } }
         )
     }
