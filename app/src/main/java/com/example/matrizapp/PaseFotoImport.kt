@@ -46,37 +46,24 @@ private fun normalizarTexto(valor: String): String =
         .replace(Regex("\\s+"), " ")
         .trim()
 
-private fun compactarTexto(valor: String): String =
-    normalizarTexto(valor).replace(" ", "")
+private fun compactarTexto(valor: String): String = normalizarTexto(valor).replace(" ", "")
 
 private fun esFlores(valor: String): Boolean {
     val texto = compactarTexto(valor)
-    return texto == "FLORES" || texto == "FL0RES" || texto == "FLORES0" ||
-        texto.matches(Regex("FL0?RES"))
+    return texto == "FLORES" || texto == "FL0RES" || texto == "FLORES0" || texto.matches(Regex("FL0?RES"))
 }
 
 private fun puntoMedio(a: Float, b: Float): Float = (a + b) / 2f
 
-private val patronCu =
-    Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)")
-
-private val patronImporte =
-    Regex("\\$?\\s*[0-9OIL]{1,3}(?:[,.][0-9OIL]{3})*(?:[,.][0-9OIL]{1,2})?")
+private val patronCu = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)")
+private val patronImporte = Regex("\\$?\\s*[0-9OIL]{1,3}(?:[,.][0-9OIL]{3})*(?:[,.][0-9OIL]{1,2})?")
 
 private enum class ColumnaObjetivo {
     CU, NOMBRE, PLAN, DIAS, DIA, SALDO, MORA, REQUE, GCR, CONTIENE, CAPITALES
 }
 
-private data class CabeceraDetectada(
-    val columna: ColumnaObjetivo,
-    val x: Float,
-    val y: Float
-)
-
-private data class RangoX(
-    val left: Float,
-    val right: Float
-)
+private data class CabeceraDetectada(val columna: ColumnaObjetivo, val x: Float, val y: Float)
+private data class RangoX(val left: Float, val right: Float)
 
 private data class LayoutColumnas(
     val yCabecera: Float,
@@ -86,10 +73,6 @@ private data class LayoutColumnas(
     fun rango(columna: ColumnaObjetivo): RangoX? = rangos[columna]
 }
 
-/**
- * Reconoce el encabezado de una columna aunque el OCR cometa errores muy comunes.
- * La posición real de la columna se obtiene de la fotografía, nunca de coordenadas fijas.
- */
 private fun detectarColumna(textoOriginal: String): ColumnaObjetivo? {
     val t = compactarTexto(textoOriginal)
     return when {
@@ -102,29 +85,31 @@ private fun detectarColumna(textoOriginal: String): ColumnaObjetivo? {
         t == "MORA" -> ColumnaObjetivo.MORA
         t == "REQUE" || t == "REQUERIMIENTO" || t == "REQUER" -> ColumnaObjetivo.REQUE
         t == "GCR" || t == "GCR1" -> ColumnaObjetivo.GCR
-        t == "CONTIENE" || t == "CONTIEN" || t == "CONT1ENE" ||
-            t == "CONT1EN" || t == "CONTENE" -> ColumnaObjetivo.CONTIENE
-        t == "CAPITALES" || t == "CAPITAL" || t == "CAP1TALES" ||
-            t == "CAP1TAL" -> ColumnaObjetivo.CAPITALES
+        t == "CONTIENE" || t == "CONTIEN" || t == "CONT1ENE" || t == "CONT1EN" || t == "CONTENE" -> ColumnaObjetivo.CONTIENE
+        t == "CAPITALES" || t == "CAPITAL" || t == "CAP1TALES" || t == "CAP1TAL" -> ColumnaObjetivo.CAPITALES
         else -> null
     }
 }
 
 /**
- * Detecta el orden real de las columnas de ESTA fotografía.
- * Cada columna queda limitada por el punto medio entre sus cabeceras vecinas.
+ * Detecta las columnas sin exigir GCR. Para el reporte $ basta con que el OCR
+ * encuentre cualquier conjunto de encabezados útiles (CU, NOMBRE, CONTIENE,
+ * CAPITALES, etc.). La posición de la cabecera se obtiene de la banda superior
+ * de encabezados de esta fotografía.
  */
-private fun detectarLayoutColumnas(
-    celdas: List<CeldaOcr>,
-    lineas: List<Text.Line>
-): LayoutColumnas? {
-    val encabezadoGcr = celdas
-        .filter { detectarColumna(it.texto) == ColumnaObjetivo.GCR }
-        .minByOrNull { it.bounds.top }
-        ?: return null
+private fun detectarLayoutColumnas(celdas: List<CeldaOcr>, lineas: List<Text.Line>): LayoutColumnas? {
+    val candidatas = celdas.mapNotNull { celda ->
+        detectarColumna(celda.texto)?.let { it to celda }
+    }
+    if (candidatas.isEmpty()) return null
 
-    val yCabecera = encabezadoGcr.centroY
-    val toleranciaCabecera = max(24f, encabezadoGcr.alto * 1.8f)
+    val yMin = candidatas.minOf { it.second.bounds.top.toFloat() }
+    val primeras = candidatas.filter { it.second.bounds.top.toFloat() <= yMin + max(24f, it.second.alto * 1.8f) }
+    if (primeras.isEmpty()) return null
+
+    val yCabecera = primeras.map { it.second.centroY }.average().toFloat()
+    val altoCabecera = primeras.maxOf { it.second.alto }
+    val toleranciaCabecera = max(28f, altoCabecera * 2.0f)
     val cabeceras = mutableMapOf<ColumnaObjetivo, CabeceraDetectada>()
 
     fun registrar(texto: String, x: Float, y: Float) {
@@ -136,102 +121,69 @@ private fun detectarLayoutColumnas(
         }
     }
 
-    // Primera fuente: la línea de OCR que contiene el encabezado GCR.
-    lineas.firstOrNull { line ->
-        line.elements.any { element ->
-            val box = element.boundingBox
-            box != null &&
-                detectarColumna(element.text) == ColumnaObjetivo.GCR &&
-                abs(box.centerY() - yCabecera) <= toleranciaCabecera
-        }
-    }?.elements?.forEach { element ->
+    // Conserva la detección por línea de OCR, pero sin usar GCR como ancla obligatoria.
+    val lineaCabecera = lineas.minByOrNull { line ->
+        line.elements.mapNotNull { it.boundingBox?.top }.minOrNull() ?: Int.MAX_VALUE
+    }
+    lineaCabecera?.elements?.forEach { element ->
         val box = element.boundingBox ?: return@forEach
         registrar(element.text, box.centerX().toFloat(), box.centerY().toFloat())
     }
 
-    // Segunda fuente: cualquier celda físicamente ubicada en la banda de encabezados.
     celdas.filter { abs(it.centroY - yCabecera) <= toleranciaCabecera }
         .forEach { registrar(it.texto, it.centroX, it.centroY) }
 
-    if (!cabeceras.containsKey(ColumnaObjetivo.GCR)) return null
+    // Si el primer grupo quedó demasiado estricto, buscar de nuevo usando la banda
+    // superior de todas las cabeceras reconocidas.
+    if (cabeceras.isEmpty()) {
+        candidatas.forEach { (columna, celda) ->
+            cabeceras[columna] = CabeceraDetectada(columna, celda.centroX, celda.centroY)
+        }
+    }
+
+    if (cabeceras.isEmpty()) return null
 
     val ordenadas = cabeceras.values.sortedBy { it.x }
     val rangos = mutableMapOf<ColumnaObjetivo, RangoX>()
-
     ordenadas.forEachIndexed { index, actual ->
         val anterior = ordenadas.getOrNull(index - 1)
         val siguiente = ordenadas.getOrNull(index + 1)
-
         val distanciaIzquierda = anterior?.let { actual.x - it.x }
         val distanciaDerecha = siguiente?.let { it.x - actual.x }
         val anchoBorde = max(60f, max(distanciaIzquierda ?: 0f, distanciaDerecha ?: 0f))
-
-        val left = anterior?.let { puntoMedio(it.x, actual.x) }
-            ?: actual.x - anchoBorde / 2f
-        val right = siguiente?.let { puntoMedio(actual.x, it.x) }
-            ?: actual.x + anchoBorde / 2f
-
+        val left = anterior?.let { puntoMedio(it.x, actual.x) } ?: actual.x - anchoBorde / 2f
+        val right = siguiente?.let { puntoMedio(actual.x, it.x) } ?: actual.x + anchoBorde / 2f
         rangos[actual.columna] = RangoX(left, right)
     }
 
     return LayoutColumnas(yCabecera, toleranciaCabecera, rangos)
 }
 
-private fun textoEnColumna(
-    celdas: List<CeldaOcr>,
-    rango: RangoX?,
-    filaTop: Float,
-    filaBottom: Float
-): List<CeldaOcr> {
+private fun textoEnColumna(celdas: List<CeldaOcr>, rango: RangoX?, filaTop: Float, filaBottom: Float): List<CeldaOcr> {
     if (rango == null) return emptyList()
     return celdas.filter {
-        it.centroY >= filaTop &&
-            it.centroY < filaBottom &&
-            it.centroX >= rango.left &&
-            it.centroX < rango.right
+        it.centroY >= filaTop && it.centroY < filaBottom && it.centroX >= rango.left && it.centroX < rango.right
     }.sortedWith(compareBy<CeldaOcr> { it.centroY }.thenBy { it.centroX })
 }
 
-private fun textoColumna(
-    celdas: List<CeldaOcr>,
-    rango: RangoX?,
-    filaTop: Float,
-    filaBottom: Float
-): String =
-    textoEnColumna(celdas, rango, filaTop, filaBottom)
-        .joinToString(" ") { it.texto }
-        .trim()
+private fun textoColumna(celdas: List<CeldaOcr>, rango: RangoX?, filaTop: Float, filaBottom: Float): String =
+    textoEnColumna(celdas, rango, filaTop, filaBottom).joinToString(" ") { it.texto }.trim()
 
-private fun extraerCu(texto: String): String =
-    patronCu.find(texto)?.value.orEmpty()
+private fun extraerCu(texto: String): String = patronCu.find(texto)?.value.orEmpty()
 
 private fun limpiarImporteOcr(texto: String): String {
-    val limpio = texto
-        .replace("O", "0")
-        .replace("I", "1")
-        .replace("L", "1")
-        .replace(" ", "")
-
+    val limpio = texto.replace("O", "0").replace("I", "1").replace("L", "1").replace(" ", "")
     val match = patronImporte.find(limpio) ?: return texto.trim()
     val valor = match.value.replace(" ", "")
     return if (valor.startsWith("$")) valor else "$$valor"
 }
 
-private fun extraerImporte(
-    celdas: List<CeldaOcr>,
-    rango: RangoX?,
-    filaTop: Float,
-    filaBottom: Float
-): String? {
+private fun extraerImporte(celdas: List<CeldaOcr>, rango: RangoX?, filaTop: Float, filaBottom: Float): String? {
     val texto = textoColumna(celdas, rango, filaTop, filaBottom)
     if (texto.isBlank()) return null
-
     val candidatos = patronImporte.findAll(texto).map { it.value }.toList()
-    return if (candidatos.isNotEmpty()) {
-        limpiarImporteOcr(candidatos.joinToString(""))
-    } else {
-        limpiarImporteOcr(texto).takeIf { it.isNotBlank() }
-    }
+    return if (candidatos.isNotEmpty()) limpiarImporteOcr(candidatos.joinToString(""))
+    else limpiarImporteOcr(texto).takeIf { it.isNotBlank() }
 }
 
 private fun celdasDeImagen(visionText: Text): List<CeldaOcr> =
@@ -245,139 +197,64 @@ private fun celdasDeImagen(visionText: Text): List<CeldaOcr> =
         }
     }
 
-/**
- * Las filas siempre se anclan al CU. El límite entre dos filas es el punto medio
- * entre sus CU, por lo que una fila nunca se traga automáticamente a la siguiente.
- */
 private fun limitesPorAnclas(anclas: List<CeldaOcr>): List<Pair<Float, Float>> =
     anclas.mapIndexed { index, ancla ->
         val anterior = anclas.getOrNull(index - 1)?.centroY
         val siguiente = anclas.getOrNull(index + 1)?.centroY
-
-        val top = if (anterior != null) {
-            puntoMedio(anterior, ancla.centroY)
-        } else {
-            ancla.centroY - max(22f, ancla.alto * 1.8f)
-        }
-
-        val bottom = if (siguiente != null) {
-            puntoMedio(ancla.centroY, siguiente)
-        } else {
-            ancla.centroY + max(22f, ancla.alto * 1.8f)
-        }
-
+        val top = if (anterior != null) puntoMedio(anterior, ancla.centroY) else ancla.centroY - max(22f, ancla.alto * 1.8f)
+        val bottom = if (siguiente != null) puntoMedio(ancla.centroY, siguiente) else ancla.centroY + max(22f, ancla.alto * 1.8f)
         top to bottom
     }
 
-private fun construirFila(
-    celdas: List<CeldaOcr>,
-    layout: LayoutColumnas,
-    filaTop: Float,
-    filaBottom: Float,
-    gcr: String
-): PaseFotoFila {
-    val textoCu = textoColumna(
-        celdas,
-        layout.rango(ColumnaObjetivo.CU),
-        filaTop,
-        filaBottom
-    )
+private fun construirFila(celdas: List<CeldaOcr>, layout: LayoutColumnas, filaTop: Float, filaBottom: Float, gcr: String): PaseFotoFila {
+    val textoCu = textoColumna(celdas, layout.rango(ColumnaObjetivo.CU), filaTop, filaBottom)
     val cu = extraerCu(textoCu).ifBlank { textoCu }
-
-    val nombre = textoColumna(
-        celdas,
-        layout.rango(ColumnaObjetivo.NOMBRE),
-        filaTop,
-        filaBottom
-    )
-        .replace(Regex("\\s+"), " ")
-        .trim()
-
-    val contiene = extraerImporte(
-        celdas,
-        layout.rango(ColumnaObjetivo.CONTIENE),
-        filaTop,
-        filaBottom
-    )
-    val capitales = extraerImporte(
-        celdas,
-        layout.rango(ColumnaObjetivo.CAPITALES),
-        filaTop,
-        filaBottom
-    )
-
+    val nombre = textoColumna(celdas, layout.rango(ColumnaObjetivo.NOMBRE), filaTop, filaBottom)
+        .replace(Regex("\\s+"), " ").trim()
+    val contiene = extraerImporte(celdas, layout.rango(ColumnaObjetivo.CONTIENE), filaTop, filaBottom)
+    val capitales = extraerImporte(celdas, layout.rango(ColumnaObjetivo.CAPITALES), filaTop, filaBottom)
     return PaseFotoFila(cu, nombre, gcr, contiene, capitales)
 }
 
-/** Detecta exclusivamente las filas cuyo GCR es FLORES. */
 fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val lineas = visionText.textBlocks.flatMap { it.lines }
     if (lineas.isEmpty()) return emptyList()
-
     val celdas = celdasDeImagen(visionText)
     if (celdas.isEmpty()) return emptyList()
-
     val layout = detectarLayoutColumnas(celdas, lineas) ?: return emptyList()
     val rangoGcr = layout.rango(ColumnaObjetivo.GCR) ?: return emptyList()
-
     val flores = celdas.filter { celda ->
         celda.centroY > layout.yCabecera + layout.toleranciaCabecera &&
-            celda.centroX >= rangoGcr.left &&
-            celda.centroX < rangoGcr.right &&
-            esFlores(celda.texto)
+            celda.centroX >= rangoGcr.left && celda.centroX < rangoGcr.right && esFlores(celda.texto)
     }.sortedBy { it.centroY }
-
     if (flores.isEmpty()) return emptyList()
-
     val limitesY = limitesPorAnclas(flores)
-
-    return flores.mapIndexed { index, flor ->
+    return flores.mapIndexed { index, _ ->
         val (filaTop, filaBottom) = limitesY[index]
         construirFila(celdas, layout, filaTop, filaBottom, "Flores")
     }.filter { it.cu.isNotBlank() || it.nombre.isNotBlank() }
-        .distinctBy {
-            "${normalizarTexto(it.cu)}|${normalizarTexto(it.nombre)}|${it.gcr}"
-        }
+        .distinctBy { "${normalizarTexto(it.cu)}|${normalizarTexto(it.nombre)}|${it.gcr}" }
 }
 
-/**
- * Segunda lectura: reporte de Contiene/Capitales.
- *
- * No depende del orden de las columnas y no depende de que las filas Flores estén
- * juntas. Cada fila se detecta mediante su CU y cada dato económico mediante la
- * posición horizontal de su encabezado en ESA fotografía.
- */
 fun parsearTodasLasFilasPorFila(visionText: Text): List<PaseFotoFila> {
     val lineas = visionText.textBlocks.flatMap { it.lines }
     if (lineas.isEmpty()) return emptyList()
-
     val celdas = celdasDeImagen(visionText)
     if (celdas.isEmpty()) return emptyList()
-
     val layout = detectarLayoutColumnas(celdas, lineas) ?: return emptyList()
     val rangoCu = layout.rango(ColumnaObjetivo.CU) ?: return emptyList()
-
     val celdasCu = celdas.filter { celda ->
         celda.centroY > layout.yCabecera + layout.toleranciaCabecera &&
-            celda.centroX >= rangoCu.left &&
-            celda.centroX < rangoCu.right &&
-            patronCu.containsMatchIn(celda.texto)
+            celda.centroX >= rangoCu.left && celda.centroX < rangoCu.right && patronCu.containsMatchIn(celda.texto)
     }.sortedBy { it.centroY }
-
     if (celdasCu.isEmpty()) return emptyList()
-
     val limitesY = limitesPorAnclas(celdasCu)
-
     return celdasCu.mapIndexed { index, celdaCu ->
         val (filaTop, filaBottom) = limitesY[index]
         construirFila(celdas, layout, filaTop, filaBottom, "")
-            .let { fila ->
-                fila.copy(cu = extraerCu(celdaCu.texto).ifBlank { fila.cu })
-            }
+            .let { fila -> fila.copy(cu = extraerCu(celdaCu.texto).ifBlank { fila.cu }) }
     }.filter { it.cu.isNotBlank() }
-        .distinctBy {
-            "${normalizarTexto(it.cu)}|${normalizarTexto(it.nombre)}"
-        }
+        .distinctBy { "${normalizarTexto(it.cu)}|${normalizarTexto(it.nombre)}" }
 }
 
 suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> =
