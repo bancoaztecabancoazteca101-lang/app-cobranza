@@ -7,19 +7,12 @@ enum class EstrategiaRutaIA(val etiqueta: String) {
     PRIORIDAD_COBRANZA("Prioridad de cobranza")
 }
 
-/**
- * Filtros duros de negocio. Se aplican antes de ordenar la ruta.
- * null significa que ese filtro está desactivado.
- */
 data class FiltrosRutaIA(
     val minimoDiasAtraso: Int? = null,
     val minimoRequerido: Double? = null,
     val exigirDireccion: Boolean = true
 )
 
-/**
- * Aplica únicamente filtros de entrada; no decide el orden de visita.
- */
 fun aplicarFiltrosRutaIA(
     items: List<RutaIAEntity>,
     filtros: FiltrosRutaIA = FiltrosRutaIA()
@@ -35,23 +28,20 @@ fun aplicarFiltrosRutaIA(
 /**
  * Construye el orden final de la ruta.
  *
- * Regla geográfica: el GPS solo determina la primera parada. Después, cada parada usa como
- * referencia la parada inmediatamente anterior.
+ * La dirección de cercanía solo modifica la estrategia INTELIGENTE:
+ * ASC busca el siguiente cliente más cercano; DESC busca el más lejano.
+ * Las demás estrategias conservan su prioridad de negocio y usan cercanía únicamente como
+ * criterio secundario.
  *
- * Las estrategias de cobranza son prioridades lexicográficas, no fórmulas con pesos arbitrarios:
- * - INTELIGENTE: distancia -> atraso -> requerido.
- * - MAYOR_ATRASO: atraso -> distancia -> requerido.
- * - MAYOR_REQUERIDO: requerido -> distancia -> atraso.
- * - PRIORIDAD_COBRANZA: atraso -> requerido -> distancia.
- *
- * Si no existe GPS, se elige la primera parada por la prioridad de la estrategia y desde ahí
- * comienza la cadena geográfica. Los clientes sin coordenadas se conservan al final.
+ * El GPS solo determina la primera parada. Después, cada parada usa como referencia la parada
+ * inmediatamente anterior. Los clientes sin coordenadas se conservan al final.
  */
 fun construirRutaIAInteligente(
     items: List<RutaIAEntity>,
     inicio: Pair<Double, Double>?,
     estrategia: EstrategiaRutaIA,
-    filtros: FiltrosRutaIA = FiltrosRutaIA()
+    filtros: FiltrosRutaIA = FiltrosRutaIA(),
+    direccion: DireccionOrdenRutaIA = DireccionOrdenRutaIA.ASC
 ): List<RutaIAEntity> {
     val filtrados = aplicarFiltrosRutaIA(items, filtros)
     val pendientes = filtrados.filter { it.lat != null && it.lng != null }.toMutableList()
@@ -83,7 +73,13 @@ fun construirRutaIAInteligente(
         val siguiente = when {
             punto == null -> prioridadSinGps()
 
-            estrategia == EstrategiaRutaIA.INTELIGENTE -> pendientes.minWithOrNull(
+            estrategia == EstrategiaRutaIA.INTELIGENTE && direccion == DireccionOrdenRutaIA.ASC -> pendientes.minWithOrNull(
+                compareBy<RutaIAEntity> { distanciaDesde(punto!!, it) }
+                    .thenByDescending { it.diasAtraso ?: 0 }
+                    .thenByDescending { it.pagoRequerido ?: 0.0 }
+            )!!
+
+            estrategia == EstrategiaRutaIA.INTELIGENTE && direccion == DireccionOrdenRutaIA.DESC -> pendientes.maxWithOrNull(
                 compareBy<RutaIAEntity> { distanciaDesde(punto!!, it) }
                     .thenByDescending { it.diasAtraso ?: 0 }
                     .thenByDescending { it.pagoRequerido ?: 0.0 }
