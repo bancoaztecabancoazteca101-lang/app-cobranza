@@ -52,8 +52,18 @@ fun construirRutaIAInteligente(
 
     if (pendientes.isEmpty()) return sinUbicar
 
-    fun distanciaDesde(punto: Pair<Double, Double>, item: RutaIAEntity): Double =
-        distanciaKm(punto, item.lat!! to item.lng!!)
+    fun distanciaDesde(punto: Pair<Double, Double>, item: RutaIAEntity): Double {
+        val destino = item.lat!! to item.lng!!
+        val radio = 6371.0
+        val dLat = Math.toRadians(destino.first - punto.first)
+        val dLon = Math.toRadians(destino.second - punto.second)
+        val lat1 = Math.toRadians(punto.first)
+        val lat2 = Math.toRadians(destino.first)
+        val h = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
+            kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2) *
+            kotlin.math.cos(lat1) * kotlin.math.cos(lat2)
+        return 2 * radio * kotlin.math.asin(kotlin.math.sqrt(h.coerceIn(0.0, 1.0)))
+    }
 
     fun prioridadSinGps(): RutaIAEntity = when (estrategia) {
         EstrategiaRutaIA.MAYOR_REQUERIDO -> pendientes.maxWithOrNull(
