@@ -5,6 +5,8 @@ on:
     branches:
       - main
       - 'feature/**'
+      - 'chatgpt/**'
+      - 'claude/**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
