@@ -50,6 +50,7 @@ class RutaIAViewModel(
     fun importarJson(
         uri: Uri,
         estrategia: EstrategiaRutaIA,
+        direccion: DireccionOrdenRutaIA = DireccionOrdenRutaIA.ASC,
         minimoDiasAtraso: Int? = null,
         minimoRequerido: Double? = null,
         exigirDireccion: Boolean = true,
@@ -115,7 +116,8 @@ class RutaIAViewModel(
                     nuevos,
                     ubicacion ?: _ubicacionActual.value,
                     estrategia,
-                    filtros
+                    filtros,
+                    direccion
                 ).mapIndexed { idx, item -> item.copy(orden = idx) }
 
                 _progreso.value = "Guardando ruta..."
