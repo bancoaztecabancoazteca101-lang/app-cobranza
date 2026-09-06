@@ -98,7 +98,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(when (estrategia) {
-                        EstrategiaRutaIA.INTELIGENTE -> if (direccion == DireccionOrdenRutaIA.ASC) "GPS determina la primera parada; después cada parada busca la siguiente más cercana." else "GPS determina la primera parada; después cada parada busca la siguiente más lejana."
+                        EstrategiaRutaIA.INTELIGENTE -> if (direccion == DireccionOrdenRutaIA.ASC) "GPS determina el inicio; después cada parada busca la siguiente más cercana." else "Se invierte la cadena de cercanía calculada desde el GPS para recorrerla en sentido contrario."
                         EstrategiaRutaIA.MAYOR_ATRASO -> "Prioriza los mayores días de atraso y usa cercanía para resolver el orden."
                         EstrategiaRutaIA.MAYOR_REQUERIDO -> "Prioriza mayor requerido/saldo y usa cercanía para resolver el orden."
                         EstrategiaRutaIA.PRIORIDAD_COBRANZA -> "Combina días de atraso y requerido como prioridad económica."
