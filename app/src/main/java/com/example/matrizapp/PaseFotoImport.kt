@@ -91,12 +91,6 @@ private fun detectarColumna(textoOriginal: String): ColumnaObjetivo? {
     }
 }
 
-/**
- * Detecta las columnas sin exigir GCR. Para el reporte $ basta con que el OCR
- * encuentre cualquier conjunto de encabezados útiles (CU, NOMBRE, CONTIENE,
- * CAPITALES, etc.). La posición de la cabecera se obtiene de la banda superior
- * de encabezados de esta fotografía.
- */
 private fun detectarLayoutColumnas(celdas: List<CeldaOcr>, lineas: List<Text.Line>): LayoutColumnas? {
     val candidatas = celdas.mapNotNull { celda ->
         detectarColumna(celda.texto)?.let { it to celda }
@@ -121,7 +115,6 @@ private fun detectarLayoutColumnas(celdas: List<CeldaOcr>, lineas: List<Text.Lin
         }
     }
 
-    // Conserva la detección por línea de OCR, pero sin usar GCR como ancla obligatoria.
     val lineaCabecera = lineas.minByOrNull { line ->
         line.elements.mapNotNull { it.boundingBox?.top }.minOrNull() ?: Int.MAX_VALUE
     }
@@ -133,8 +126,6 @@ private fun detectarLayoutColumnas(celdas: List<CeldaOcr>, lineas: List<Text.Lin
     celdas.filter { abs(it.centroY - yCabecera) <= toleranciaCabecera }
         .forEach { registrar(it.texto, it.centroX, it.centroY) }
 
-    // Si el primer grupo quedó demasiado estricto, buscar de nuevo usando la banda
-    // superior de todas las cabeceras reconocidas.
     if (cabeceras.isEmpty()) {
         candidatas.forEach { (columna, celda) ->
             cabeceras[columna] = CabeceraDetectada(columna, celda.centroX, celda.centroY)
@@ -216,22 +207,39 @@ private fun construirFila(celdas: List<CeldaOcr>, layout: LayoutColumnas, filaTo
     return PaseFotoFila(cu, nombre, gcr, contiene, capitales)
 }
 
+/**
+ * Importación de la cartera FLORES.
+ *
+ * La fila se delimita por CU, no por la aparición de FLORES. FLORES/GCR es
+ * únicamente el filtro que decide qué filas conservar. Esto evita que un nombre
+ * de la fila anterior se fusione con el cliente FLORES cuando ambos están juntos.
+ */
 fun parsearFilasPaseFoto(visionText: Text): List<PaseFotoFila> {
     val lineas = visionText.textBlocks.flatMap { it.lines }
     if (lineas.isEmpty()) return emptyList()
     val celdas = celdasDeImagen(visionText)
     if (celdas.isEmpty()) return emptyList()
     val layout = detectarLayoutColumnas(celdas, lineas) ?: return emptyList()
+    val rangoCu = layout.rango(ColumnaObjetivo.CU) ?: return emptyList()
     val rangoGcr = layout.rango(ColumnaObjetivo.GCR) ?: return emptyList()
-    val flores = celdas.filter { celda ->
+
+    val celdasCu = celdas.filter { celda ->
         celda.centroY > layout.yCabecera + layout.toleranciaCabecera &&
-            celda.centroX >= rangoGcr.left && celda.centroX < rangoGcr.right && esFlores(celda.texto)
+            celda.centroX >= rangoCu.left && celda.centroX < rangoCu.right &&
+            patronCu.containsMatchIn(celda.texto)
     }.sortedBy { it.centroY }
-    if (flores.isEmpty()) return emptyList()
-    val limitesY = limitesPorAnclas(flores)
-    return flores.mapIndexed { index, _ ->
+
+    if (celdasCu.isEmpty()) return emptyList()
+
+    val limitesY = limitesPorAnclas(celdasCu)
+
+    return celdasCu.mapIndexedNotNull { index, celdaCu ->
         val (filaTop, filaBottom) = limitesY[index]
+        val gcrTexto = textoColumna(celdas, rangoGcr, filaTop, filaBottom)
+        if (!esFlores(gcrTexto)) return@mapIndexedNotNull null
+
         construirFila(celdas, layout, filaTop, filaBottom, "Flores")
+            .let { fila -> fila.copy(cu = extraerCu(celdaCu.texto).ifBlank { fila.cu }) }
     }.filter { it.cu.isNotBlank() || it.nombre.isNotBlank() }
         .distinctBy { "${normalizarTexto(it.cu)}|${normalizarTexto(it.nombre)}|${it.gcr}" }
 }
