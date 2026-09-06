@@ -186,9 +186,10 @@ fun MatrizItemCard(
     onCardClick: () -> Unit,
     onDeleteClick: () -> Unit = {},
     contiene: String? = null,
-    capitales: String? = null
+    capitales: String? = null,
+    resaltarPagado: Boolean = false
 ) {
-    val pagado = item.estado.equals("Pagado", ignoreCase = true)
+    val pagado = resaltarPagado && item.estado.equals("Pagado", ignoreCase = true)
     Card(
         onClick = onCardClick,
         modifier = Modifier.fillMaxWidth(),
