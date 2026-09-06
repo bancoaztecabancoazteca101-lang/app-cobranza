@@ -55,11 +55,20 @@ jobs:
         if: env.BUILD_FAILED == 'true'
         run: exit 1
 
+      - name: Compute release tag
+        if: env.BUILD_FAILED != 'true' && github.event_name != 'pull_request'
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "RELEASE_TAG=latest-debug" >> $GITHUB_ENV
+          else
+            echo "RELEASE_TAG=latest-debug-${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
       - name: Publish stable release with APK
         if: env.BUILD_FAILED != 'true' && github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest-debug-${{ github.ref_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           name: "Última build (debug) - ${{ github.ref_name }}"
           body: "APK generado automáticamente desde el commit ${{ github.sha }}."
           files: app/build/outputs/apk/debug/*.apk
