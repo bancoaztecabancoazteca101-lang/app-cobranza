@@ -42,6 +42,9 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
             modelClass.isAssignableFrom(RutaIAViewModel::class.java) ->
                 RutaIAViewModel(container.database.rutaIADao(), container.database.rutaIAFiltroDao(), container.database.matrizDao(), container.repository, container.context) as T
 
+            modelClass.isAssignableFrom(DiagnosticoViewModel::class.java) ->
+                DiagnosticoViewModel(container.repository, container.context) as T
+
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
     }

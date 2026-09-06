@@ -4,6 +4,29 @@ plugins {
     id 'kotlin-kapt'
     id 'com.google.gms.google-services'
 }
+
+// Identificador de build para saber, desde dentro de la app, exactamente qué commit corre cada
+// teléfono (ver DeviceInfo.kt / pantalla Diagnóstico). GITHUB_SHA y GITHUB_RUN_NUMBER ya los
+// expone GitHub Actions automáticamente en cada corrida, sin tocar build.yml. Si se compila
+// fuera de Actions (ej. Android Studio local) cae al SHA real de git en el checkout local, y si
+// tampoco hay repo git disponible, a "local". Calculado aquí (nivel de script, no dentro de
+// defaultConfig) porque exec() dentro de un bloque DSL anidado de Android no siempre resuelve
+// correctamente contra el Project.
+def gitShaForBuild = (System.getenv("GITHUB_SHA") ?: "").take(7)
+if (gitShaForBuild.isEmpty()) {
+    try {
+        def out = new ByteArrayOutputStream()
+        exec {
+            commandLine "git", "rev-parse", "--short", "HEAD"
+            standardOutput = out
+            ignoreExitValue = true
+        }
+        gitShaForBuild = out.toString().trim()
+    } catch (ignored) { }
+}
+if (gitShaForBuild.isEmpty()) gitShaForBuild = "local"
+def buildNumberForBuild = System.getenv("GITHUB_RUN_NUMBER") ?: "0"
+
 android {
     namespace 'com.example.matrizapp'
     compileSdk 34
@@ -14,6 +37,8 @@ android {
         versionCode 1
         versionName "1.0"
         manifestPlaceholders = [MAPS_API_KEY: project.findProperty("MAPS_API_KEY") ?: "PENDIENTE_CONFIGURAR"]
+        buildConfigField "String", "BUILD_SHA", "\"${gitShaForBuild}\""
+        buildConfigField "String", "BUILD_NUMBER", "\"${buildNumberForBuild}\""
     }
     signingConfigs {
         debug {
@@ -28,7 +53,7 @@ android {
             signingConfig signingConfigs.debug
         }
     }
-    buildFeatures { compose true }
+    buildFeatures { compose true; buildConfig true }
     composeOptions { kotlinCompilerExtensionVersion '1.5.1' }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8

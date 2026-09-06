@@ -112,6 +112,7 @@ fun AppNavigationDrawer(
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Call, contentDescription = null) }, label = { Text("Llamadas") }, selected = currentRoute == "llamadas", onClick = { onNavigate("llamadas"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Schedule, contentDescription = null) }, label = { Text("Bloques de horario") }, selected = currentRoute == "bloques_llamada", onClick = { onNavigate("bloques_llamada"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Message, contentDescription = null) }, label = { Text("Plantillas de SMS") }, selected = currentRoute == "plantillas_sms", onClick = { onNavigate("plantillas_sms"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.BugReport, contentDescription = null) }, label = { Text("Diagnóstico") }, selected = currentRoute == "diagnostico", onClick = { onNavigate("diagnostico"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }

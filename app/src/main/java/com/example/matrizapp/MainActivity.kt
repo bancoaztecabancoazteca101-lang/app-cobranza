@@ -113,6 +113,7 @@ class MainActivity : ComponentActivity() {
                 val bloqueVm: BloqueHorarioViewModel = viewModel(factory = factory)
                 val plantillaVm: PlantillaSmsViewModel = viewModel(factory = factory)
                 val rutaIAVm: RutaIAViewModel = viewModel(factory = factory)
+                val diagnosticoVm: DiagnosticoViewModel = viewModel(factory = factory)
                 // searchInput es lo que el usuario teclea (se actualiza al instante, sin costo,
                 // porque no dispara el filtrado). searchQuery es la versión "debounced" que se
                 // pasa a las pantallas y sí dispara el filtrado de las listas; se actualiza ~180ms
@@ -139,6 +140,13 @@ class MainActivity : ComponentActivity() {
                         } catch (e: Exception) {
                             syncError = e.stackTraceToString()
                         }
+                        // Reporte de versión (para Diagnóstico -> Dispositivos): nunca debe
+                        // bloquear ni fallar el refresh normal si algo sale mal aquí.
+                        try {
+                            container.repository.reportarDispositivo(
+                                DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId
+                            )
+                        } catch (e: Exception) { }
                         isRefreshing = false
                     }
                 }
@@ -378,6 +386,7 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
                         composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
                         composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm) }
+                        composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
                     }
                 }
                 }
@@ -399,4 +408,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object BloquesLlamada : Screen("bloques_llamada", "Bloques de horario", Icons.Default.Schedule)
     object PlantillasSms : Screen("plantillas_sms", "Plantillas de SMS", Icons.Default.Message)
     object RutaIA : Screen("ruta_ia", "Ruta IA", Icons.Default.Route)
+    object Diagnostico : Screen("diagnostico", "Diagnóstico", Icons.Default.BugReport)
 }

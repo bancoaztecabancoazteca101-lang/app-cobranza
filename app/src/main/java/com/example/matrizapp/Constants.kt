@@ -8,6 +8,7 @@ object Constants {
     const val SHEET_FILTRAR = "Filtrar"
     const val SHEET_CONTROL = "GraficaSuma"
     const val SHEET_RUTA_IA = "Ruta IA"
+    const val SHEET_DISPOSITIVOS = "Dispositivos"
     const val FOLDER_IMAGES = "Matriz_Images/"
     const val FOLDER_AUDIOS = "Matriz_Audios/"
 

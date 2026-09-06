@@ -88,6 +88,116 @@ class SheetsRepository(
         Unit
     }
 
+    /** Compara la hoja "Matriz " (fuente maestra) contra la copia local en Room, registro por
+     * registro, y reporta discrepancias. Es de solo lectura -- no corrige nada, es el paso
+     * "Verificar" del plan de sincronización, pensado para detectar divergencias silenciosas
+     * (ej. un registro borrado directo en Sheets sin pasar por la app, o una fila que quedó
+     * corrupta) antes de que causen confusión en campo. Los isDirty=true se excluyen: todavía
+     * tienen un cambio local sin subir, así que es normal y esperado que no coincidan. */
+    suspend fun verificarConsistenciaMatriz(): List<Discrepancia> = withContext(Dispatchers.IO) {
+        val dirtyIds = matrizDao.getDirtyItems().map { it.id }.toSet()
+        val locales = matrizDao.getAllMatriz().first().filter { it.id !in dirtyIds }.associateBy { it.id }
+        val rows = fetchRows(Constants.SHEET_MATRIZ)
+        val remotos = rows.mapNotNull { row ->
+            val id = cell(row, Constants.MatrizCols.ID) ?: return@mapNotNull null
+            val nombre = cell(row, Constants.MatrizCols.NOMBRE) ?: ""
+            if (nombre.contains("Pase semana", ignoreCase = true) || nombre.isBlank()) return@mapNotNull null
+            id to row
+        }.toMap()
+
+        val discrepancias = mutableListOf<Discrepancia>()
+
+        remotos.forEach { (id, row) ->
+            val nombre = cell(row, Constants.MatrizCols.NOMBRE) ?: ""
+            val local = locales[id]
+            if (local == null) {
+                if (id !in dirtyIds) {
+                    discrepancias.add(Discrepancia(id, nombre, TipoDiscrepancia.FALTA_EN_APP, "Toca 'Descargar' para traerlo a este teléfono"))
+                }
+                return@forEach
+            }
+            // Comparar solo los campos que vienen del Sheet (no los que genera el propio
+            // teléfono, como imagenUrl mientras aún es un content:// local sin subir).
+            val diffs = mutableListOf<String>()
+            if (local.nombre != nombre) diffs.add("nombre")
+            if (local.semana != (cell(row, Constants.MatrizCols.SEMANA) ?: "")) diffs.add("semana")
+            if (local.requisito != (cell(row, Constants.MatrizCols.REQUISITO) ?: "")) diffs.add("requisito")
+            if (local.numTT != (cell(row, Constants.MatrizCols.NUMTT) ?: "")) diffs.add("numTT")
+            if (local.ref1 != (cell(row, Constants.MatrizCols.REF1) ?: "")) diffs.add("ref1")
+            if (local.ref2 != (cell(row, Constants.MatrizCols.REF2) ?: "")) diffs.add("ref2")
+            if ((local.observaciones ?: "") != (cell(row, Constants.MatrizCols.OBSERVACIONES) ?: "")) diffs.add("observaciones")
+            if (local.estado != (cell(row, Constants.MatrizCols.ESTADO) ?: "")) diffs.add("estado")
+            if (diffs.isNotEmpty()) {
+                discrepancias.add(Discrepancia(id, nombre, TipoDiscrepancia.DATOS_DIFERENTES, "Campos distintos: ${diffs.joinToString(", ")}"))
+            }
+        }
+
+        // Ya sincronizado (no dirty) en la app pero ya no existe en el Sheet: alguien lo borró
+        // directo en Sheets, o se borró desde otro teléfono y este aún no refrescó.
+        locales.forEach { (id, local) ->
+            if (id !in remotos) {
+                discrepancias.add(Discrepancia(id, local.nombre, TipoDiscrepancia.FALTA_EN_SHEET, "Ya no existe en el Sheet"))
+            }
+        }
+
+        discrepancias
+    }
+
+    private fun asegurarHojaDispositivosExiste() {
+        val yaExiste = getRealSheetTitles().values.any { it.equals(Constants.SHEET_DISPOSITIVOS, ignoreCase = true) }
+        if (yaExiste) return
+        val addSheetRequest = Request().setAddSheet(
+            com.google.api.services.sheets.v4.model.AddSheetRequest().setProperties(
+                com.google.api.services.sheets.v4.model.SheetProperties().setTitle(Constants.SHEET_DISPOSITIVOS)
+            )
+        )
+        sheetsService.spreadsheets()
+            .batchUpdate(Constants.SPREADSHEET_ID, BatchUpdateSpreadsheetRequest().setRequests(listOf(addSheetRequest)))
+            .execute()
+        sheetTitleCache = null
+        val encabezados = listOf("AndroidId", "Modelo", "Build", "UltimoReporte")
+        val realName = resolveSheetName(Constants.SHEET_DISPOSITIVOS)
+        val body = ValueRange().setValues(listOf(encabezados))
+        sheetsService.spreadsheets().values().update(Constants.SPREADSHEET_ID, "'$realName'!A1", body)
+            .setValueInputOption("USER_ENTERED").execute()
+    }
+
+    /** Registra (o actualiza) este dispositivo en la hoja "Dispositivos": modelo, build (SHA de
+     * commit + número de corrida de GitHub Actions) y fecha/hora del reporte. Deja ver desde
+     * Sheets qué teléfonos siguen en una build vieja sin tener que revisarlos uno por uno.
+     * Cualquier falla aquí se ignora silenciosamente -- nunca debe tumbar el refresh normal de
+     * la pantalla; se vuelve a intentar la próxima vez que se abra Diagnóstico. */
+    suspend fun reportarDispositivo(androidId: String, modelo: String, buildId: String) = withContext(Dispatchers.IO) {
+        try {
+            asegurarHojaDispositivosExiste()
+            val idx = findRowIndexById(Constants.SHEET_DISPOSITIVOS, androidId, "A")
+            val ahora = DateUtils.toSheetsSerial(System.currentTimeMillis())
+            if (idx != -1) {
+                updateSheetCell(Constants.SHEET_DISPOSITIVOS, "B", idx, modelo)
+                updateSheetCell(Constants.SHEET_DISPOSITIVOS, "C", idx, buildId)
+                updateSheetCell(Constants.SHEET_DISPOSITIVOS, "D", idx, ahora)
+            } else {
+                appendRow(Constants.SHEET_DISPOSITIVOS, listOf(androidId, modelo, buildId, ahora))
+            }
+        } catch (e: Exception) { /* no crítico */ }
+    }
+
+    /** Lee la hoja "Dispositivos" completa para mostrarla en la pantalla de Diagnóstico. */
+    suspend fun listarDispositivos(): List<DispositivoInfo> = withContext(Dispatchers.IO) {
+        val yaExiste = getRealSheetTitles().values.any { it.equals(Constants.SHEET_DISPOSITIVOS, ignoreCase = true) }
+        if (!yaExiste) return@withContext emptyList()
+        val rows = fetchRows(Constants.SHEET_DISPOSITIVOS, lastCol = "D")
+        rows.mapNotNull { row ->
+            val androidId = cell(row, 0) ?: return@mapNotNull null
+            DispositivoInfo(
+                androidId = androidId,
+                modelo = cell(row, 1) ?: "",
+                buildId = cell(row, 2) ?: "",
+                ultimoReporte = DateUtils.parseCellDateToEpochMillis(cell(row, 3))
+            )
+        }
+    }
+
     /** Trae en vivo la hoja de la semana actual "Cont-Sem-NN" (Nombre, Sem, Req, Id, CU,
      * Imagen, Imagen 2, Colonia, Visitas, UltimaFechaVisita, NumTT, Ubicacion). No se guarda
      * en Room: es solo lectura y son pocos datos. El orden de columnas debe coincidir EXACTO
