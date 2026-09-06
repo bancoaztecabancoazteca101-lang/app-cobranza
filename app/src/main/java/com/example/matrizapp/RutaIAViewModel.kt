@@ -47,7 +47,14 @@ class RutaIAViewModel(
         }
     }
 
-    fun importarJson(uri: Uri, estrategia: EstrategiaRutaIA, onResult: (Boolean, String?, List<String>) -> Unit) {
+    fun importarJson(
+        uri: Uri,
+        estrategia: EstrategiaRutaIA,
+        minimoDiasAtraso: Int? = null,
+        minimoRequerido: Double? = null,
+        exigirDireccion: Boolean = true,
+        onResult: (Boolean, String?, List<String>) -> Unit
+    ) {
         if (_procesando.value) return
         viewModelScope.launch {
             _procesando.value = true
@@ -100,9 +107,9 @@ class RutaIAViewModel(
 
                 _progreso.value = "Aplicando filtros y construyendo ruta..."
                 val filtros = FiltrosRutaIA(
-                    minimoDiasAtraso = null,
-                    minimoRequerido = null,
-                    exigirDireccion = true
+                    minimoDiasAtraso = minimoDiasAtraso,
+                    minimoRequerido = minimoRequerido,
+                    exigirDireccion = exigirDireccion
                 )
                 val ordenados = construirRutaIAInteligente(
                     nuevos,
@@ -124,7 +131,15 @@ class RutaIAViewModel(
                     // pueda reintentarse sin perder los datos ya procesados.
                 }
 
-                onResult(true, "Ruta generada con ${ordenados.size} clientes", importado.advertencias)
+                val cantidadOriginal = nuevos.size
+                val cantidadFinal = ordenados.size
+                val filtrados = cantidadOriginal - cantidadFinal
+                val mensaje = if (filtrados > 0) {
+                    "Ruta generada con $cantidadFinal clientes ($filtrados excluidos por filtros)"
+                } else {
+                    "Ruta generada con $cantidadFinal clientes"
+                }
+                onResult(true, mensaje, importado.advertencias)
             } catch (e: Exception) {
                 onResult(false, e.message ?: "No se pudo importar el JSON", emptyList())
             } finally {
