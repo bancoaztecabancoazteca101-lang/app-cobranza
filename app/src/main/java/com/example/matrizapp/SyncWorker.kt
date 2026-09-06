@@ -16,6 +16,7 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
         try {
             syncMatriz()
             syncPase()
+            syncRutaIA()
             syncSolicitud()
             syncFiltroFecha()
             Result.success()
@@ -25,13 +26,9 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
     private suspend fun syncMatriz() {
         repository.getDirtyMatrizItems().forEach { item ->
             var remoteImg = item.imagenUrl
-            if (item.imagenUrl?.startsWith("content://") == true) {
-                remoteImg = driveHelper.uploadFile(Uri.parse(item.imagenUrl!!), Constants.FOLDER_IMAGES, "image/jpeg")
-            }
+            if (item.imagenUrl?.startsWith("content://") == true) remoteImg = driveHelper.uploadFile(Uri.parse(item.imagenUrl!!), Constants.FOLDER_IMAGES, "image/jpeg")
             var remoteImg2 = item.imagenUrl2
-            if (item.imagenUrl2?.startsWith("content://") == true) {
-                remoteImg2 = driveHelper.uploadFile(Uri.parse(item.imagenUrl2!!), Constants.FOLDER_IMAGES, "image/jpeg")
-            }
+            if (item.imagenUrl2?.startsWith("content://") == true) remoteImg2 = driveHelper.uploadFile(Uri.parse(item.imagenUrl2!!), Constants.FOLDER_IMAGES, "image/jpeg")
             val idx = repository.findRowIndexById(Constants.SHEET_MATRIZ, item.id, Constants.MatrizCols.COL_ID)
             if (idx != -1) {
                 repository.updateSheetCell(Constants.SHEET_MATRIZ, "A", idx, item.nombre)
@@ -50,11 +47,7 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                 repository.updateSheetCell(Constants.SHEET_MATRIZ, "O", idx, item.ruta)
                 repository.updateSheetCell(Constants.SHEET_MATRIZ, "P", idx, item.folioP)
             } else {
-                repository.appendRow(Constants.SHEET_MATRIZ, listOf(
-                    item.nombre, item.semana, item.requisito, item.numTT, item.ref1, item.ref2,
-                    item.observaciones, item.estado, item.ubicacion, remoteImg, remoteImg2 ?: "",
-                    DateUtils.toSheetsSerial(item.fecha), item.id, item.hora, item.ruta, item.folioP
-                ))
+                repository.appendRow(Constants.SHEET_MATRIZ, listOf(item.nombre, item.semana, item.requisito, item.numTT, item.ref1, item.ref2, item.observaciones, item.estado, item.ubicacion, remoteImg, remoteImg2 ?: "", DateUtils.toSheetsSerial(item.fecha), item.id, item.hora, item.ruta, item.folioP))
             }
             repository.markMatrizAsClean(item.id, remoteImg, remoteImg2)
         }
@@ -71,21 +64,9 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
         }
     }
 
-    /**
-     * Pase conserva el layout existente y agrega CONTIENE/CAPITALES al final, en T/U.
-     * No desplazamos ninguna columna histórica de la hoja.
-     *
-     * Los importes se mandan como texto con USER_ENTERED y prefijo $, de modo que Sheets
-     * los interpreta como números con formato de moneda. Ejemplo: "$4,463.00".
-     *
-     * Si un registro de Pase todavía no existe en Sheets, se agrega una fila completa.
-     * Esto evita dejar isDirty=1 para siempre en registros creados/importados desde la app.
-     */
     private suspend fun syncPase() {
-        // Crea los encabezados si la hoja todavía no tiene las nuevas columnas.
         repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CONTIENE, 1, "CONTIENE")
         repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CAPITALES, 1, "CAPITALES")
-
         repository.getDirtyPaseItems().forEach { item ->
             val idx = repository.findRowIndexById(Constants.SHEET_PASE, item.id, Constants.PaseCols.COL_ID)
             if (idx != -1) {
@@ -94,48 +75,30 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                 repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CAPITALES, idx, formatoMoneda(item.capitales))
                 repository.markPaseAsClean(item.id)
             } else {
-                // Layout conservador: conserva las columnas conocidas de Pase y deja vacías
-                // las columnas históricas cuyo significado no está modelado en PaseEntity.
-                repository.appendRow(Constants.SHEET_PASE, listOf(
-                    item.id,
-                    item.folioP ?: "",
-                    item.nombre,
-                    item.numTT,
-                    "",
-                    item.ref1,
-                    "",
-                    item.ref2,
-                    "",
-                    "",
-                    "",
-                    "",
-                    item.imagenUrl?.takeUnless { it.startsWith("content://") } ?: "",
-                    item.imagenUrl2?.takeUnless { it.startsWith("content://") } ?: "",
-                    "",
-                    "",
-                    item.ubicacion ?: "",
-                    "",
-                    item.estado,
-                    formatoMoneda(item.contiene),
-                    formatoMoneda(item.capitales)
-                ))
+                repository.appendRow(Constants.SHEET_PASE, listOf(item.id, item.folioP ?: "", item.nombre, item.numTT, "", item.ref1, "", item.ref2, "", "", "", "", item.imagenUrl?.takeUnless { it.startsWith("content://") } ?: "", item.imagenUrl2?.takeUnless { it.startsWith("content://") } ?: "", "", "", item.ubicacion ?: "", "", item.estado, formatoMoneda(item.contiene), formatoMoneda(item.capitales)))
                 repository.markPaseAsClean(item.id)
             }
         }
     }
 
+    /** Ruta IA usa un reemplazo completo porque la hoja representa la ruta vigente del día.
+     * Si una subida anterior falló o el usuario cambió Visitado/orden sin red, cualquier dirty
+     * obliga a reescribir la ruta completa, evitando dejar filas antiguas o estados parciales. */
+    private suspend fun syncRutaIA() {
+        if (repository.getDirtyRutaIAItems().isEmpty()) return
+        val items = repository.getAllRutaIAItems()
+        repository.reemplazarRutaIAEnSheet(items)
+        items.forEach { repository.markRutaIAAsClean(it.id) }
+    }
+
     private fun formatoMoneda(valor: String?): String {
         val limpio = valor?.trim()?.removePrefix("$")?.replace(" ", "") ?: return ""
         if (limpio.isBlank()) return ""
-
         val normalizado = when {
-            limpio.contains(".") && limpio.contains(",") && limpio.lastIndexOf(',') > limpio.lastIndexOf('.') ->
-                limpio.replace(".", "").replace(",", ".")
-            limpio.contains(",") && limpio.substringAfterLast(',').length == 2 ->
-                limpio.replace(".", "").replace(",", ".")
+            limpio.contains(".") && limpio.contains(",") && limpio.lastIndexOf(',') > limpio.lastIndexOf('.') -> limpio.replace(".", "").replace(",", ".")
+            limpio.contains(",") && limpio.substringAfterLast(',').length == 2 -> limpio.replace(".", "").replace(",", ".")
             else -> limpio.replace(",", "")
         }
-
         val numero = normalizado.toDoubleOrNull() ?: return limpio
         return String.format(Locale.US, "$%,.2f", numero)
     }
@@ -143,25 +106,15 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
     private suspend fun syncSolicitud() {
         repository.getDirtySolicitudItems().forEach { item ->
             var remoteAudio = item.audioUrl
-            if (item.audioUrl?.startsWith("content://") == true || item.audioUrl?.startsWith("file://") == true) {
-                remoteAudio = driveHelper.uploadFile(Uri.parse(item.audioUrl!!), Constants.FOLDER_AUDIOS, "audio/mp4")
-            }
+            if (item.audioUrl?.startsWith("content://") == true || item.audioUrl?.startsWith("file://") == true) remoteAudio = driveHelper.uploadFile(Uri.parse(item.audioUrl!!), Constants.FOLDER_AUDIOS, "audio/mp4")
             var remoteImg = item.imageUrl
-            if (item.imageUrl?.startsWith("content://") == true || item.imageUrl?.startsWith("file://") == true) {
-                remoteImg = driveHelper.uploadFile(Uri.parse(item.imageUrl!!), Constants.FOLDER_IMAGES, "image/jpeg")
-            }
+            if (item.imageUrl?.startsWith("content://") == true || item.imageUrl?.startsWith("file://") == true) remoteImg = driveHelper.uploadFile(Uri.parse(item.imageUrl!!), Constants.FOLDER_IMAGES, "image/jpeg")
             var remoteImg2 = item.imageUrl2
-            if (item.imageUrl2?.startsWith("content://") == true || item.imageUrl2?.startsWith("file://") == true) {
-                remoteImg2 = driveHelper.uploadFile(Uri.parse(item.imageUrl2!!), Constants.FOLDER_IMAGES, "image/jpeg")
-            }
+            if (item.imageUrl2?.startsWith("content://") == true || item.imageUrl2?.startsWith("file://") == true) remoteImg2 = driveHelper.uploadFile(Uri.parse(item.imageUrl2!!), Constants.FOLDER_IMAGES, "image/jpeg")
             var remoteImg3 = item.imageUrl3
-            if (item.imageUrl3?.startsWith("content://") == true || item.imageUrl3?.startsWith("file://") == true) {
-                remoteImg3 = driveHelper.uploadFile(Uri.parse(item.imageUrl3!!), Constants.FOLDER_IMAGES, "image/jpeg")
-            }
+            if (item.imageUrl3?.startsWith("content://") == true || item.imageUrl3?.startsWith("file://") == true) remoteImg3 = driveHelper.uploadFile(Uri.parse(item.imageUrl3!!), Constants.FOLDER_IMAGES, "image/jpeg")
             var remoteImg4 = item.imageUrl4
-            if (item.imageUrl4?.startsWith("content://") == true || item.imageUrl4?.startsWith("file://") == true) {
-                remoteImg4 = driveHelper.uploadFile(Uri.parse(item.imageUrl4!!), Constants.FOLDER_IMAGES, "image/jpeg")
-            }
+            if (item.imageUrl4?.startsWith("content://") == true || item.imageUrl4?.startsWith("file://") == true) remoteImg4 = driveHelper.uploadFile(Uri.parse(item.imageUrl4!!), Constants.FOLDER_IMAGES, "image/jpeg")
             val idx = repository.findRowIndexById(Constants.SHEET_SOLICITUD, item.id, Constants.SolicitudCols.COL_ID)
             if (idx != -1) {
                 repository.updateSheetCell(Constants.SHEET_SOLICITUD, "B", idx, item.nombre)
@@ -183,12 +136,7 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                 repository.updateSheetCell(Constants.SHEET_SOLICITUD, "R", idx, DateUtils.toSheetsSerial(item.fechaHora))
                 repository.markSolicitudAsClean(item.id, remoteAudio, remoteImg, remoteImg2, remoteImg3, remoteImg4)
             } else {
-                repository.appendRow(Constants.SHEET_SOLICITUD, listOf(
-                    item.id, item.nombre, item.numero ?: "", item.sucursal ?: "", item.ubicacionRaw ?: "",
-                    remoteImg ?: "", remoteImg2 ?: "", item.nombreRef1 ?: "", item.ref1 ?: "",
-                    item.nombreRef2 ?: "", item.ref2 ?: "", item.observaciones ?: "", remoteAudio ?: "", item.estado,
-                    remoteImg3 ?: "", remoteImg4 ?: "", item.gestorAsignado, DateUtils.toSheetsSerial(item.fechaHora)
-                ))
+                repository.appendRow(Constants.SHEET_SOLICITUD, listOf(item.id, item.nombre, item.numero ?: "", item.sucursal ?: "", item.ubicacionRaw ?: "", remoteImg ?: "", remoteImg2 ?: "", item.nombreRef1 ?: "", item.ref1 ?: "", item.nombreRef2 ?: "", item.ref2 ?: "", item.observaciones ?: "", remoteAudio ?: "", item.estado, remoteImg3 ?: "", remoteImg4 ?: "", item.gestorAsignado, DateUtils.toSheetsSerial(item.fechaHora)))
                 repository.markSolicitudAsClean(item.id, remoteAudio, remoteImg, remoteImg2, remoteImg3, remoteImg4)
             }
         }
