@@ -47,16 +47,14 @@ class SheetsRepository(
         val sheetId = getSheetIdByTitle(sheetName) ?: return@withContext false
         val deleteRequest = Request().setDeleteDimension(
             DeleteDimensionRequest().setRange(
-                DimensionRange()
-                    .setSheetId(sheetId)
-                    .setDimension("ROWS")
-                    .setStartIndex(rowIndex - 1)
-                    .setEndIndex(rowIndex)
+                DimensionRange().setSheetId(sheetId).setDimension("ROWS")
+                    .setStartIndex(rowIndex - 1).setEndIndex(rowIndex)
             )
         )
-        sheetsService.spreadsheets()
-            .batchUpdate(Constants.SPREADSHEET_ID, BatchUpdateSpreadsheetRequest().setRequests(listOf(deleteRequest)))
-            .execute()
+        sheetsService.spreadsheets().batchUpdate(
+            Constants.SPREADSHEET_ID,
+            BatchUpdateSpreadsheetRequest().setRequests(listOf(deleteRequest))
+        ).execute()
         true
     }
 
@@ -72,9 +70,7 @@ class SheetsRepository(
         val range = "'$realName'!A1"
         val body = ValueRange().setValues(listOf(values.map { it ?: "" }))
         sheetsService.spreadsheets().values().append(Constants.SPREADSHEET_ID, range, body)
-            .setValueInputOption("USER_ENTERED")
-            .setInsertDataOption("INSERT_ROWS")
-            .execute()
+            .setValueInputOption("USER_ENTERED").setInsertDataOption("INSERT_ROWS").execute()
         Unit
     }
 
@@ -160,21 +156,13 @@ class SheetsRepository(
             val nombre = row.getOrNull(0)?.toString()?.trim()
             if (nombre.isNullOrBlank()) return@mapNotNull null
             Sem6Item(
-                nombre = nombre,
-                sem = row.getOrNull(1)?.toString()?.trim() ?: "",
-                req = row.getOrNull(2)?.toString()?.trim() ?: "",
-                id = row.getOrNull(3)?.toString()?.trim() ?: "",
-                cu = row.getOrNull(4)?.toString()?.trim() ?: "",
-                ubicacion = row.getOrNull(5)?.toString()?.trim() ?: "",
-                imagenUrl = row.getOrNull(6)?.toString()?.trim(),
-                colonia = row.getOrNull(8)?.toString()?.trim() ?: "",
-                visitas = row.getOrNull(9)?.toString()?.trim()?.toIntOrNull() ?: 0,
-                ultimaFechaVisita = row.getOrNull(10)?.toString()?.trim() ?: "",
-                numTT = row.getOrNull(11)?.toString()?.trim() ?: "",
-                seContiene = row.getOrNull(12)?.toString()?.trim() ?: "",
-                susceptible = row.getOrNull(13)?.toString()?.trim() ?: "",
-                observaciones = row.getOrNull(14)?.toString()?.trim() ?: "",
-                capital = row.getOrNull(15)?.toString()?.trim() ?: ""
+                nombre = nombre, sem = row.getOrNull(1)?.toString()?.trim() ?: "", req = row.getOrNull(2)?.toString()?.trim() ?: "",
+                id = row.getOrNull(3)?.toString()?.trim() ?: "", cu = row.getOrNull(4)?.toString()?.trim() ?: "",
+                ubicacion = row.getOrNull(5)?.toString()?.trim() ?: "", imagenUrl = row.getOrNull(6)?.toString()?.trim(),
+                colonia = row.getOrNull(8)?.toString()?.trim() ?: "", visitas = row.getOrNull(9)?.toString()?.trim()?.toIntOrNull() ?: 0,
+                ultimaFechaVisita = row.getOrNull(10)?.toString()?.trim() ?: "", numTT = row.getOrNull(11)?.toString()?.trim() ?: "",
+                seContiene = row.getOrNull(12)?.toString()?.trim() ?: "", susceptible = row.getOrNull(13)?.toString()?.trim() ?: "",
+                observaciones = row.getOrNull(14)?.toString()?.trim() ?: "", capital = row.getOrNull(15)?.toString()?.trim() ?: ""
             )
         }
     }
@@ -286,23 +274,87 @@ class SheetsRepository(
             val nombre = cell(row, Constants.MatrizCols.NOMBRE) ?: ""
             if (nombre.contains("Pase semana", ignoreCase = true) || nombre.isBlank()) return@mapNotNull null
             val fechaSerial = DateUtils.parseCellDateToEpochMillis(cell(row, Constants.MatrizCols.FECHA))
-            MatrizEntity(id = id, nombre = nombre, semana = cell(row, Constants.MatrizCols.SEMANA) ?: "", requisito = cell(row, Constants.MatrizCols.REQUISITO) ?: "", numTT = cell(row, Constants.MatrizCols.NUMTT) ?: "", ref1 = cell(row, Constants.MatrizCols.REF1) ?: "", ref2 = cell(row, Constants.MatrizCols.REF2) ?: "", observaciones = cell(row, Constants.MatrizCols.OBSERVACIONES), estado = cell(row, Constants.MatrizCols.ESTADO) ?: "", ubicacion = cell(row, Constants.MatrizCols.UBICACION), imagenUrl = cell(row, Constants.MatrizCols.IMAGEN), imagenUrl2 = cell(row, Constants.MatrizCols.IMAGEN2), fecha = fechaSerial, hora = cell(row, Constants.MatrizCols.HORA), ruta = cell(row, Constants.MatrizCols.RUTA), folioP = cell(row, Constants.MatrizCols.FOLIOP))
+            MatrizEntity(
+                id = id, nombre = nombre, semana = cell(row, Constants.MatrizCols.SEMANA) ?: "", requisito = cell(row, Constants.MatrizCols.REQUISITO) ?: "",
+                numTT = cell(row, Constants.MatrizCols.NUMTT) ?: "", ref1 = cell(row, Constants.MatrizCols.REF1) ?: "", ref2 = cell(row, Constants.MatrizCols.REF2) ?: "",
+                observaciones = cell(row, Constants.MatrizCols.OBSERVACIONES), estado = cell(row, Constants.MatrizCols.ESTADO) ?: "", ubicacion = cell(row, Constants.MatrizCols.UBICACION),
+                imagenUrl = cell(row, Constants.MatrizCols.IMAGEN), imagenUrl2 = cell(row, Constants.MatrizCols.IMAGEN2), fecha = fechaSerial,
+                hora = cell(row, Constants.MatrizCols.HORA), ruta = cell(row, Constants.MatrizCols.RUTA), folioP = cell(row, Constants.MatrizCols.FOLIOP)
+            )
         }
         if (items.isNotEmpty()) matrizDao.insertAll(items)
     }
 
     private suspend fun copiarPaseDesdeMatriz() {
-        val matrizItems = matrizDao.getAllMatriz().first()
-        val yaEnPase = paseDao.getAll().first().associateBy { it.id }
-        val semanaActual = java.util.Calendar.getInstance().get(java.util.Calendar.WEEK_OF_YEAR)
-        val aCopiar = matrizItems.filter { it.estado.equals("PASE", ignoreCase = true) && semanaCoincide(it.semana, semanaActual) && it.id !in yaEnPase }
-        if (aCopiar.isEmpty()) return
-        paseDao.insertAll(aCopiar.map { m -> PaseEntity(id = m.id, folioP = m.folioP, nombre = m.nombre, numTT = m.numTT, ref1 = m.ref1, ref2 = m.ref2, imagenUrl = m.imagenUrl, imagenUrl2 = m.imagenUrl2, ubicacion = m.ubicacion, estado = "Pendiente", contiene = "", capitales = "", fecha = m.fecha, isDirty = true) })
+        val registros = matrizDao.getAllMatriz().first()
+        val yaCopiados = paseDao.getOrigenesYaCopiados().toSet()
+        val nuevos = registros.filter { it.estado.equals("PASE", ignoreCase = true) && estaEnSemanaActual(it.fecha) }
+            .filter { it.id !in yaCopiados }
+            .map { m ->
+                PaseEntity(
+                    id = java.util.UUID.randomUUID().toString().replace("-", "").take(12), nombre = m.nombre, semana = m.semana, requisito = m.requisito, numTT = m.numTT,
+                    ref1 = m.ref1, ref2 = m.ref2, observaciones = m.observaciones, estado = m.estado, ubicacion = m.ubicacion, imagenUrl = m.imagenUrl, imagenUrl2 = m.imagenUrl2,
+                    fecha = m.fecha, hora = m.hora, ruta = m.ruta, folioP = m.folioP, origenMatrizId = m.id
+                )
+            }
+        nuevos.forEach { paseDao.insertar(it) }
     }
 
-    private suspend fun refreshSolicitud() { /* implementación existente */ }
-    private suspend fun refreshFiltroFecha() { /* implementación existente */ }
-    private suspend fun refreshFiltrar() { /* implementación existente */ }
-    private suspend fun refreshControl() { /* implementación existente */ }
-    private fun semanaCoincide(valor: String, semanaActual: Int): Boolean = valor.filter { it.isDigit() }.toIntOrNull() == semanaActual
+    private suspend fun refreshSolicitud() {
+        val dirtyIds = solicitudDao.getDirtyItems().map { it.id }.toSet()
+        val rows = fetchRows(Constants.SHEET_SOLICITUD)
+        val items = rows.mapNotNull { row ->
+            val id = cell(row, Constants.SolicitudCols.ID) ?: return@mapNotNull null
+            if (id in dirtyIds) return@mapNotNull null
+            SolicitudEntity(
+                id = id, nombre = cell(row, Constants.SolicitudCols.NOMBRE) ?: "", numero = cell(row, Constants.SolicitudCols.NUMERO), sucursal = cell(row, Constants.SolicitudCols.SUCURSAL),
+                ubicacionRaw = cell(row, Constants.SolicitudCols.UBICACION), imageUrl = cell(row, Constants.SolicitudCols.IMAGEN), imageUrl2 = cell(row, Constants.SolicitudCols.IMAGEN2),
+                nombreRef1 = cell(row, Constants.SolicitudCols.NOMBRE_REF1), ref1 = cell(row, Constants.SolicitudCols.REF1), nombreRef2 = cell(row, Constants.SolicitudCols.NOMBRE_REF2), ref2 = cell(row, Constants.SolicitudCols.REF2),
+                observaciones = cell(row, Constants.SolicitudCols.OBSERVACIONES), audioUrl = cell(row, Constants.SolicitudCols.AUDIO), estado = cell(row, Constants.SolicitudCols.ESTADO) ?: "",
+                imageUrl3 = cell(row, Constants.SolicitudCols.IMAGEN3), imageUrl4 = cell(row, Constants.SolicitudCols.IMAGEN4), gestorAsignado = cell(row, Constants.SolicitudCols.GESTOR) ?: "Flores",
+                fechaHora = DateUtils.parseCellDateToEpochMillis(cell(row, Constants.SolicitudCols.FECHA_HORA))
+            )
+        }
+        if (items.isNotEmpty()) solicitudDao.insertAll(items)
+    }
+
+    private suspend fun refreshFiltroFecha() {
+        val dirtyIds = filtroDao.getDirtyItems().map { it.id }.toSet()
+        val rows = fetchRows(Constants.SHEET_FILTRO)
+        val items = rows.mapNotNull { row ->
+            val id = cell(row, Constants.FiltroCols.ID) ?: return@mapNotNull null
+            if (id in dirtyIds) return@mapNotNull null
+            val fechaMillis = DateUtils.parseCellDateToEpochMillis(cell(row, Constants.FiltroCols.FECHA)) ?: return@mapNotNull null
+            FiltroFechaEntity(id = id, nombre = cell(row, Constants.FiltroCols.NOMBRE) ?: "", estado = cell(row, Constants.FiltroCols.ESTADO) ?: "", observaciones = cell(row, Constants.FiltroCols.OBSERVACIONES), numTT = cell(row, Constants.FiltroCols.NUMTT) ?: "", fecha = fechaMillis, hora = cell(row, Constants.FiltroCols.HORA), imagenUrl = cell(row, Constants.FiltroCols.IMAGEN), ref1 = cell(row, Constants.FiltroCols.REF1), ref2 = cell(row, Constants.FiltroCols.REF2), ubicacion = cell(row, Constants.FiltroCols.UBICACION), req = cell(row, Constants.FiltroCols.REQ))
+        }
+        filtroDao.deleteAllClean()
+        if (items.isNotEmpty()) filtroDao.insertAll(items)
+    }
+
+    private suspend fun refreshFiltrar() {
+        val rows = fetchRows(Constants.SHEET_FILTRAR, lastCol = "AB")
+        val items = rows.mapNotNull { row ->
+            val id = cell(row, Constants.FiltrarCols.ID) ?: return@mapNotNull null
+            val nombre = cell(row, Constants.FiltrarCols.NOMBRE) ?: ""
+            val refsTexto = Constants.FiltrarCols.REF_PAIRS.mapNotNull { (nIdx, rIdx) ->
+                val n = cell(row, nIdx); val r = cell(row, rIdx)
+                if (n != null || r != null) "${n ?: ""}: ${r ?: ""}" else null
+            }.joinToString("\n").takeIf { it.isNotBlank() }
+            val fechaMillis = DateUtils.parseCellDateToEpochMillis(cell(row, Constants.FiltrarCols.FECHA))
+            FiltrarEntity(id = id, nombre = nombre, semana = cell(row, Constants.FiltrarCols.SEMANA) ?: "", requerido = cell(row, Constants.FiltrarCols.REQUERIDO) ?: "", numTT = cell(row, Constants.FiltrarCols.NUMTT) ?: "", referencias = refsTexto, observaciones = cell(row, Constants.FiltrarCols.OBSERVACIONES), estado = cell(row, Constants.FiltrarCols.ESTADO) ?: "", ubicacion = cell(row, Constants.FiltrarCols.UBICACION), imagen = cell(row, Constants.FiltrarCols.IMAGEN), fecha = fechaMillis, hora = cell(row, Constants.FiltrarCols.HORA))
+        }
+        if (items.isNotEmpty()) filtrarDao.insertAll(items)
+    }
+
+    private suspend fun refreshControl() {
+        val rows = fetchRows(Constants.SHEET_CONTROL, lastCol = "F")
+        val items = rows.mapNotNull { row ->
+            val semana = cell(row, Constants.ControlCols.SEMANA) ?: return@mapNotNull null
+            val requeridoStr = row.drop(1).mapNotNull { it?.toString()?.trim() }
+                .firstOrNull { it.replace(",", "").replace("$", "").toDoubleOrNull() != null } ?: "0"
+            ControlEntity(semana = semana, requerido = requeridoStr)
+        }
+        controlDao.deleteAll()
+        if (items.isNotEmpty()) controlDao.insertAll(items)
+    }
 }
