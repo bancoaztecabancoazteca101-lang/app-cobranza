@@ -8,22 +8,54 @@ enum class EstrategiaRutaIA(val etiqueta: String) {
 }
 
 /**
+ * Filtros duros de negocio. Se aplican antes de ordenar la ruta.
+ * null significa que ese filtro está desactivado.
+ */
+data class FiltrosRutaIA(
+    val minimoDiasAtraso: Int? = null,
+    val minimoRequerido: Double? = null,
+    val exigirDireccion: Boolean = true
+)
+
+/**
+ * Aplica únicamente filtros de entrada; no decide el orden de visita.
+ */
+fun aplicarFiltrosRutaIA(
+    items: List<RutaIAEntity>,
+    filtros: FiltrosRutaIA = FiltrosRutaIA()
+): List<RutaIAEntity> = items.filter { item ->
+    val cumpleDias = filtros.minimoDiasAtraso == null ||
+        (item.diasAtraso != null && item.diasAtraso >= filtros.minimoDiasAtraso)
+    val cumpleRequerido = filtros.minimoRequerido == null ||
+        (item.pagoRequerido != null && item.pagoRequerido >= filtros.minimoRequerido)
+    val cumpleDireccion = !filtros.exigirDireccion || item.direccion.isNotBlank()
+    cumpleDias && cumpleRequerido && cumpleDireccion
+}
+
+/**
  * Construye el orden final de la ruta.
  *
- * Regla de distancia: el GPS solo determina la primera parada. A partir de ahí, cada siguiente
- * parada se calcula contra la parada inmediatamente anterior, nunca otra vez contra el GPS.
- * Esto evita el error de ordenar toda la cartera únicamente por distancia al punto inicial.
+ * Regla geográfica: el GPS solo determina la primera parada. Después, cada parada usa como
+ * referencia la parada inmediatamente anterior.
  *
- * INTELIGENTE usa exactamente esa regla de vecino más cercano. Las otras estrategias cambian
- * deliberadamente la prioridad principal y usan la cercanía solo para desempatar.
+ * Las estrategias de cobranza son prioridades lexicográficas, no fórmulas con pesos arbitrarios:
+ * - INTELIGENTE: distancia -> atraso -> requerido.
+ * - MAYOR_ATRASO: atraso -> distancia -> requerido.
+ * - MAYOR_REQUERIDO: requerido -> distancia -> atraso.
+ * - PRIORIDAD_COBRANZA: atraso -> requerido -> distancia.
+ *
+ * Los clientes sin coordenadas no rompen la ruta: se conservan al final en su orden relativo.
  */
 fun construirRutaIAInteligente(
     items: List<RutaIAEntity>,
     inicio: Pair<Double, Double>?,
-    estrategia: EstrategiaRutaIA
+    estrategia: EstrategiaRutaIA,
+    filtros: FiltrosRutaIA = FiltrosRutaIA()
 ): List<RutaIAEntity> {
-    val pendientes = items.filter { it.lat != null && it.lng != null }.toMutableList()
-    val sinUbicar = items.filter { it.lat == null || it.lng == null }
+    val filtrados = aplicarFiltrosRutaIA(items, filtros)
+    val pendientes = filtrados.filter { it.lat != null && it.lng != null }.toMutableList()
+    val sinUbicar = filtrados.filter { it.lat == null || it.lng == null }
+
     if (pendientes.isEmpty()) return sinUbicar
 
     fun distanciaDesde(punto: Pair<Double, Double>, item: RutaIAEntity): Double =
@@ -35,30 +67,38 @@ fun construirRutaIAInteligente(
     while (pendientes.isNotEmpty()) {
         val siguiente = when (estrategia) {
             EstrategiaRutaIA.INTELIGENTE -> {
-                if (punto == null) pendientes.first()
-                else pendientes.minWithOrNull(
-                    compareBy<RutaIAEntity> { distanciaDesde(punto!!, it) }
-                        .thenByDescending { it.diasAtraso ?: 0 }
-                        .thenByDescending { it.pagoRequerido ?: 0.0 }
-                )!!
+                if (punto == null) {
+                    pendientes.minWithOrNull(
+                        compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
+                            .thenByDescending { it.pagoRequerido ?: 0.0 }
+                    )!!
+                } else {
+                    pendientes.minWithOrNull(
+                        compareBy<RutaIAEntity> { distanciaDesde(punto!!, it) }
+                            .thenByDescending { it.diasAtraso ?: 0 }
+                            .thenByDescending { it.pagoRequerido ?: 0.0 }
+                    )!!
+                }
             }
             EstrategiaRutaIA.MAYOR_ATRASO -> {
                 pendientes.maxWithOrNull(
                     compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
                         .thenBy { -(if (punto == null) 0.0 else distanciaDesde(punto!!, it)) }
+                        .thenByDescending { it.pagoRequerido ?: 0.0 }
                 )!!
             }
             EstrategiaRutaIA.MAYOR_REQUERIDO -> {
                 pendientes.maxWithOrNull(
                     compareBy<RutaIAEntity> { it.pagoRequerido ?: 0.0 }
                         .thenBy { -(if (punto == null) 0.0 else distanciaDesde(punto!!, it)) }
+                        .thenByDescending { it.diasAtraso ?: 0 }
                 )!!
             }
             EstrategiaRutaIA.PRIORIDAD_COBRANZA -> {
                 pendientes.maxWithOrNull(
-                    compareBy<RutaIAEntity> {
-                        (it.diasAtraso ?: 0) * 100000.0 + (it.pagoRequerido ?: 0.0)
-                    }.thenBy { -(if (punto == null) 0.0 else distanciaDesde(punto!!, it)) }
+                    compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
+                        .thenBy { it.pagoRequerido ?: 0.0 }
+                        .thenBy { -(if (punto == null) 0.0 else distanciaDesde(punto!!, it)) }
                 )!!
             }
         }
