@@ -188,19 +188,21 @@ fun MatrizItemCard(
     contiene: String? = null,
     capitales: String? = null
 ) {
-    Card(onClick = onCardClick, modifier = Modifier.fillMaxWidth()) {
+    val pagado = item.estado.equals("Pagado", ignoreCase = true)
+    Card(
+        onClick = onCardClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (pagado) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface
+        )
+    ) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PortadaThumbnail(item.imagenUrl, driveHelper)
             Column(Modifier.weight(1f)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(item.nombre, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        StatusBadge(item.estado)
-                        IconButton(onClick = onDeleteClick, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Delete, contentDescription = "Eliminar registro", tint = Color.Gray) }
-                        if (onEditClick != null) {
-                            IconButton(onClick = onEditClick, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Edit, contentDescription = "Editar registro") }
-                        }
-                    }
+                    StatusBadge(item.estado)
+                    IconButton(onClick = onDeleteClick, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.Delete, contentDescription = "Eliminar registro", tint = Color.Gray) }
                 }
                 if (!item.folioP.isNullOrBlank()) Text("CU: ${item.folioP}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 ColoniaLabel(item.ubicacion)
