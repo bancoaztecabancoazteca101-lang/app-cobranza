@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.Locale
 
+/** Registro crudo ya validado para entrar al motor de Ruta IA. */
 data class ClienteRutaIAJson(
     val nombre: String,
     val cu: String?,
@@ -42,7 +44,7 @@ private fun JSONObject.doubleOrNull(vararg keys: String): Double? {
                 raw.replace(".", "").replace(",", ".")
             else -> raw.replace(",", "")
         }
-        normalizado.toDoubleOrNull()?.let { return it }
+        normalizado.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { return it }
     }
     return null
 }
@@ -52,15 +54,21 @@ private fun JSONObject.intOrNull(vararg keys: String): Int? {
         if (!has(key) || isNull(key)) continue
         val raw = opt(key)?.toString()?.trim()?.replace(",", "") ?: continue
         raw.toIntOrNull()?.let { return it }
-        raw.toDoubleOrNull()?.toInt()?.let { return it }
+        raw.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { return it.toInt() }
     }
     return null
 }
 
 private fun normalizarClaveDuplicado(valor: String?): String? = valor
-    ?.uppercase(java.util.Locale.ROOT)
+    ?.uppercase(Locale.ROOT)
     ?.replace(Regex("[^A-Z0-9]"), "")
     ?.ifBlank { null }
+
+private fun normalizarNombreDuplicado(valor: String): String = valor
+    .uppercase(Locale.ROOT)
+    .normalize(java.text.Normalizer.Form.NFD)
+    .replace(Regex("\\p{M}+"), "")
+    .replace(Regex("[^A-Z0-9]"), "")
 
 fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRutaIA {
     val texto = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
@@ -90,11 +98,12 @@ fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRuta
     val clientes = mutableListOf<ClienteRutaIAJson>()
     val advertencias = mutableListOf<String>()
     val clavesCU = mutableSetOf<String>()
+    val nombresSinCU = mutableSetOf<String>()
 
     for (i in 0 until arreglo.length()) {
         val o = arreglo.optJSONObject(i)
         if (o == null) {
-            advertencias += "Registro ${i + 1}: objeto inválido"
+            advertencias += "Registro ${i + 1}: objeto inválido; se omitió"
             continue
         }
 
@@ -106,25 +115,45 @@ fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRuta
         val requerido = o.doubleOrNull("requerido", "pago_requerido", "pagoRequerido", "Pago requerido")
 
         if (nombre == null) {
-            advertencias += "Registro ${i + 1}: falta nombre"
+            advertencias += "Registro ${i + 1}: falta nombre; se omitió"
             continue
         }
         if (direccion == null) {
-            advertencias += "$nombre: falta dirección"
+            advertencias += "$nombre: falta dirección; se omitió porque no es visitable"
             continue
         }
+
+        if (dias != null && dias < 0) {
+            advertencias += "$nombre: días de atraso inválidos ($dias); se omitió"
+            continue
+        }
+        if ((saldo != null && saldo < 0.0) || (requerido != null && requerido < 0.0)) {
+            advertencias += "$nombre: saldo/requerido negativo; se omitió"
+            continue
+        }
+
         if (cu == null) advertencias += "$nombre: CU no leída"
         if (dias == null) advertencias += "$nombre: días de atraso no leídos"
         if (saldo == null && requerido == null) advertencias += "$nombre: saldo/requerido no leído"
 
         if (saldo != null && requerido != null && kotlin.math.abs(saldo - requerido) > 0.01) {
-            advertencias += "$nombre: saldo y requerido son diferentes"
+            advertencias += "$nombre: saldo y requerido son diferentes (se conservan ambos conceptos en el JSON)"
         }
 
         val claveCU = normalizarClaveDuplicado(cu)
         if (claveCU != null && !clavesCU.add(claveCU)) {
             advertencias += "$nombre: CU duplicada; se omitió el registro repetido"
             continue
+        }
+
+        // Si Gemini no pudo leer CU, evitamos que dos apariciones del mismo cliente
+        // entren como registros distintos por diferencias de acentos/espacios.
+        if (claveCU == null) {
+            val claveNombre = normalizarNombreDuplicado(nombre)
+            if (!nombresSinCU.add(claveNombre)) {
+                advertencias += "$nombre: nombre duplicado sin CU; se omitió el registro repetido"
+                continue
+            }
         }
 
         clientes += ClienteRutaIAJson(
@@ -139,7 +168,7 @@ fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRuta
         )
     }
 
-    if (clientes.isEmpty()) throw IllegalArgumentException("No hay clientes válidos en el JSON")
+    if (clientes.isEmpty()) throw IllegalArgumentException("No hay clientes válidos/visitables en el JSON")
     return ResultadoImportacionRutaIA(clientes, advertencias)
 }
 
