@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,14 +23,8 @@ class RutaIAViewModel(
     private val repository: SheetsRepository,
     private val context: Context
 ) : ViewModel() {
-    val rutaList: StateFlow<List<RutaIAEntity>> = rutaIADao.getAll().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
-    )
-    private val _criterios = MutableStateFlow(
-        listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC))
-    )
+    val rutaList: StateFlow<List<RutaIAEntity>> = rutaIADao.getAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _criterios = MutableStateFlow(listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC)))
     val criterios: StateFlow<List<CriterioOrdenRutaIA>> = _criterios
     private val _procesando = MutableStateFlow(false)
     val procesando: StateFlow<Boolean> = _procesando
@@ -35,36 +34,21 @@ class RutaIAViewModel(
     val ubicacionActual: StateFlow<Pair<Double, Double>?> = _ubicacionActual
 
     init {
-        viewModelScope.launch {
-            filtroDao.get()?.let { _criterios.value = parsearCriteriosRutaIA(it.criteriosOrden) }
-        }
-        viewModelScope.launch {
-            parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it }
-        }
+        viewModelScope.launch { filtroDao.get()?.let { _criterios.value = parsearCriteriosRutaIA(it.criteriosOrden) } }
+        viewModelScope.launch { parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it } }
     }
 
-    // La ruta ya llega ordenada por RutaIAEngine y queda persistida así en Room.
-    // No se vuelve a ordenar aquí con una segunda implementación.
     val rutaOrdenada: StateFlow<List<RutaIAEntity>> = rutaList
 
     fun actualizarCriterios(nuevos: List<CriterioOrdenRutaIA>) {
-        _criterios.value = nuevos.ifEmpty {
-            listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC))
-        }
+        _criterios.value = nuevos.ifEmpty { listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC)) }
         viewModelScope.launch {
-            filtroDao.guardar(
-                RutaIAFiltroEntity(
-                    id = 1,
-                    criteriosOrden = serializarCriteriosRutaIA(_criterios.value)
-                )
-            )
+            filtroDao.guardar(RutaIAFiltroEntity(id = 1, criteriosOrden = serializarCriteriosRutaIA(_criterios.value)))
         }
     }
 
     fun refrescarUbicacion() {
-        viewModelScope.launch {
-            parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it }
-        }
+        viewModelScope.launch { parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it } }
     }
 
     fun importarJson(
@@ -83,41 +67,26 @@ class RutaIAViewModel(
                 val importado = leerClientesRutaIAJson(context, uri)
                 val ubicacion = parseLatLngOrden(obtenerUbicacionActual(context))
                 if (ubicacion != null) _ubicacionActual.value = ubicacion
-
                 val matrizActual = matrizDao.getAllMatriz().first()
 
-                fun normalizarCu(valor: String?): String = valor.orEmpty()
-                    .uppercase(java.util.Locale.ROOT)
-                    .replace(Regex("[^A-Z0-9]"), "")
+                fun normalizarCu(valor: String?): String = valor.orEmpty().uppercase(java.util.Locale.ROOT).replace(Regex("[^A-Z0-9]"), "")
 
                 fun buscarEnMatriz(cu: String?, nombre: String): MatrizEntity? {
                     val cuNormalizado = normalizarCu(cu)
                     if (cuNormalizado.isNotBlank()) {
-                        matrizActual.firstOrNull {
-                            normalizarCu(it.folioP) == cuNormalizado
-                        }?.let { return it }
+                        matrizActual.firstOrNull { normalizarCu(it.folioP) == cuNormalizado }?.let { return it }
                     }
-                    return matrizActual.firstOrNull {
-                        coincideBusqueda(it.nombre, nombre) || coincideBusqueda(nombre, it.nombre)
-                    }
+                    return matrizActual.firstOrNull { coincideBusqueda(it.nombre, nombre) || coincideBusqueda(nombre, it.nombre) }
                 }
 
                 _progreso.value = "Validando ${importado.clientes.size} clientes..."
                 val fechaHoy = inicioDeHoy()
                 val nuevos = importado.clientes.mapIndexed { idx, cliente ->
                     _progreso.value = "Ubicando ${idx + 1}/${importado.clientes.size}: ${cliente.nombre}"
-
-                    val direccionCompleta = listOf(
-                        cliente.direccion,
-                        cliente.colonia,
-                        cliente.cp
-                    )
-                        .filterNot { it.isNullOrBlank() }
-                        .joinToString(", ")
-
+                    val direccionCompleta = listOf(cliente.direccion, cliente.colonia, cliente.cp)
+                        .filterNot { it.isNullOrBlank() }.joinToString(", ")
                     val coords = geocodificarDireccion(context, direccionCompleta)
                     val matchMatriz = buscarEnMatriz(cliente.cu, cliente.nombre)
-
                     RutaIAEntity(
                         id = java.util.UUID.randomUUID().toString().replace("-", "").take(12),
                         nombre = cliente.nombre,
@@ -137,11 +106,7 @@ class RutaIAViewModel(
                 }
 
                 _progreso.value = "Aplicando filtros y construyendo ruta..."
-                val filtros = FiltrosRutaIA(
-                    minimoDiasAtraso = minimoDiasAtraso,
-                    minimoRequerido = minimoRequerido,
-                    exigirDireccion = exigirDireccion
-                )
+                val filtros = FiltrosRutaIA(minimoDiasAtraso, minimoRequerido, exigirDireccion)
                 val ordenados = construirRutaIAInteligente(
                     items = nuevos,
                     inicio = ubicacion ?: _ubicacionActual.value,
@@ -153,26 +118,19 @@ class RutaIAViewModel(
                 _progreso.value = "Guardando ruta..."
                 rutaIADao.deleteAll()
                 rutaIADao.insertAll(ordenados)
-                actualizarCriterios(
-                    listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC))
-                )
+                actualizarCriterios(listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC)))
 
                 try {
                     repository.reemplazarRutaIAEnSheet(ordenados)
                     ordenados.forEach { repository.markRutaIAAsClean(it.id) }
                 } catch (_: Exception) {
-                    // La ruta local queda marcada dirty para que la sincronización pendiente
-                    // pueda reintentarse sin perder los datos ya procesados.
+                    programarSincronizacionRutaIA()
                 }
 
                 val cantidadOriginal = nuevos.size
                 val cantidadFinal = ordenados.size
                 val filtrados = cantidadOriginal - cantidadFinal
-                val mensaje = if (filtrados > 0) {
-                    "Ruta generada con $cantidadFinal clientes ($filtrados excluidos por filtros)"
-                } else {
-                    "Ruta generada con $cantidadFinal clientes"
-                }
+                val mensaje = if (filtrados > 0) "Ruta generada con $cantidadFinal clientes ($filtrados excluidos por filtros)" else "Ruta generada con $cantidadFinal clientes"
                 onResult(true, mensaje, importado.advertencias)
             } catch (e: Exception) {
                 onResult(false, e.message ?: "No se pudo importar el JSON", emptyList())
@@ -188,7 +146,10 @@ class RutaIAViewModel(
 
     fun alternarVisitado(item: RutaIAEntity) {
         val nuevoEstado = if (item.estado.equals("Visitado", ignoreCase = true)) "Pendiente" else "Visitado"
-        viewModelScope.launch { rutaIADao.updateEstadoLocal(item.id, nuevoEstado) }
+        viewModelScope.launch {
+            rutaIADao.updateEstadoLocal(item.id, nuevoEstado)
+            programarSincronizacionRutaIA()
+        }
     }
 
     fun moverManualmente(id: String, delta: Int) {
@@ -197,18 +158,13 @@ class RutaIAViewModel(
             val idx = actual.indexOfFirst { it.id == id }
             val nuevoIdx = idx + delta
             if (idx == -1 || nuevoIdx < 0 || nuevoIdx >= actual.size) return@launch
-
             val reordenado = actual.toMutableList()
             val tmp = reordenado[idx]
             reordenado[idx] = reordenado[nuevoIdx]
             reordenado[nuevoIdx] = tmp
-
-            reordenado.forEachIndexed { i, item ->
-                rutaIADao.updateOrden(item.id, i)
-            }
-            actualizarCriterios(
-                listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC))
-            )
+            reordenado.forEachIndexed { i, item -> rutaIADao.updateOrden(item.id, i) }
+            actualizarCriterios(listOf(CriterioOrdenRutaIA(CampoOrdenRutaIA.PERSONALIZADO, DireccionOrdenRutaIA.ASC)))
+            programarSincronizacionRutaIA()
         }
     }
 
@@ -221,6 +177,13 @@ class RutaIAViewModel(
                 repository.reemplazarRutaIAEnSheet(emptyList())
             } catch (_: Exception) { }
         }
+    }
+
+    private fun programarSincronizacionRutaIA() {
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork("ruta_ia_sync", ExistingWorkPolicy.REPLACE, request)
     }
 
     private fun inicioDeHoy(): Long {
