@@ -179,7 +179,7 @@ suspend fun geocodificarDireccion(context: Context, direccion: String): Pair<Dou
     } catch (e: Exception) { null }
 }
 
-fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
+private fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
     val radio = 6371.0
     val dLat = Math.toRadians(b.first - a.first)
     val dLon = Math.toRadians(b.second - a.second)
