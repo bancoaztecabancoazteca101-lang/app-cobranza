@@ -4,9 +4,9 @@ import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.Normalizer
 import java.util.Locale
 
-/** Registro crudo ya validado para entrar al motor de Ruta IA. */
 data class ClienteRutaIAJson(
     val nombre: String,
     val cu: String?,
@@ -64,9 +64,8 @@ private fun normalizarClaveDuplicado(valor: String?): String? = valor
     ?.replace(Regex("[^A-Z0-9]"), "")
     ?.ifBlank { null }
 
-private fun normalizarNombreDuplicado(valor: String): String = valor
-    .uppercase(Locale.ROOT)
-    .normalize(java.text.Normalizer.Form.NFD)
+private fun normalizarNombreDuplicado(valor: String): String = Normalizer
+    .normalize(valor.uppercase(Locale.ROOT), Normalizer.Form.NFD)
     .replace(Regex("\\p{M}+"), "")
     .replace(Regex("[^A-Z0-9]"), "")
 
@@ -122,7 +121,6 @@ fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRuta
             advertencias += "$nombre: falta dirección; se omitió porque no es visitable"
             continue
         }
-
         if (dias != null && dias < 0) {
             advertencias += "$nombre: días de atraso inválidos ($dias); se omitió"
             continue
@@ -135,7 +133,6 @@ fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRuta
         if (cu == null) advertencias += "$nombre: CU no leída"
         if (dias == null) advertencias += "$nombre: días de atraso no leídos"
         if (saldo == null && requerido == null) advertencias += "$nombre: saldo/requerido no leído"
-
         if (saldo != null && requerido != null && kotlin.math.abs(saldo - requerido) > 0.01) {
             advertencias += "$nombre: saldo y requerido son diferentes (se conservan ambos conceptos en el JSON)"
         }
@@ -145,9 +142,6 @@ fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRuta
             advertencias += "$nombre: CU duplicada; se omitió el registro repetido"
             continue
         }
-
-        // Si Gemini no pudo leer CU, evitamos que dos apariciones del mismo cliente
-        // entren como registros distintos por diferencias de acentos/espacios.
         if (claveCU == null) {
             val claveNombre = normalizarNombreDuplicado(nombre)
             if (!nombresSinCU.add(claveNombre)) {
