@@ -41,6 +41,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     var minimoDiasTexto by remember { mutableStateOf("") }
     var minimoRequeridoTexto by remember { mutableStateOf("") }
     var exigirDireccion by remember { mutableStateOf(true) }
+    var direccion by remember { mutableStateOf(DireccionOrdenRutaIA.ASC) }
 
     val importarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
@@ -57,6 +58,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
         viewModel.importarJson(
             uri = uri,
             estrategia = estrategia,
+            direccion = direccion,
             minimoDiasAtraso = minimoDias,
             minimoRequerido = minimoRequerido,
             exigirDireccion = exigirDireccion
@@ -107,13 +109,29 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                             }
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Dirección de cercanía", fontWeight = FontWeight.Bold)
+                    Text("Solo controla si la ruta inteligente busca primero el cliente más cercano o más lejano.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Spacer(Modifier.height(6.dp))
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = direccion == DireccionOrdenRutaIA.ASC,
+                            onClick = { direccion = DireccionOrdenRutaIA.ASC },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                        ) { Text("Menor a mayor") }
+                        SegmentedButton(
+                            selected = direccion == DireccionOrdenRutaIA.DESC,
+                            onClick = { direccion = DireccionOrdenRutaIA.DESC },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                        ) { Text("Mayor a menor") }
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text(
                         when (estrategia) {
-                            EstrategiaRutaIA.INTELIGENTE -> "GPS determina la primera parada; después cada parada busca la siguiente cercana. Atraso y requerido ayudan a desempatar."
-                            EstrategiaRutaIA.MAYOR_ATRASO -> "Prioriza los mayores días de atraso y usa cercanía para resolver el orden."
-                            EstrategiaRutaIA.MAYOR_REQUERIDO -> "Prioriza mayor requerido/saldo y usa cercanía para resolver el orden."
-                            EstrategiaRutaIA.PRIORIDAD_COBRANZA -> "Combina días de atraso y requerido como prioridad económica."
+                            EstrategiaRutaIA.INTELIGENTE -> if (direccion == DireccionOrdenRutaIA.ASC) "GPS determina la primera parada; después cada parada busca la siguiente más cercana. Atraso y requerido ayudan a desempatar." else "GPS determina la primera parada; después cada parada busca la siguiente más lejana. Atraso y requerido ayudan a desempatar."
+                            EstrategiaRutaIA.MAYOR_ATRASO -> "Prioriza los mayores días de atraso y usa cercanía para resolver el orden. La dirección de cercanía no cambia esta prioridad."
+                            EstrategiaRutaIA.MAYOR_REQUERIDO -> "Prioriza mayor requerido/saldo y usa cercanía para resolver el orden. La dirección de cercanía no cambia esta prioridad."
+                            EstrategiaRutaIA.PRIORIDAD_COBRANZA -> "Combina días de atraso y requerido como prioridad económica. La dirección de cercanía no cambia esta prioridad."
                         }, style = MaterialTheme.typography.bodySmall, color = Color.Gray
                     )
 
@@ -203,7 +221,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
         AlertDialog(
             onDismissRequest = { mostrarAyuda = false },
             title = { Text("Cómo funciona") },
-            text = { Text("1. Sube las fotos a Gemini.\n2. Pide el JSON con el formato de Ruta IA.\n3. Guarda el archivo.\n4. Selecciona la estrategia y configura uno o varios filtros.\n5. Pulsa Importar JSON.\n6. La app valida, cruza con Matriz, geocodifica, aplica todos los filtros activos y construye la ruta.\n\nGemini extrae los datos; la app decide qué registros pasan los filtros y el orden.") },
+            text = { Text("1. Sube las fotos a Gemini.\n2. Pide el JSON con el formato de Ruta IA.\n3. Guarda el archivo.\n4. Selecciona la estrategia, la dirección y configura uno o varios filtros.\n5. Pulsa Importar JSON.\n6. La app valida, cruza con Matriz, geocodifica, aplica todos los filtros activos y construye la ruta.\n\nGemini extrae los datos; la app decide qué registros pasan los filtros y el orden.") },
             confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } }
         )
     }
