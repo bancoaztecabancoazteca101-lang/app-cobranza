@@ -36,6 +36,7 @@ jobs:
           gradle-version: '8.4'
           cache-disabled: true
 
+      # Disparo intencional de build para validar la corrección actual de Pase.
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace > build_output.log 2>&1 || (echo "BUILD_FAILED=true" >> $GITHUB_ENV; true)
         continue-on-error: false
