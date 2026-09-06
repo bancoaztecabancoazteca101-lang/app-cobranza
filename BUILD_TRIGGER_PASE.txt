@@ -1,0 +1,1 @@
+Validacion de build para la correccion de UI de Pase. Este archivo se elimina en una limpieza posterior.

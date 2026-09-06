@@ -24,6 +24,7 @@ data class PaseEntity(
     val ref1: String, val ref2: String, var observaciones: String?, var estado: String,
     val ubicacion: String?, var imagenUrl: String?, var imagenUrl2: String?, val fecha: Long?, val hora: String?,
     val ruta: String?, val folioP: String?, val origenMatrizId: String,
+    val contiene: String? = null, val capitales: String? = null,
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 
@@ -35,8 +36,6 @@ data class SolicitudEntity(
     val nombreRef1: String?, val ref1: String?, val nombreRef2: String?, val ref2: String?,
     var observaciones: String?, var audioUrl: String?, var estado: String,
     val imageUrl3: String? = null, val imageUrl4: String? = null,
-    // Fijos al crear el registro: gestorAsignado siempre "Flores" (no editable),
-    // fechaHora se captura automático con la hora del dispositivo al guardar.
     val gestorAsignado: String = "Flores", val fechaHora: Long? = null,
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
