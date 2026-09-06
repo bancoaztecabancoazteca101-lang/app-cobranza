@@ -26,15 +26,18 @@ fun aplicarFiltrosRutaIA(
 }
 
 /**
- * Construye el orden final de la ruta.
+ * Construye el único orden de Ruta IA.
  *
- * La dirección de cercanía solo modifica la estrategia INTELIGENTE:
- * ASC busca el siguiente cliente más cercano; DESC busca el más lejano.
- * Las demás estrategias conservan su prioridad de negocio y usan cercanía únicamente como
- * criterio secundario.
+ * INTELIGENTE + ASC:
+ *   GPS determina la primera parada; después se busca siempre la siguiente más cercana
+ *   desde la parada anterior.
  *
- * El GPS solo determina la primera parada. Después, cada parada usa como referencia la parada
- * inmediatamente anterior. Los clientes sin coordenadas se conservan al final.
+ * INTELIGENTE + DESC:
+ *   se calcula exactamente la misma cadena ASC y después se invierte únicamente el bloque
+ *   geocodificado. Los registros sin coordenadas permanecen siempre al final.
+ *
+ * Las estrategias de negocio priorizan su criterio principal y usan cercanía como desempate.
+ * Si no hay GPS, se utiliza la prioridad de negocio para elegir la primera parada.
  */
 fun construirRutaIAInteligente(
     items: List<RutaIAEntity>,
@@ -53,61 +56,63 @@ fun construirRutaIAInteligente(
         distanciaKm(punto, item.lat!! to item.lng!!)
 
     fun prioridadSinGps(): RutaIAEntity = when (estrategia) {
+        EstrategiaRutaIA.MAYOR_REQUERIDO -> pendientes.maxWithOrNull(
+            compareBy<RutaIAEntity> { it.pagoRequerido ?: Double.NEGATIVE_INFINITY }
+                .thenBy { it.diasAtraso ?: Int.MIN_VALUE }
+        )!!
         EstrategiaRutaIA.INTELIGENTE,
         EstrategiaRutaIA.MAYOR_ATRASO,
         EstrategiaRutaIA.PRIORIDAD_COBRANZA -> pendientes.maxWithOrNull(
-            compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
-                .thenBy { it.pagoRequerido ?: 0.0 }
-        )!!
-
-        EstrategiaRutaIA.MAYOR_REQUERIDO -> pendientes.maxWithOrNull(
-            compareBy<RutaIAEntity> { it.pagoRequerido ?: 0.0 }
-                .thenBy { it.diasAtraso ?: 0 }
+            compareBy<RutaIAEntity> { it.diasAtraso ?: Int.MIN_VALUE }
+                .thenBy { it.pagoRequerido ?: Double.NEGATIVE_INFINITY }
         )!!
     }
 
-    val resultado = mutableListOf<RutaIAEntity>()
-    var punto: Pair<Double, Double>? = inicio
+    fun construirCadenaAsc(): MutableList<RutaIAEntity> {
+        val restantes = pendientes.toMutableList()
+        val cadena = mutableListOf<RutaIAEntity>()
+        var puntoActual = inicio
 
-    while (pendientes.isNotEmpty()) {
-        val siguiente = when {
-            punto == null -> prioridadSinGps()
-
-            estrategia == EstrategiaRutaIA.INTELIGENTE && direccion == DireccionOrdenRutaIA.ASC -> pendientes.minWithOrNull(
-                compareBy<RutaIAEntity> { distanciaDesde(punto!!, it) }
-                    .thenByDescending { it.diasAtraso ?: 0 }
-                    .thenByDescending { it.pagoRequerido ?: 0.0 }
-            )!!
-
-            estrategia == EstrategiaRutaIA.INTELIGENTE && direccion == DireccionOrdenRutaIA.DESC -> pendientes.maxWithOrNull(
-                compareBy<RutaIAEntity> { distanciaDesde(punto!!, it) }
-                    .thenByDescending { it.diasAtraso ?: 0 }
-                    .thenByDescending { it.pagoRequerido ?: 0.0 }
-            )!!
-
-            estrategia == EstrategiaRutaIA.MAYOR_ATRASO -> pendientes.maxWithOrNull(
-                compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
-                    .thenBy { -(distanciaDesde(punto!!, it)) }
-                    .thenBy { it.pagoRequerido ?: 0.0 }
-            )!!
-
-            estrategia == EstrategiaRutaIA.MAYOR_REQUERIDO -> pendientes.maxWithOrNull(
-                compareBy<RutaIAEntity> { it.pagoRequerido ?: 0.0 }
-                    .thenBy { -(distanciaDesde(punto!!, it)) }
-                    .thenBy { it.diasAtraso ?: 0 }
-            )!!
-
-            else -> pendientes.maxWithOrNull(
-                compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
-                    .thenBy { it.pagoRequerido ?: 0.0 }
-                    .thenBy { -(distanciaDesde(punto!!, it)) }
-            )!!
+        while (restantes.isNotEmpty()) {
+            val siguiente = if (puntoActual != null) {
+                when (estrategia) {
+                    EstrategiaRutaIA.INTELIGENTE -> restantes.minWithOrNull(
+                        compareBy<RutaIAEntity> { distanciaDesde(puntoActual!!, it) }
+                            .thenByDescending { it.diasAtraso ?: Int.MIN_VALUE }
+                            .thenByDescending { it.pagoRequerido ?: Double.NEGATIVE_INFINITY }
+                    )!!
+                    EstrategiaRutaIA.MAYOR_ATRASO -> restantes.maxWithOrNull(
+                        compareBy<RutaIAEntity> { it.diasAtraso ?: Int.MIN_VALUE }
+                            .thenBy { distanciaDesde(puntoActual!!, it) }
+                            .thenByDescending { it.pagoRequerido ?: Double.NEGATIVE_INFINITY }
+                    )!!
+                    EstrategiaRutaIA.MAYOR_REQUERIDO -> restantes.maxWithOrNull(
+                        compareBy<RutaIAEntity> { it.pagoRequerido ?: Double.NEGATIVE_INFINITY }
+                            .thenBy { distanciaDesde(puntoActual!!, it) }
+                            .thenByDescending { it.diasAtraso ?: Int.MIN_VALUE }
+                    )!!
+                    EstrategiaRutaIA.PRIORIDAD_COBRANZA -> restantes.maxWithOrNull(
+                        compareBy<RutaIAEntity> { it.diasAtraso ?: Int.MIN_VALUE }
+                            .thenBy { it.pagoRequerido ?: Double.NEGATIVE_INFINITY }
+                            .thenBy { -distanciaDesde(puntoActual!!, it) }
+                    )!!
+                }
+            } else {
+                prioridadSinGps()
+            }
+            cadena += siguiente
+            restantes.remove(siguiente)
+            puntoActual = siguiente.lat!! to siguiente.lng!!
         }
-
-        resultado += siguiente
-        pendientes.remove(siguiente)
-        punto = siguiente.lat!! to siguiente.lng!!
+        return cadena
     }
 
-    return resultado + sinUbicar
+    val cadena = construirCadenaAsc()
+    val orientada = if (estrategia == EstrategiaRutaIA.INTELIGENTE && direccion == DireccionOrdenRutaIA.DESC) {
+        cadena.reversed()
+    } else {
+        cadena
+    }
+
+    return orientada + sinUbicar
 }
