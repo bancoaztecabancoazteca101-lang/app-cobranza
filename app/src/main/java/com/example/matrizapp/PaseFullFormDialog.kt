@@ -1,6 +1,7 @@
 package com.example.matrizapp
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,8 +9,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,11 +30,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * Editor completo específico de Pase.
- * Mantiene los campos habituales del registro y agrega CONTIENE y CAPITALES
- * dentro del mismo formulario de edición, porque ambos pertenecen únicamente a Pase.
- */
+private val ESTADOS_PASE = listOf(
+    "Pagado",
+    "Susceptible",
+    "No susceptible",
+    "Compromiso"
+)
+
 @Composable
 fun PaseFullFormDialog(
     item: PaseEntity,
@@ -69,6 +75,7 @@ fun PaseFullFormDialog(
     var folioP by remember(item.id) { mutableStateOf(item.folioP ?: "") }
     var contiene by remember(item.id) { mutableStateOf(item.contiene ?: "") }
     var capitales by remember(item.id) { mutableStateOf(item.capitales ?: "") }
+    var menuStatusAbierto by remember(item.id) { mutableStateOf(false) }
 
     val fechaTextoInicial = remember(item.id, item.fecha) {
         item.fecha?.let { SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date(it)) } ?: ""
@@ -107,8 +114,36 @@ fun PaseFullFormDialog(
                 OutlinedTextField(value = hora, onValueChange = { hora = it }, label = { Text("Hora") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = id, onValueChange = { id = it }, label = { Text("ID") }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = observaciones, onValueChange = { observaciones = it }, label = { Text("Observaciones") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-                OutlinedTextField(value = estado, onValueChange = { estado = it }, label = { Text("Status") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = ubicacion, onValueChange = { ubicacion = it }, label = { Text("Ubicación") }, modifier = Modifier.fillMaxWidth())
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = estado,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Status") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clickable { menuStatusAbierto = true }
+                    )
+                    DropdownMenu(
+                        expanded = menuStatusAbierto,
+                        onDismissRequest = { menuStatusAbierto = false }
+                    ) {
+                        ESTADOS_PASE.forEach { opcion ->
+                            DropdownMenuItem(
+                                text = { Text(opcion) },
+                                onClick = {
+                                    estado = opcion
+                                    menuStatusAbierto = false
+                                }
+                            )
+                        }
+                    }
+                }
 
                 Spacer(Modifier.height(4.dp))
                 Text("Datos de Pase")
