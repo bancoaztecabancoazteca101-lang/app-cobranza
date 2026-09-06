@@ -10,7 +10,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -92,20 +91,16 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
         if (filtered.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros en Pase") }
         else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(filtered, key = { it.id }) { item ->
-                Box {
-                    MatrizItemCard(
-                        item = item.comoMatrizParaUi(),
-                        driveHelper = viewModel.driveHelper,
-                        onCardClick = { itemToView = item },
-                        onDeleteClick = { itemToDelete = item },
-                        contiene = item.contiene,
-                        capitales = item.capitales,
-                        resaltarPagado = true
-                    )
-                    IconButton(onClick = { itemToEdit = item }, modifier = Modifier.align(Alignment.TopEnd)) {
-                        Icon(Icons.Default.Edit, contentDescription = "Editar registro de Pase")
-                    }
-                }
+                MatrizItemCard(
+                    item = item.comoMatrizParaUi(),
+                    driveHelper = viewModel.driveHelper,
+                    onCardClick = { itemToView = item },
+                    onDeleteClick = { itemToDelete = item },
+                    onEditClick = { itemToEdit = item },
+                    contiene = item.contiene,
+                    capitales = item.capitales,
+                    resaltarPagado = true
+                )
             }
         }
         Row(Modifier.align(Alignment.BottomEnd).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
