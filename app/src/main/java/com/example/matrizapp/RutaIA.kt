@@ -180,13 +180,3 @@ suspend fun geocodificarDireccion(context: Context, direccion: String): Pair<Dou
         r.latitude to r.longitude
     } catch (e: Exception) { null }
 }
-
-private fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
-    val radio = 6371.0
-    val dLat = Math.toRadians(b.first - a.first)
-    val dLon = Math.toRadians(b.second - a.second)
-    val lat1 = Math.toRadians(a.first)
-    val lat2 = Math.toRadians(b.first)
-    val h = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) + kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2) * kotlin.math.cos(lat1) * kotlin.math.cos(lat2)
-    return 2 * radio * kotlin.math.asin(kotlin.math.sqrt(h.coerceIn(0.0, 1.0)))
-}
