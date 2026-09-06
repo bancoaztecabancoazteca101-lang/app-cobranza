@@ -44,7 +44,8 @@ fun aplicarFiltrosRutaIA(
  * - MAYOR_REQUERIDO: requerido -> distancia -> atraso.
  * - PRIORIDAD_COBRANZA: atraso -> requerido -> distancia.
  *
- * Los clientes sin coordenadas no rompen la ruta: se conservan al final en su orden relativo.
+ * Si no existe GPS, se elige la primera parada por la prioridad de la estrategia y desde ahí
+ * comienza la cadena geográfica. Los clientes sin coordenadas se conservan al final.
  */
 fun construirRutaIAInteligente(
     items: List<RutaIAEntity>,
@@ -61,46 +62,50 @@ fun construirRutaIAInteligente(
     fun distanciaDesde(punto: Pair<Double, Double>, item: RutaIAEntity): Double =
         distanciaKm(punto, item.lat!! to item.lng!!)
 
+    fun prioridadSinGps(): RutaIAEntity = when (estrategia) {
+        EstrategiaRutaIA.INTELIGENTE,
+        EstrategiaRutaIA.MAYOR_ATRASO,
+        EstrategiaRutaIA.PRIORIDAD_COBRANZA -> pendientes.maxWithOrNull(
+            compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
+                .thenBy { it.pagoRequerido ?: 0.0 }
+        )!!
+
+        EstrategiaRutaIA.MAYOR_REQUERIDO -> pendientes.maxWithOrNull(
+            compareBy<RutaIAEntity> { it.pagoRequerido ?: 0.0 }
+                .thenBy { it.diasAtraso ?: 0 }
+        )!!
+    }
+
     val resultado = mutableListOf<RutaIAEntity>()
     var punto: Pair<Double, Double>? = inicio
 
     while (pendientes.isNotEmpty()) {
-        val siguiente = when (estrategia) {
-            EstrategiaRutaIA.INTELIGENTE -> {
-                if (punto == null) {
-                    pendientes.minWithOrNull(
-                        compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
-                            .thenByDescending { it.pagoRequerido ?: 0.0 }
-                    )!!
-                } else {
-                    pendientes.minWithOrNull(
-                        compareBy<RutaIAEntity> { distanciaDesde(punto!!, it) }
-                            .thenByDescending { it.diasAtraso ?: 0 }
-                            .thenByDescending { it.pagoRequerido ?: 0.0 }
-                    )!!
-                }
-            }
-            EstrategiaRutaIA.MAYOR_ATRASO -> {
-                pendientes.maxWithOrNull(
-                    compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
-                        .thenBy { -(if (punto == null) 0.0 else distanciaDesde(punto!!, it)) }
-                        .thenByDescending { it.pagoRequerido ?: 0.0 }
-                )!!
-            }
-            EstrategiaRutaIA.MAYOR_REQUERIDO -> {
-                pendientes.maxWithOrNull(
-                    compareBy<RutaIAEntity> { it.pagoRequerido ?: 0.0 }
-                        .thenBy { -(if (punto == null) 0.0 else distanciaDesde(punto!!, it)) }
-                        .thenByDescending { it.diasAtraso ?: 0 }
-                )!!
-            }
-            EstrategiaRutaIA.PRIORIDAD_COBRANZA -> {
-                pendientes.maxWithOrNull(
-                    compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
-                        .thenBy { it.pagoRequerido ?: 0.0 }
-                        .thenBy { -(if (punto == null) 0.0 else distanciaDesde(punto!!, it)) }
-                )!!
-            }
+        val siguiente = when {
+            punto == null -> prioridadSinGps()
+
+            estrategia == EstrategiaRutaIA.INTELIGENTE -> pendientes.minWithOrNull(
+                compareBy<RutaIAEntity> { distanciaDesde(punto!!, it) }
+                    .thenByDescending { it.diasAtraso ?: 0 }
+                    .thenByDescending { it.pagoRequerido ?: 0.0 }
+            )!!
+
+            estrategia == EstrategiaRutaIA.MAYOR_ATRASO -> pendientes.maxWithOrNull(
+                compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
+                    .thenBy { -(distanciaDesde(punto!!, it)) }
+                    .thenBy { it.pagoRequerido ?: 0.0 }
+            )!!
+
+            estrategia == EstrategiaRutaIA.MAYOR_REQUERIDO -> pendientes.maxWithOrNull(
+                compareBy<RutaIAEntity> { it.pagoRequerido ?: 0.0 }
+                    .thenBy { -(distanciaDesde(punto!!, it)) }
+                    .thenBy { it.diasAtraso ?: 0 }
+            )!!
+
+            else -> pendientes.maxWithOrNull(
+                compareBy<RutaIAEntity> { it.diasAtraso ?: 0 }
+                    .thenBy { it.pagoRequerido ?: 0.0 }
+                    .thenBy { -(distanciaDesde(punto!!, it)) }
+            )!!
         }
 
         resultado += siguiente
