@@ -117,9 +117,10 @@ fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRuta
             advertencias += "Registro ${i + 1}: falta nombre; se omitió"
             continue
         }
+        // La dirección es un criterio de negocio opcional y NO debe eliminarse aquí.
+        // El ViewModel/Engine decide después según exigirDireccion.
         if (direccion == null) {
-            advertencias += "$nombre: falta dirección; se omitió porque no es visitable"
-            continue
+            advertencias += "$nombre: falta dirección"
         }
         if (dias != null && dias < 0) {
             advertencias += "$nombre: días de atraso inválidos ($dias); se omitió"
@@ -153,7 +154,7 @@ fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRuta
         clientes += ClienteRutaIAJson(
             nombre = nombre,
             cu = cu,
-            direccion = direccion,
+            direccion = direccion.orEmpty(),
             colonia = o.stringOrNull("colonia", "colony"),
             cp = o.stringOrNull("cp", "codigo_postal", "codigoPostal", "código_postal", "postal_code"),
             diasAtraso = dias,
@@ -162,7 +163,7 @@ fun leerClientesRutaIAJson(context: Context, uri: Uri): ResultadoImportacionRuta
         )
     }
 
-    if (clientes.isEmpty()) throw IllegalArgumentException("No hay clientes válidos/visitables en el JSON")
+    if (clientes.isEmpty()) throw IllegalArgumentException("No hay clientes válidos en el JSON")
     return ResultadoImportacionRutaIA(clientes, advertencias)
 }
 
