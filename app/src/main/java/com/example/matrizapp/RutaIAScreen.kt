@@ -24,20 +24,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val ruta by viewModel.rutaOrdenada.collectAsState()
     val procesando by viewModel.procesando.collectAsState()
     val progreso by viewModel.progreso.collectAsState()
     var estrategia by remember { mutableStateOf(EstrategiaRutaIA.INTELIGENTE) }
-    var selectorEstrategia by remember { mutableStateOf(false) }
+    var mostrarMenu by remember { mutableStateOf(false) }
+    var mostrarFiltros by remember { mutableStateOf(false) }
     var mostrarMapa by remember { mutableStateOf(false) }
     var mostrarAyuda by remember { mutableStateOf(false) }
+    var selectorEstrategia by remember { mutableStateOf(false) }
     var minimoDiasTexto by remember { mutableStateOf("") }
     var minimoRequeridoTexto by remember { mutableStateOf("") }
     var exigirDireccion by remember { mutableStateOf(true) }
@@ -66,58 +66,29 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                     Text("Ruta IA", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(if (ruta.isEmpty()) "Sin ruta cargada" else "${ruta.size} paradas", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     IconButton(onClick = { mostrarAyuda = true }) { Icon(Icons.Default.HelpOutline, "Ayuda") }
                     if (ruta.any { it.lat != null && it.lng != null }) IconButton(onClick = { mostrarMapa = true }) { Icon(Icons.Default.Map, "Mapa") }
-                    if (ruta.isNotEmpty()) IconButton(onClick = { viewModel.limpiarRutaAhora() }) { Icon(Icons.Default.DeleteSweep, "Limpiar") }
-                }
-            }
-
-            Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("Estrategia de ruta", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(6.dp))
-                    ExposedDropdownMenuBox(expanded = selectorEstrategia, onExpandedChange = { selectorEstrategia = !selectorEstrategia }) {
-                        OutlinedTextField(value = estrategia.etiqueta, onValueChange = {}, readOnly = true, label = { Text("Cómo ordenar") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(selectorEstrategia) }, modifier = Modifier.fillMaxWidth().menuAnchor())
-                        ExposedDropdownMenu(expanded = selectorEstrategia, onDismissRequest = { selectorEstrategia = false }) {
-                            EstrategiaRutaIA.values().forEach { opcion -> DropdownMenuItem(text = { Text(opcion.etiqueta) }, onClick = { estrategia = opcion; selectorEstrategia = false }) }
+                    IconButton(onClick = { mostrarMenu = true }) { Icon(Icons.Default.MoreVert, "Más opciones") }
+                    DropdownMenu(expanded = mostrarMenu, onDismissRequest = { mostrarMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Filtros y configuración") },
+                            leadingIcon = { Icon(Icons.Default.Tune, null) },
+                            onClick = { mostrarMenu = false; mostrarFiltros = true }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Importar JSON de Gemini") },
+                            leadingIcon = { Icon(Icons.Default.UploadFile, null) },
+                            enabled = !procesando,
+                            onClick = { mostrarMenu = false; importarLauncher.launch(arrayOf("application/json", "text/plain", "text/*")) }
+                        )
+                        if (ruta.isNotEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("Limpiar ruta") },
+                                leadingIcon = { Icon(Icons.Default.DeleteSweep, null) },
+                                onClick = { mostrarMenu = false; viewModel.limpiarRutaAhora() }
+                            )
                         }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text("Dirección de cercanía", fontWeight = FontWeight.Bold)
-                    Text("Controla el sentido de la ruta inteligente.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                    Spacer(Modifier.height(6.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (direccion == DireccionOrdenRutaIA.ASC) {
-                            Button(onClick = { direccion = DireccionOrdenRutaIA.ASC }, modifier = Modifier.weight(1f)) { Text("Menor a mayor") }
-                            OutlinedButton(onClick = { direccion = DireccionOrdenRutaIA.DESC }, modifier = Modifier.weight(1f)) { Text("Mayor a menor") }
-                        } else {
-                            OutlinedButton(onClick = { direccion = DireccionOrdenRutaIA.ASC }, modifier = Modifier.weight(1f)) { Text("Menor a mayor") }
-                            Button(onClick = { direccion = DireccionOrdenRutaIA.DESC }, modifier = Modifier.weight(1f)) { Text("Mayor a menor") }
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(when (estrategia) {
-                        EstrategiaRutaIA.INTELIGENTE -> if (direccion == DireccionOrdenRutaIA.ASC) "GPS determina el inicio; después cada parada busca la siguiente más cercana." else "Se invierte la cadena de cercanía calculada desde el GPS para recorrerla en sentido contrario."
-                        EstrategiaRutaIA.MAYOR_ATRASO -> "Prioriza los mayores días de atraso y usa cercanía para resolver el orden."
-                        EstrategiaRutaIA.MAYOR_REQUERIDO -> "Prioriza mayor requerido/saldo y usa cercanía para resolver el orden."
-                        EstrategiaRutaIA.PRIORIDAD_COBRANZA -> "Combina días de atraso y requerido como prioridad económica."
-                    }, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-
-                    Spacer(Modifier.height(12.dp))
-                    Text("Filtros", fontWeight = FontWeight.Bold)
-                    Text("Se aplican antes de ordenar la ruta y se combinan con AND.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                    Spacer(Modifier.height(8.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = minimoDiasTexto, onValueChange = { minimoDiasTexto = it.filter(Char::isDigit) }, label = { Text("Atraso mínimo") }, placeholder = { Text("Opcional") }, singleLine = true, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = minimoRequeridoTexto, onValueChange = { minimoRequeridoTexto = it.filter { c -> c.isDigit() || c == '.' || c == ',' } }, label = { Text("Requerido mínimo") }, placeholder = { Text("Opcional") }, singleLine = true, modifier = Modifier.weight(1f))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = exigirDireccion, onCheckedChange = { exigirDireccion = it })
-                        Text("Excluir registros sin dirección válida")
-                    }
-                    Button(onClick = { importarLauncher.launch(arrayOf("application/json", "text/plain", "text/*")) }, modifier = Modifier.fillMaxWidth(), enabled = !procesando) {
-                        Icon(Icons.Default.UploadFile, null); Spacer(Modifier.width(8.dp)); Text("Importar JSON de Gemini")
                     }
                 }
             }
@@ -134,7 +105,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                     itemsIndexed(ruta, key = { _, item -> item.id }) { index, item ->
                         RutaIANuevaCard(item, index + 1, index > 0, index < ruta.lastIndex, { viewModel.alternarVisitado(item) }, { viewModel.moverManualmente(item.id, -1) }, { viewModel.moverManualmente(item.id, 1) }) {
                             if (item.cuMatrizMatch == null) Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
-                            else scope.launch { viewModel.buscarMatrizPorId(item.cuMatrizMatch)?.let { Toast.makeText(context, "Coincide en Matriz: ${it.nombre}", Toast.LENGTH_SHORT).show() } }
+                            else Toast.makeText(context, "Coincide en Matriz: ${item.nombre}", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -147,10 +118,52 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
         }
     }
 
-    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("1. Sube las fotos a Gemini.\n2. Pide el JSON con el formato de Ruta IA.\n3. Guarda el archivo.\n4. Selecciona estrategia, dirección y filtros.\n5. Pulsa Importar JSON.\n6. La app valida, cruza con Matriz, geocodifica, filtra y construye la ruta.\n\nGemini extrae los datos; la app decide qué registros pasan los filtros y el orden.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
+    if (mostrarFiltros) {
+        AlertDialog(
+            onDismissRequest = { mostrarFiltros = false },
+            title = { Text("Filtros y configuración") },
+            text = {
+                Column {
+                    ExposedDropdownMenuBox(expanded = selectorEstrategia, onExpandedChange = { selectorEstrategia = !selectorEstrategia }) {
+                        OutlinedTextField(value = estrategia.etiqueta, onValueChange = {}, readOnly = true, label = { Text("Cómo ordenar") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(selectorEstrategia) }, modifier = Modifier.fillMaxWidth().menuAnchor())
+                        ExposedDropdownMenu(expanded = selectorEstrategia, onDismissRequest = { selectorEstrategia = false }) {
+                            EstrategiaRutaIA.values().forEach { opcion -> DropdownMenuItem(text = { Text(opcion.etiqueta) }, onClick = { estrategia = opcion; selectorEstrategia = false }) }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("Dirección de cercanía", fontWeight = FontWeight.Bold)
+                    Text("Controla el sentido de la ruta inteligente.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (direccion == DireccionOrdenRutaIA.ASC) {
+                            Button(onClick = { direccion = DireccionOrdenRutaIA.ASC }, modifier = Modifier.weight(1f)) { Text("Menor a mayor") }
+                            OutlinedButton(onClick = { direccion = DireccionOrdenRutaIA.DESC }, modifier = Modifier.weight(1f)) { Text("Mayor a menor") }
+                        } else {
+                            OutlinedButton(onClick = { direccion = DireccionOrdenRutaIA.ASC }, modifier = Modifier.weight(1f)) { Text("Menor a mayor") }
+                            Button(onClick = { direccion = DireccionOrdenRutaIA.DESC }, modifier = Modifier.weight(1f)) { Text("Mayor a menor") }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Filtros", fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(value = minimoDiasTexto, onValueChange = { minimoDiasTexto = it.filter(Char::isDigit) }, label = { Text("Atraso mínimo") }, placeholder = { Text("Opcional") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = minimoRequeridoTexto, onValueChange = { minimoRequeridoTexto = it.filter { c -> c.isDigit() || c == '.' || c == ',' } }, label = { Text("Requerido mínimo") }, placeholder = { Text("Opcional") }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = exigirDireccion, onCheckedChange = { exigirDireccion = it })
+                        Text("Excluir registros sin dirección válida")
+                    }
+                }
+            },
+            confirmButton = { Button(onClick = { mostrarFiltros = false }) { Text("Aplicar") } },
+            dismissButton = { TextButton(onClick = { mostrarFiltros = false }) { Text("Cancelar") } }
+        )
+    }
+
+    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("1. Sube las fotos a Gemini.\n2. Pide el JSON con el formato de Ruta IA.\n3. Guarda el archivo.\n4. Abre ⋮ para configurar estrategia y filtros.\n5. Desde el mismo menú importa el JSON.\n6. La app valida, cruza con Matriz, geocodifica, filtra y construye la ruta.\n\nGemini extrae los datos; la app decide qué registros pasan los filtros y el orden.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
 
     if (mostrarMapa) Dialog(onDismissRequest = { mostrarMapa = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        RutaIAMapaFullScreen(items = ruta, onCerrar = { mostrarMapa = false }, onMarcadorClick = { Toast.makeText(context, it.nombre, Toast.LENGTH_SHORT).show() })
+        RutaIAMapaFullScreen(items = ruta, onCerrar = { mostrarMapa = false }, onMarcadorClick = { })
     }
 }
 
