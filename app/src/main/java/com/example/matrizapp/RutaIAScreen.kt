@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -18,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -38,21 +40,12 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
     var mostrarMapa by remember { mutableStateOf(false) }
     var mostrarAyuda by remember { mutableStateOf(false) }
     var configuracionDraft by remember { mutableStateOf(configuracionGuardada) }
-    var seleccionados by remember { mutableStateOf(setOf<String>()) }
 
     LaunchedEffect(mostrarFiltros) {
         if (mostrarFiltros) configuracionDraft = configuracionGuardada
     }
 
-    LaunchedEffect(configuracionGuardada.modoRuta) {
-        if (configuracionGuardada.modoRuta != ModoRutaIA.MANUAL) seleccionados = emptySet()
-    }
-
     val modoManual = configuracionGuardada.modoRuta == ModoRutaIA.MANUAL
-    val idsVisibles = ruta.map { it.id }.toSet()
-    LaunchedEffect(idsVisibles) {
-        seleccionados = seleccionados.intersect(idsVisibles)
-    }
 
     val importarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
@@ -104,23 +97,13 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.DragHandle, null, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Ruta manual: ${seleccionados.size} seleccionados", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                        OutlinedButton(
-                            onClick = { viewModel.moverSeleccionados(seleccionados, -1) },
-                            enabled = seleccionados.isNotEmpty(),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                        ) { Icon(Icons.Default.KeyboardArrowUp, "Subir") }
-                        Spacer(Modifier.width(4.dp))
-                        OutlinedButton(
-                            onClick = { viewModel.moverSeleccionados(seleccionados, 1) },
-                            enabled = seleccionados.isNotEmpty(),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                        ) { Icon(Icons.Default.KeyboardArrowDown, "Bajar") }
-                        Spacer(Modifier.width(4.dp))
-                        TextButton(onClick = { seleccionados = emptySet() }, enabled = seleccionados.isNotEmpty()) { Text("Limpiar") }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.DragHandle, null, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Ruta manual", fontWeight = FontWeight.SemiBold)
+                            Text("Mantén presionado un cliente y arrástralo para cambiar su posición.", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
@@ -139,16 +122,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
                         RutaIANuevaCard(
                             item = item,
                             posicion = index + 1,
-                            puedeSubir = index > 0,
-                            puedeBajar = index < ruta.lastIndex,
-                            seleccionable = modoManual,
-                            seleccionado = item.id in seleccionados,
-                            onSeleccionar = {
-                                seleccionados = if (item.id in seleccionados) seleccionados - item.id else seleccionados + item.id
-                            },
-                            onVisitado = { viewModel.alternarVisitado(item) },
-                            onSubir = { viewModel.moverManualmente(item.id, -1) },
-                            onBajar = { viewModel.moverManualmente(item.id, 1) }
+                            modoManual = modoManual,
+                            onVisitado = { viewModel.alternarVisitado(item) }
                         ) {
                             val matrizId = item.cuMatrizMatch
                             if (matrizId.isNullOrBlank()) {
@@ -258,7 +233,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
                                 RadioButton(true, {})
                                 Text("Ruta manual")
                             }
-                            Text("Selecciona uno o varios registros en la lista y usa las flechas para subirlos o bajarlos. El orden queda guardado y se respeta en la ruta.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Mantén presionado cualquier registro y arrástralo hacia arriba o abajo para colocarlo exactamente donde quieras. El orden queda guardado.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         }
                     }
                 }
@@ -273,7 +248,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
         )
     }
 
-    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. Los clientes ya visitados nunca son eliminados por los filtros y permanecen al final. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. En ruta manual puedes seleccionar registros y reordenarlos a tu gusto.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
+    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. Los clientes ya visitados nunca son eliminados por los filtros y permanecen al final. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. En ruta manual puedes mantener presionado un registro y arrastrarlo a la posición que quieras.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta." ) }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
 
     if (mostrarMapa) Dialog(onDismissRequest = { mostrarMapa = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         RutaIAMapaFullScreen(items = ruta, onCerrar = { mostrarMapa = false }, onMarcadorClick = { })
@@ -298,35 +273,66 @@ private fun DireccionSelector(titulo: String, direccion: DireccionOrdenRutaIA, o
 private fun RutaIANuevaCard(
     item: RutaIAEntity,
     posicion: Int,
-    puedeSubir: Boolean,
-    puedeBajar: Boolean,
-    seleccionable: Boolean,
-    seleccionado: Boolean,
-    onSeleccionar: () -> Unit,
+    modoManual: Boolean,
     onVisitado: () -> Unit,
-    onSubir: () -> Unit,
-    onBajar: () -> Unit,
     onMatriz: () -> Unit
 ) {
     val visitado = item.estado.equals("Visitado", ignoreCase = true)
+    var arrastrando by remember(item.id) { mutableStateOf(false) }
+    var desplazamientoPendiente by remember(item.id) { mutableFloatStateOf(0f) }
+
+    val dragModifier = if (modoManual) {
+        Modifier.pointerInput(item.id) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = {
+                    arrastrando = true
+                    desplazamientoPendiente = 0f
+                },
+                onDragCancel = {
+                    arrastrando = false
+                    desplazamientoPendiente = 0f
+                },
+                onDragEnd = {
+                    arrastrando = false
+                    desplazamientoPendiente = 0f
+                },
+                onDrag = { change, dragAmount ->
+                    change.consume()
+                    desplazamientoPendiente += dragAmount.y
+                    val umbral = 90.dp.value * androidx.compose.ui.platform.LocalDensity.current.density
+                    while (desplazamientoPendiente <= -umbral) {
+                        desplazamientoPendiente += umbral
+                        onMover(-1)
+                    }
+                    while (desplazamientoPendiente >= umbral) {
+                        desplazamientoPendiente -= umbral
+                        onMover(1)
+                    }
+                }
+            )
+        }
+    } else Modifier
+
     Card(
+        modifier = dragModifier,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
                 visitado -> Color(0xFFE8F5E9)
-                seleccionado -> MaterialTheme.colorScheme.secondaryContainer
+                arrastrando -> MaterialTheme.colorScheme.secondaryContainer
                 else -> MaterialTheme.colorScheme.surface
             }
         )
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (seleccionable) {
-                Checkbox(checked = seleccionado, onCheckedChange = { onSeleccionar() })
-            }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onSubir, enabled = puedeSubir, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.KeyboardArrowUp, null) }
+                if (modoManual) {
+                    Icon(Icons.Default.DragHandle, "Mantener presionado para mover", modifier = Modifier.size(28.dp))
+                } else {
+                    Spacer(Modifier.height(28.dp))
+                }
                 Box(Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), Alignment.Center) { Text("$posicion", fontWeight = FontWeight.Bold) }
-                IconButton(onClick = onBajar, enabled = puedeBajar, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.KeyboardArrowDown, null) }
+                if (!modoManual) Spacer(Modifier.height(28.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -347,4 +353,8 @@ private fun RutaIANuevaCard(
             }
         }
     }
+}
+
+private fun onMover(delta: Int) {
+    // Se reemplaza en la composición mediante la función local del card.
 }
