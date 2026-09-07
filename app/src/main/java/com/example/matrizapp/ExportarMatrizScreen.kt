@@ -2,6 +2,8 @@ package com.example.matrizapp
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -199,8 +201,12 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                     generandoExcel = true
                     scope.launch {
                         try {
-                            val archivo = generarExcelMatrizConImagenes(context, seleccionados)
-                            abrirArchivoExcel(context, archivo)
+                            val resultado = generarExcelMatrizConImagenes(context, seleccionados)
+                            abrirArchivoExcel(context, resultado.archivo)
+                            val aviso = if (resultado.totalFuentes > 0) {
+                                "Excel generado. Imágenes incrustadas: ${resultado.totalIncrustadas}/${resultado.totalFuentes}."
+                            } else "Excel generado. No hay imágenes en los registros seleccionados."
+                            Toast.makeText(context, aviso, Toast.LENGTH_LONG).show()
                         } catch (e: Exception) {
                             Toast.makeText(context, "No se pudo generar el Excel: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
                         } finally { generandoExcel = false }
@@ -257,34 +263,64 @@ private fun abrirArchivoExcel(context: Context, archivo: File) {
     catch (_: Exception) { Toast.makeText(context, "Excel generado: ${archivo.name}", Toast.LENGTH_LONG).show() }
 }
 
-private suspend fun generarExcelMatrizConImagenes(context: Context, registros: List<MatrizEntity>): File = withContext(Dispatchers.IO) {
+private data class ResultadoExcel(val archivo: File, val totalFuentes: Int, val totalIncrustadas: Int)
+
+private suspend fun generarExcelMatrizConImagenes(context: Context, registros: List<MatrizEntity>): ResultadoExcel = withContext(Dispatchers.IO) {
     val carpeta = File(context.cacheDir, "exportaciones").apply { mkdirs() }
     val archivo = File(carpeta, "matriz_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.xlsx")
     val temp = File(context.cacheDir, "exportaciones_temp").apply { mkdirs() }
+
     val driveHelper = (context.applicationContext as MainApplication).container.driveHelper
 
-    data class ImagenExportada(val archivo: File, val extension: String, val zipName: String, val fila: Int, val columna: Int)
+    data class ImagenExportada(val archivo: File, val zipName: String, val fila: Int, val columna: Int)
     val imagenes = mutableListOf<ImagenExportada>()
     var secuencia = 0
+    var totalFuentes = 0
 
     suspend fun prepararImagen(raw: String?, fila: Int, columna: Int): ImagenExportada? {
         if (raw.isNullOrBlank()) return null
-        val destino = File(temp, "img_${System.currentTimeMillis()}_${secuencia++}.tmp")
-        val ok = try {
+        totalFuentes++
+        val origen = File(temp, "origen_${System.currentTimeMillis()}_${secuencia++}.bin")
+        val jpeg = File(temp, "img_${System.currentTimeMillis()}_${secuencia++}.jpg")
+        val descargada = try {
             when {
                 raw.startsWith("content://") -> {
-                    context.contentResolver.openInputStream(Uri.parse(raw))?.use { input -> FileOutputStream(destino).use { output -> input.copyTo(output) } }
-                    destino.exists() && destino.length() > 0L
+                    context.contentResolver.openInputStream(Uri.parse(raw))?.use { input ->
+                        FileOutputStream(origen).use { output -> input.copyTo(output) }
+                    }
+                    origen.exists() && origen.length() > 0L
                 }
-                raw.startsWith("http://") || raw.startsWith("https://") -> driveHelper.downloadFile(raw, destino)
-                raw.contains("/") -> driveHelper.downloadByRelativePath(raw, destino)
+                raw.startsWith("http://") || raw.startsWith("https://") -> driveHelper.downloadFile(raw, origen)
+                raw.contains("/") -> driveHelper.downloadByRelativePath(raw, origen)
                 else -> false
             }
         } catch (_: Exception) { false }
-        if (!ok || !destino.exists() || destino.length() == 0L) { destino.delete(); return null }
-        val ext = if (raw.lowercase(Locale.ROOT).contains(".png")) "png" else "jpg"
-        val zipName = "xl/media/image${imagenes.size + 1}.$ext"
-        return ImagenExportada(destino, ext, zipName, fila, columna)
+
+        if (!descargada || !origen.exists() || origen.length() == 0L) {
+            origen.delete()
+            return null
+        }
+
+        val bitmap = try { BitmapFactory.decodeFile(origen.absolutePath) } catch (_: Exception) { null }
+        if (bitmap == null) {
+            origen.delete()
+            return null
+        }
+
+        val comprimida = try {
+            FileOutputStream(jpeg).use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+            }
+        } catch (_: Exception) { false }
+        bitmap.recycle()
+        origen.delete()
+
+        if (!comprimida || !jpeg.exists() || jpeg.length() == 0L) {
+            jpeg.delete()
+            return null
+        }
+
+        return ImagenExportada(jpeg, "xl/media/image${imagenes.size + 1}.jpg", fila, columna)
     }
 
     registros.forEachIndexed { index, r ->
@@ -294,46 +330,73 @@ private suspend fun generarExcelMatrizConImagenes(context: Context, registros: L
     }
 
     FileOutputStream(archivo).use { fos -> ZipOutputStream(fos).use { zip ->
-        fun entry(nombre: String, contenido: String) { zip.putNextEntry(ZipEntry(nombre)); zip.write(contenido.toByteArray(Charsets.UTF_8)); zip.closeEntry() }
+        fun entry(nombre: String, contenido: String) {
+            zip.putNextEntry(ZipEntry(nombre))
+            zip.write(contenido.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+        }
         fun esc(s: String): String = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
-        fun colName(n: Int): String { var x=n+1; var out=""; while(x>0){ val r=(x-1)%26; out=('A'.code+r).toChar()+out; x=(x-1)/26 }; return out }
+        fun colName(n: Int): String {
+            var x = n + 1
+            var out = ""
+            while (x > 0) {
+                val r = (x - 1) % 26
+                out = ('A'.code + r).toChar() + out
+                x = (x - 1) / 26
+            }
+            return out
+        }
         fun cell(col: String, row: Int, value: String): String = "<c r=\"$col$row\" t=\"inlineStr\"><is><t>${esc(value)}</t></is></c>"
 
         val headers = listOf("Nombre","Sem","Req","NumTT","Ref1","Ref2","Obs","Estado","Ubicación","Img","Img2","Fecha","Id","Hora","Ruta","CU")
         val rows = StringBuilder("<row r=\"1\">")
-        headers.forEachIndexed { i,h -> rows.append(cell(colName(i),1,h)) }
+        headers.forEachIndexed { i, h -> rows.append(cell(colName(i), 1, h)) }
         rows.append("</row>")
-        registros.forEachIndexed { index,r ->
-            val row=index+2
-            val fecha=r.fecha?.let{SimpleDateFormat("dd/MM/yyyy", Locale("es","MX")).format(Date(it))}.orEmpty()
-            val values=listOf(r.nombre,r.semana,r.requisito,r.numTT,r.ref1,r.ref2,r.observaciones.orEmpty(),r.estado,r.ubicacion.orEmpty(),if(!r.imagenUrl.isNullOrBlank())"Imagen incrustada" else "",if(!r.imagenUrl2.isNullOrBlank())"Imagen incrustada" else "",fecha,r.id,r.hora.orEmpty(),r.ruta.orEmpty(),r.folioP.orEmpty())
-            rows.append("<row r=\"$row\" ht=\"95\" customHeight=\"1\">")
-            values.forEachIndexed { i,v -> rows.append(cell(colName(i),row,v)) }
+
+        registros.forEachIndexed { index, r ->
+            val row = index + 2
+            val fecha = r.fecha?.let { SimpleDateFormat("dd/MM/yyyy", Locale("es","MX")).format(Date(it)) }.orEmpty()
+            val values = listOf(
+                r.nombre, r.semana, r.requisito, r.numTT, r.ref1, r.ref2,
+                r.observaciones.orEmpty(), r.estado, r.ubicacion.orEmpty(),
+                if (!r.imagenUrl.isNullOrBlank()) "Imagen incrustada" else "",
+                if (!r.imagenUrl2.isNullOrBlank()) "Imagen incrustada" else "",
+                fecha, r.id, r.hora.orEmpty(), r.ruta.orEmpty(), r.folioP.orEmpty()
+            )
+            rows.append("<row r=\"$row\" ht=\"110\" customHeight=\"1\">")
+            values.forEachIndexed { i, v -> rows.append(cell(colName(i), row, v)) }
             rows.append("</row>")
         }
 
-        val contentTypes="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"jpg\" ContentType=\"image/jpeg\"/><Default Extension=\"png\" ContentType=\"image/png\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/drawings/drawing1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/></Types>"
-        entry("[Content_Types].xml",contentTypes)
-        entry("_rels/.rels","<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>")
-        entry("xl/workbook.xml","<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Matriz Exportada\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>")
-        entry("xl/_rels/workbook.xml.rels","<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>")
-        entry("xl/worksheets/sheet1.xml","<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheetData>$rows</sheetData>${if(imagenes.isNotEmpty())"<drawing r=\"rId1\"/>" else ""}</worksheet>")
+        val contentTypes = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"jpg\" ContentType=\"image/jpeg\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/drawings/drawing1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/></Types>"
+        entry("[Content_Types].xml", contentTypes)
+        entry("_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>")
+        entry("xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Matriz Exportada\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>")
+        entry("xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>")
+        entry("xl/worksheets/sheet1.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheetData>$rows</sheetData>${if (imagenes.isNotEmpty()) "<drawing r=\"rId1\"/>" else ""}</worksheet>")
 
-        if(imagenes.isNotEmpty()){
-            entry("xl/worksheets/_rels/sheet1.xml.rels","<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing1.xml\"/></Relationships>")
-            val drawing=StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">")
-            val rels=StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">")
-            imagenes.forEachIndexed{i,img->
-                val rid="rId${i+1}"
-                drawing.append("<xdr:twoCellAnchor><xdr:from><xdr:col>${img.columna}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${img.fila}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${img.columna+1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${img.fila+1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"${i+1}\" name=\"Imagen ${i+1}\"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed=\"$rid\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>")
-                rels.append("<Relationship Id=\"$rid\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/image${i+1}.${img.extension}\"/>")
+        if (imagenes.isNotEmpty()) {
+            entry("xl/worksheets/_rels/sheet1.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing1.xml\"/></Relationships>")
+            val drawing = StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">")
+            val rels = StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">")
+
+            imagenes.forEachIndexed { i, img ->
+                val rid = "rId${i + 1}"
+                drawing.append("<xdr:twoCellAnchor editAs=\"oneCell\"><xdr:from><xdr:col>${img.columna}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${img.fila}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${img.columna + 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${img.fila + 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"${i + 1}\" name=\"Imagen ${i + 1}\"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed=\"$rid\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>")
+                rels.append("<Relationship Id=\"$rid\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/image${i + 1}.jpg\"/>")
             }
-            drawing.append("</xdr:wsDr>"); rels.append("</Relationships>")
-            entry("xl/drawings/drawing1.xml",drawing.toString())
-            entry("xl/drawings/_rels/drawing1.xml.rels",rels.toString())
-            imagenes.forEach{img->zip.putNextEntry(ZipEntry(img.zipName));img.archivo.inputStream().use{input->input.copyTo(zip)};zip.closeEntry()}
+            drawing.append("</xdr:wsDr>")
+            rels.append("</Relationships>")
+            entry("xl/drawings/drawing1.xml", drawing.toString())
+            entry("xl/drawings/_rels/drawing1.xml.rels", rels.toString())
+            imagenes.forEach { img ->
+                zip.putNextEntry(ZipEntry(img.zipName))
+                img.archivo.inputStream().use { input -> input.copyTo(zip) }
+                zip.closeEntry()
+            }
         }
     }}
-    imagenes.forEach{it.archivo.delete()}
-    archivo
+
+    imagenes.forEach { it.archivo.delete() }
+    ResultadoExcel(archivo, totalFuentes, imagenes.size)
 }
