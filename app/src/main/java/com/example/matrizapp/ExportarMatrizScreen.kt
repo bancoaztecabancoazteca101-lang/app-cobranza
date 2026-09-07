@@ -2,8 +2,6 @@ package com.example.matrizapp
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -43,57 +41,42 @@ private data class FotoPendiente(val textoOcr: String, val candidatos: List<Matr
 @Composable
 fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
     val context = LocalContext.current
-    val todosLosRegistros by viewModel.matrizList.collectAsState()
+    val todos by viewModel.matrizList.collectAsState()
     val scope = rememberCoroutineScope()
-    var textoBusqueda by remember { mutableStateOf("") }
+    var busqueda by remember { mutableStateOf("") }
     var seleccionados by remember { mutableStateOf<List<MatrizEntity>>(emptyList()) }
-    var mostrandoResultados by remember { mutableStateOf(false) }
-    var procesandoFotos by remember { mutableStateOf(false) }
-    var progresoFotos by remember { mutableStateOf("") }
-    var generandoExcel by remember { mutableStateOf(false) }
-    var mostrarConfirmacionLimpiar by remember { mutableStateOf(false) }
-    var pendientesRevision by remember { mutableStateOf<List<FotoPendiente>>(emptyList()) }
+    var mostrarResultados by remember { mutableStateOf(false) }
+    var procesando by remember { mutableStateOf(false) }
+    var progreso by remember { mutableStateOf("") }
+    var generando by remember { mutableStateOf(false) }
+    var limpiar by remember { mutableStateOf(false) }
+    var pendientes by remember { mutableStateOf<List<FotoPendiente>>(emptyList()) }
 
-    val resultados = remember(todosLosRegistros, textoBusqueda, seleccionados) {
-        buscarCoincidenciasExportacion(todosLosRegistros, textoBusqueda, seleccionados)
-    }
-
-    val selectorFotos = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
+    val resultados = remember(todos, busqueda, seleccionados) { buscarCoincidenciasExportacion(todos, busqueda, seleccionados) }
+    val selector = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        procesandoFotos = true
+        procesando = true
         scope.launch {
-            var agregadosAutomaticamente = 0
-            var sinResultado = 0
-            val nuevosPendientes = mutableListOf<FotoPendiente>()
-            uris.forEachIndexed { index, uri ->
-                progresoFotos = "Procesando foto ${index + 1} de ${uris.size}…"
-                val nombreDetectado = extraerNombreDeImagen(context, uri)
-                if (nombreDetectado.isNullOrBlank()) {
-                    sinResultado++
-                } else {
-                    val candidatos = buscarCoincidenciasExportacion(todosLosRegistros, nombreDetectado, seleccionados)
-                    val nombreNormalizado = normalizarNombreParaExportacion(nombreDetectado)
-                    val exactas = candidatos.filter { normalizarNombreParaExportacion(it.nombre) == nombreNormalizado }
+            var auto = 0
+            var sin = 0
+            val nuevos = mutableListOf<FotoPendiente>()
+            uris.forEachIndexed { i, uri ->
+                progreso = "Procesando foto ${i + 1} de ${uris.size}…"
+                val texto = extraerNombreDeImagen(context, uri)
+                if (texto.isNullOrBlank()) { sin++ } else {
+                    val candidatos = buscarCoincidenciasExportacion(todos, texto, seleccionados)
+                    val normal = normalizarNombreParaExportacion(texto)
+                    val exactas = candidatos.filter { normalizarNombreParaExportacion(it.nombre) == normal }
                     if (exactas.size == 1) {
-                        val coincidencia = exactas.first()
-                        if (seleccionados.none { it.id == coincidencia.id }) {
-                            seleccionados = seleccionados + coincidencia
-                            agregadosAutomaticamente++
-                        }
-                    } else if (candidatos.isNotEmpty()) {
-                        nuevosPendientes += FotoPendiente(nombreDetectado, candidatos.take(10))
-                    } else sinResultado++
+                        val r = exactas.first()
+                        if (seleccionados.none { it.id == r.id }) { seleccionados += r; auto++ }
+                    } else if (candidatos.isNotEmpty()) nuevos += FotoPendiente(texto, candidatos.take(10)) else sin++
                 }
             }
-            pendientesRevision = pendientesRevision + nuevosPendientes
-            procesandoFotos = false
-            progresoFotos = ""
-            val mensaje = buildString {
-                append("Fotos procesadas: ${uris.size}. Agregados automáticamente: $agregadosAutomaticamente.")
-                if (nuevosPendientes.isNotEmpty()) append(" Para revisar: ${nuevosPendientes.size}.")
-                if (sinResultado > 0) append(" Sin coincidencia: $sinResultado.")
-            }
-            Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+            pendientes += nuevos
+            procesando = false
+            progreso = ""
+            Toast.makeText(context, "Fotos procesadas: ${uris.size}. Agregados: $auto. Revisar: ${nuevos.size}. Sin coincidencia: $sin.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -102,301 +85,136 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
             Spacer(Modifier.height(4.dp))
             Text("Selecciona los clientes que quieres incluir. La información exportada se toma completa desde Matriz.", style = MaterialTheme.typography.bodyMedium)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = textoBusqueda,
-                    onValueChange = { textoBusqueda = it; mostrandoResultados = it.isNotBlank() },
-                    modifier = Modifier.weight(1f), singleLine = true,
-                    label = { Text("Nombre, TT o CU") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (textoBusqueda.isNotBlank()) IconButton(onClick = { textoBusqueda = ""; mostrandoResultados = false }) { Icon(Icons.Default.Close, contentDescription = "Limpiar") }
-                    }
-                )
+                OutlinedTextField(value = busqueda, onValueChange = { busqueda = it; mostrarResultados = it.isNotBlank() }, modifier = Modifier.weight(1f), singleLine = true, label = { Text("Nombre, TT o CU") }, leadingIcon = { Icon(Icons.Default.Search, null) }, trailingIcon = { if (busqueda.isNotBlank()) IconButton({ busqueda = ""; mostrarResultados = false }) { Icon(Icons.Default.Close, "Limpiar") } })
                 Spacer(Modifier.width(6.dp))
-                IconButton(onClick = { selectorFotos.launch("image/*") }, enabled = !procesandoFotos) {
-                    if (procesandoFotos) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.CameraAlt, contentDescription = "Agregar fotos")
-                }
+                IconButton(onClick = { selector.launch("image/*") }, enabled = !procesando) { if (procesando) CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.CameraAlt, "Agregar fotos") }
             }
-            if (procesandoFotos && progresoFotos.isNotBlank()) Text(progresoFotos, style = MaterialTheme.typography.bodySmall)
+            if (progreso.isNotBlank()) Text(progreso, style = MaterialTheme.typography.bodySmall)
 
-            if (mostrandoResultados && textoBusqueda.isNotBlank()) {
+            if (mostrarResultados && busqueda.isNotBlank()) {
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(Modifier.fillMaxWidth().padding(10.dp)) {
                         Text("Coincidencias", style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.height(6.dp))
-                        if (resultados.isEmpty()) Text("Sin coincidencias. Prueba otro texto o revisa la ortografía.")
-                        else resultados.forEach { registro ->
+                        resultados.forEach { r ->
                             Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(registro.nombre, style = MaterialTheme.typography.bodyLarge)
-                                    Text("TT: ${registro.numTT}  ·  CU: ${registro.folioP.orEmpty()}", style = MaterialTheme.typography.bodySmall)
-                                }
-                                IconButton(onClick = {
-                                    if (seleccionados.none { it.id == registro.id }) seleccionados = seleccionados + registro
-                                    textoBusqueda = ""; mostrandoResultados = false
-                                }) { Icon(Icons.Default.Add, contentDescription = "Agregar") }
+                                Column(Modifier.weight(1f)) { Text(r.nombre); Text("TT: ${r.numTT} · CU: ${r.folioP.orEmpty()}", style = MaterialTheme.typography.bodySmall) }
+                                IconButton({ if (seleccionados.none { it.id == r.id }) seleccionados += r; busqueda = ""; mostrarResultados = false }) { Icon(Icons.Default.Add, "Agregar") }
                             }
                             Divider()
                         }
+                        if (resultados.isEmpty()) Text("Sin coincidencias. Prueba otro texto.")
                     }
                 }
             }
 
-            if (pendientesRevision.isNotEmpty()) {
+            if (pendientes.isNotEmpty()) {
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                     Column(Modifier.fillMaxWidth().padding(10.dp)) {
-                        Text("Revisar fotos (${pendientesRevision.size})", style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.height(6.dp))
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 280.dp)
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            pendientesRevision.forEachIndexed { index, pendiente ->
-                                Text("OCR: ${pendiente.textoOcr}", style = MaterialTheme.typography.bodySmall)
-                                pendiente.candidatos.forEach { candidato ->
-                                    TextButton(onClick = {
-                                        if (seleccionados.none { it.id == candidato.id }) seleccionados = seleccionados + candidato
-                                        pendientesRevision = pendientesRevision.toMutableList().also { it.removeAt(index) }
-                                    }) { Text("${candidato.nombre}  ·  TT ${candidato.numTT}") }
-                                }
+                        Text("Revisar fotos (${pendientes.size})", style = MaterialTheme.typography.titleSmall)
+                        Column(Modifier.fillMaxWidth().heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
+                            pendientes.forEachIndexed { index, p ->
+                                Text("OCR: ${p.textoOcr}", style = MaterialTheme.typography.bodySmall)
+                                p.candidatos.forEach { r -> TextButton({ if (seleccionados.none { it.id == r.id }) seleccionados += r; pendientes = pendientes.toMutableList().also { it.removeAt(index) } }) { Text("${r.nombre} · TT ${r.numTT}") } }
                                 Divider()
                             }
                         }
-                        TextButton(onClick = { pendientesRevision = emptyList() }) { Text("Cerrar revisiones") }
+                        TextButton({ pendientes = emptyList() }) { Text("Cerrar revisiones") }
                     }
                 }
             }
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Seleccionados: ${seleccionados.size}", style = MaterialTheme.typography.titleMedium)
-                if (seleccionados.isNotEmpty()) TextButton(onClick = { mostrarConfirmacionLimpiar = true }) { Text("Limpiar") }
+                if (seleccionados.isNotEmpty()) TextButton({ limpiar = true }) { Text("Limpiar") }
             }
             Divider()
             if (seleccionados.isEmpty()) {
-                Column(Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                    Text("Aún no hay clientes seleccionados.")
-                    Spacer(Modifier.height(8.dp))
-                    Text("Puedes buscarlos manualmente o agregar una o varias fotos.", style = MaterialTheme.typography.bodySmall)
-                }
+                Column(Modifier.fillMaxWidth().weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { Text("Aún no hay clientes seleccionados."); Text("Puedes buscarlos manualmente o agregar fotos.", style = MaterialTheme.typography.bodySmall) }
             } else {
                 LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(seleccionados, key = { it.id }) { registro ->
-                        Card(Modifier.fillMaxWidth()) {
-                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(registro.nombre, style = MaterialTheme.typography.titleSmall)
-                                    Text("TT: ${registro.numTT}  ·  CU: ${registro.folioP.orEmpty()}", style = MaterialTheme.typography.bodySmall)
-                                }
-                                IconButton(onClick = { seleccionados = seleccionados.filterNot { it.id == registro.id } }) { Icon(Icons.Default.Delete, contentDescription = "Quitar") }
-                            }
-                        }
-                    }
+                    items(seleccionados, key = { it.id }) { r -> Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(r.nombre, style = MaterialTheme.typography.titleSmall); Text("TT: ${r.numTT} · CU: ${r.folioP.orEmpty()}", style = MaterialTheme.typography.bodySmall) }; IconButton({ seleccionados = seleccionados.filterNot { it.id == r.id } }) { Icon(Icons.Default.Delete, "Quitar") } } } }
                 }
             }
-            Button(
-                onClick = {
-                    generandoExcel = true
-                    scope.launch {
-                        try {
-                            val resultado = generarExcelMatrizConImagenes(context, seleccionados)
-                            abrirArchivoExcel(context, resultado.archivo)
-                            val aviso = if (resultado.totalFuentes > 0) {
-                                "Excel generado. Imágenes incrustadas: ${resultado.totalIncrustadas}/${resultado.totalFuentes}."
-                            } else "Excel generado. No hay imágenes en los registros seleccionados."
-                            Toast.makeText(context, aviso, Toast.LENGTH_LONG).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "No se pudo generar el Excel: ${e.message ?: "error desconocido"}", Toast.LENGTH_LONG).show()
-                        } finally { generandoExcel = false }
-                    }
-                },
-                enabled = seleccionados.isNotEmpty() && !generandoExcel,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (generandoExcel) {
-                    CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp)); Text("Generando…")
-                } else {
-                    Icon(Icons.Default.FileDownload, contentDescription = null)
-                    Spacer(Modifier.width(8.dp)); Text("Generar Excel (${seleccionados.size})")
+            Button(onClick = {
+                generando = true
+                scope.launch {
+                    try {
+                        val resultado = generarExcelMatrizConUrls(context, seleccionados)
+                        abrirArchivoExcel(context, resultado.archivo)
+                        Toast.makeText(context, "Excel generado. Enlaces de imagen: ${resultado.urlsEncontradas}/${resultado.totalFuentes}.", Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) { Toast.makeText(context, "No se pudo generar el Excel: ${e.message ?: "error"}", Toast.LENGTH_LONG).show() }
+                    finally { generando = false }
                 }
+            }, enabled = seleccionados.isNotEmpty() && !generando, modifier = Modifier.fillMaxWidth()) {
+                if (generando) { CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)); Text("Generando…") } else { Icon(Icons.Default.FileDownload, null); Spacer(Modifier.width(8.dp)); Text("Generar Excel (${seleccionados.size})") }
             }
             Spacer(Modifier.height(8.dp))
         }
     }
-
-    if (mostrarConfirmacionLimpiar) {
-        AlertDialog(
-            onDismissRequest = { mostrarConfirmacionLimpiar = false },
-            title = { Text("Limpiar selección") },
-            text = { Text("Se quitarán todos los clientes acumulados. Los datos de Matriz no se modificarán.") },
-            confirmButton = { TextButton(onClick = { seleccionados = emptyList(); mostrarConfirmacionLimpiar = false }) { Text("Limpiar") } },
-            dismissButton = { TextButton(onClick = { mostrarConfirmacionLimpiar = false }) { Text("Cancelar") } }
-        )
-    }
+    if (limpiar) AlertDialog(onDismissRequest = { limpiar = false }, title = { Text("Limpiar selección") }, text = { Text("Se quitarán todos los clientes acumulados. Matriz no se modifica.") }, confirmButton = { TextButton({ seleccionados = emptyList(); limpiar = false }) { Text("Limpiar") } }, dismissButton = { TextButton({ limpiar = false }) { Text("Cancelar") } })
 }
 
 private fun buscarCoincidenciasExportacion(registros: List<MatrizEntity>, texto: String, seleccionados: List<MatrizEntity>): List<MatrizEntity> {
     val q = normalizarNombreParaExportacion(texto)
     if (q.isBlank()) return emptyList()
-    return registros.asSequence()
-        .filter { r -> normalizarNombreParaExportacion(r.nombre).contains(q) || normalizarNombreParaExportacion(r.numTT).contains(q) || normalizarNombreParaExportacion(r.folioP).contains(q) }
-        .filterNot { r -> seleccionados.any { it.id == r.id } }
-        .take(30).toList()
+    return registros.asSequence().filter { r -> normalizarNombreParaExportacion(r.nombre).contains(q) || normalizarNombreParaExportacion(r.numTT).contains(q) || normalizarNombreParaExportacion(r.folioP).contains(q) }.filterNot { r -> seleccionados.any { it.id == r.id } }.take(30).toList()
 }
 
-private fun normalizarNombreParaExportacion(valor: String?): String =
-    java.text.Normalizer.normalize(valor.orEmpty(), java.text.Normalizer.Form.NFD)
-        .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
-        .uppercase(Locale.ROOT).replace("Ñ", "N")
-        .replace(Regex("[^A-Z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+private fun normalizarNombreParaExportacion(valor: String?): String = java.text.Normalizer.normalize(valor.orEmpty(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "").uppercase(Locale.ROOT).replace("Ñ", "N").replace(Regex("[^A-Z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
 
 private fun abrirArchivoExcel(context: Context, archivo: File) {
     val uri = androidx.core.content.FileProvider.getUriForFile(context, "com.example.matrizapp.fileprovider", archivo)
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    try { context.startActivity(Intent.createChooser(intent, "Abrir Excel")) }
-    catch (_: Exception) { Toast.makeText(context, "Excel generado: ${archivo.name}", Toast.LENGTH_LONG).show() }
+    val intent = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+    try { context.startActivity(Intent.createChooser(intent, "Abrir Excel")) } catch (_: Exception) { Toast.makeText(context, "Excel generado: ${archivo.name}", Toast.LENGTH_LONG).show() }
 }
 
-private data class ResultadoExcel(val archivo: File, val totalFuentes: Int, val totalIncrustadas: Int)
+private data class ResultadoExcel(val archivo: File, val totalFuentes: Int, val urlsEncontradas: Int)
 
-private suspend fun generarExcelMatrizConImagenes(context: Context, registros: List<MatrizEntity>): ResultadoExcel = withContext(Dispatchers.IO) {
+private suspend fun generarExcelMatrizConUrls(context: Context, registros: List<MatrizEntity>): ResultadoExcel = withContext(Dispatchers.IO) {
     val carpeta = File(context.cacheDir, "exportaciones").apply { mkdirs() }
     val archivo = File(carpeta, "matriz_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.xlsx")
-    val temp = File(context.cacheDir, "exportaciones_temp").apply { mkdirs() }
-
     val driveHelper = (context.applicationContext as MainApplication).container.driveHelper
-
-    data class ImagenExportada(val archivo: File, val zipName: String, val fila: Int, val columna: Int)
-    val imagenes = mutableListOf<ImagenExportada>()
-    var secuencia = 0
+    data class Enlace(val fila: Int, val columna: Int, val url: String)
+    val enlaces = mutableListOf<Enlace>()
     var totalFuentes = 0
 
-    suspend fun prepararImagen(raw: String?, fila: Int, columna: Int): ImagenExportada? {
-        if (raw.isNullOrBlank()) return null
+    suspend fun resolver(raw: String?, fila: Int, columna: Int) {
+        if (raw.isNullOrBlank()) return
         totalFuentes++
-        val origen = File(temp, "origen_${System.currentTimeMillis()}_${secuencia++}.bin")
-        val jpeg = File(temp, "img_${System.currentTimeMillis()}_${secuencia++}.jpg")
-        val descargada = try {
-            when {
-                raw.startsWith("content://") -> {
-                    context.contentResolver.openInputStream(Uri.parse(raw))?.use { input ->
-                        FileOutputStream(origen).use { output -> input.copyTo(output) }
-                    }
-                    origen.exists() && origen.length() > 0L
-                }
-                raw.startsWith("http://") || raw.startsWith("https://") -> driveHelper.downloadFile(raw, origen)
-                raw.contains("/") -> driveHelper.downloadByRelativePath(raw, origen)
-                else -> false
-            }
-        } catch (_: Exception) { false }
-
-        if (!descargada || !origen.exists() || origen.length() == 0L) {
-            origen.delete()
-            return null
-        }
-
-        val bitmap = try { BitmapFactory.decodeFile(origen.absolutePath) } catch (_: Exception) { null }
-        if (bitmap == null) {
-            origen.delete()
-            return null
-        }
-
-        val comprimida = try {
-            FileOutputStream(jpeg).use { output ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
-            }
-        } catch (_: Exception) { false }
-        bitmap.recycle()
-        origen.delete()
-
-        if (!comprimida || !jpeg.exists() || jpeg.length() == 0L) {
-            jpeg.delete()
-            return null
-        }
-
-        return ImagenExportada(jpeg, "xl/media/image${imagenes.size + 1}.jpg", fila, columna)
+        driveHelper.findImageUrl(raw)?.let { enlaces += Enlace(fila, columna, it) }
     }
-
-    registros.forEachIndexed { index, r ->
-        val fila = index + 1
-        prepararImagen(r.imagenUrl, fila, 9)?.let { imagenes += it }
-        prepararImagen(r.imagenUrl2, fila, 10)?.let { imagenes += it }
-    }
+    registros.forEachIndexed { index, r -> val fila = index + 2; resolver(r.imagenUrl, fila, 9); resolver(r.imagenUrl2, fila, 10) }
 
     FileOutputStream(archivo).use { fos -> ZipOutputStream(fos).use { zip ->
-        fun entry(nombre: String, contenido: String) {
-            zip.putNextEntry(ZipEntry(nombre))
-            zip.write(contenido.toByteArray(Charsets.UTF_8))
-            zip.closeEntry()
-        }
-        fun esc(s: String): String = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
-        fun colName(n: Int): String {
-            var x = n + 1
-            var out = ""
-            while (x > 0) {
-                val r = (x - 1) % 26
-                out = ('A'.code + r).toChar() + out
-                x = (x - 1) / 26
-            }
-            return out
-        }
-        fun cell(col: String, row: Int, value: String): String = "<c r=\"$col$row\" t=\"inlineStr\"><is><t>${esc(value)}</t></is></c>"
-
+        fun entry(name: String, text: String) { zip.putNextEntry(ZipEntry(name)); zip.write(text.toByteArray(Charsets.UTF_8)); zip.closeEntry() }
+        fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
+        fun col(n: Int): String { var x=n+1; var o=""; while(x>0){ val r=(x-1)%26; o=('A'.code+r).toChar()+o; x=(x-1)/26 }; return o }
+        val enlacePorCelda = enlaces.associateBy { "${it.fila}:${it.columna}" }
+        fun cell(c: String, row: Int, value: String) = "<c r=\"$c$row\" t=\"inlineStr\"><is><t>${esc(value)}</t></is></c>"
         val headers = listOf("Nombre","Sem","Req","NumTT","Ref1","Ref2","Obs","Estado","Ubicación","Img","Img2","Fecha","Id","Hora","Ruta","CU")
         val rows = StringBuilder("<row r=\"1\">")
-        headers.forEachIndexed { i, h -> rows.append(cell(colName(i), 1, h)) }
-        rows.append("</row>")
-
-        registros.forEachIndexed { index, r ->
-            val row = index + 2
-            val fecha = r.fecha?.let { SimpleDateFormat("dd/MM/yyyy", Locale("es","MX")).format(Date(it)) }.orEmpty()
-            val values = listOf(
-                r.nombre, r.semana, r.requisito, r.numTT, r.ref1, r.ref2,
-                r.observaciones.orEmpty(), r.estado, r.ubicacion.orEmpty(),
-                if (!r.imagenUrl.isNullOrBlank()) "Imagen incrustada" else "",
-                if (!r.imagenUrl2.isNullOrBlank()) "Imagen incrustada" else "",
-                fecha, r.id, r.hora.orEmpty(), r.ruta.orEmpty(), r.folioP.orEmpty()
-            )
-            rows.append("<row r=\"$row\" ht=\"110\" customHeight=\"1\">")
-            values.forEachIndexed { i, v -> rows.append(cell(colName(i), row, v)) }
+        headers.forEachIndexed { i,h -> rows.append(cell(col(i),1,h)) }; rows.append("</row>")
+        registros.forEachIndexed { i,r ->
+            val row=i+2
+            val fecha=r.fecha?.let { SimpleDateFormat("dd/MM/yyyy", Locale("es","MX")).format(Date(it)) }.orEmpty()
+            val vals=listOf(r.nombre,r.semana,r.requisito,r.numTT,r.ref1,r.ref2,r.observaciones.orEmpty(),r.estado,r.ubicacion.orEmpty(),"","",fecha,r.id,r.hora.orEmpty(),r.ruta.orEmpty(),r.folioP.orEmpty())
+            rows.append("<row r=\"$row\">")
+            vals.forEachIndexed { c,v -> val link=enlacePorCelda["$row:$c"]; rows.append(cell(col(c),row,if(link!=null) "Ver imagen" else v)) }
             rows.append("</row>")
         }
-
-        val contentTypes = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Default Extension=\"jpg\" ContentType=\"image/jpeg\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/><Override PartName=\"/xl/drawings/drawing1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/></Types>"
-        entry("[Content_Types].xml", contentTypes)
-        entry("_rels/.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>")
-        entry("xl/workbook.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Matriz Exportada\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>")
-        entry("xl/_rels/workbook.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>")
-        entry("xl/worksheets/sheet1.xml", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheetData>$rows</sheetData>${if (imagenes.isNotEmpty()) "<drawing r=\"rId1\"/>" else ""}</worksheet>")
-
-        if (imagenes.isNotEmpty()) {
-            entry("xl/worksheets/_rels/sheet1.xml.rels", "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing1.xml\"/></Relationships>")
-            val drawing = StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">")
-            val rels = StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">")
-
-            imagenes.forEachIndexed { i, img ->
-                val rid = "rId${i + 1}"
-                drawing.append("<xdr:twoCellAnchor editAs=\"oneCell\"><xdr:from><xdr:col>${img.columna}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${img.fila}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>${img.columna + 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${img.fila + 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"${i + 1}\" name=\"Imagen ${i + 1}\"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed=\"$rid\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>")
-                rels.append("<Relationship Id=\"$rid\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/image${i + 1}.jpg\"/>")
-            }
-            drawing.append("</xdr:wsDr>")
-            rels.append("</Relationships>")
-            entry("xl/drawings/drawing1.xml", drawing.toString())
-            entry("xl/drawings/_rels/drawing1.xml.rels", rels.toString())
-            imagenes.forEach { img ->
-                zip.putNextEntry(ZipEntry(img.zipName))
-                img.archivo.inputStream().use { input -> input.copyTo(zip) }
-                zip.closeEntry()
-            }
-        }
+        val linksXml=StringBuilder()
+        val relsXml=StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">")
+        enlaces.forEachIndexed { i,e -> val rid="rId${i+1}"; linksXml.append("<hyperlink ref=\"${col(e.columna)}${e.fila}\" r:id=\"$rid\"/>"); relsXml.append("<Relationship Id=\"$rid\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"${esc(e.url)}\" TargetMode=\"External\"/>") }
+        relsXml.append("</Relationships>")
+        val sheetRels=if(enlaces.isNotEmpty()) "<hyperlinks>$linksXml</hyperlinks>" else ""
+        val sheet="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheetData>$rows</sheetData>$sheetRels</worksheet>"
+        val ct="<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/></Types>"
+        entry("[Content_Types].xml",ct)
+        entry("_rels/.rels","<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>")
+        entry("xl/workbook.xml","<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Matriz Exportada\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>")
+        entry("xl/_rels/workbook.xml.rels","<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>")
+        entry("xl/worksheets/sheet1.xml",sheet)
+        if(enlaces.isNotEmpty()) entry("xl/worksheets/_rels/sheet1.xml.rels",relsXml.toString())
     }}
-
-    imagenes.forEach { it.archivo.delete() }
-    ResultadoExcel(archivo, totalFuentes, imagenes.size)
+    ResultadoExcel(archivo,totalFuentes,enlaces.size)
 }
