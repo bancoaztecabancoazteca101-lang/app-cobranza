@@ -46,8 +46,6 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // La barra de estado del sistema (arriba del todo) no la pinta Compose: hay que
-        // fijarla a mano o si no queda con el morado por defecto del tema base Material3.
         window.statusBarColor = android.graphics.Color.parseColor("#1565C0")
         val container = (application as MainApplication).container
         val factory = ViewModelFactory(container)
@@ -55,50 +53,27 @@ class MainActivity : ComponentActivity() {
         val previousCrash = if (crashFile.exists()) crashFile.readText().also { crashFile.delete() } else null
         setContent {
             val colorSchemeAzul = lightColorScheme(
-                primary = Color(0xFF1565C0),
-                onPrimary = Color.White,
-                primaryContainer = Color(0xFFD2E4FF),
-                onPrimaryContainer = Color(0xFF001D36),
-                inversePrimary = Color(0xFFA0CAFD),
-                secondary = Color(0xFF3A608F),
-                onSecondary = Color.White,
-                secondaryContainer = Color(0xFFD3E4FF),
-                onSecondaryContainer = Color(0xFF001D36),
-                tertiary = Color(0xFF2E5F6B),
-                onTertiary = Color.White,
-                tertiaryContainer = Color(0xFFD0E7F0),
-                onTertiaryContainer = Color(0xFF001F26),
-                background = Color(0xFFF3F7FD),
-                onBackground = Color(0xFF1A1C1E),
-                surface = Color(0xFFEAF1FB),
-                onSurface = Color(0xFF1A1C1E),
-                surfaceVariant = Color(0xFFDDE3EA),
-                onSurfaceVariant = Color(0xFF41474D),
-                outline = Color(0xFF71787E),
-                outlineVariant = Color(0xFFC1C7CE),
-                inverseSurface = Color(0xFF2E3133),
-                inverseOnSurface = Color(0xFFF0F0F3),
-                scrim = Color.Black
+                primary = Color(0xFF1565C0), onPrimary = Color.White,
+                primaryContainer = Color(0xFFD2E4FF), onPrimaryContainer = Color(0xFF001D36),
+                inversePrimary = Color(0xFFA0CAFD), secondary = Color(0xFF3A608F), onSecondary = Color.White,
+                secondaryContainer = Color(0xFFD3E4FF), onSecondaryContainer = Color(0xFF001D36),
+                tertiary = Color(0xFF2E5F6B), onTertiary = Color.White,
+                tertiaryContainer = Color(0xFFD0E7F0), onTertiaryContainer = Color(0xFF001F26),
+                background = Color(0xFFF3F7FD), onBackground = Color(0xFF1A1C1E),
+                surface = Color(0xFFEAF1FB), onSurface = Color(0xFF1A1C1E),
+                surfaceVariant = Color(0xFFDDE3EA), onSurfaceVariant = Color(0xFF41474D),
+                outline = Color(0xFF71787E), outlineVariant = Color(0xFFC1C7CE),
+                inverseSurface = Color(0xFF2E3133), inverseOnSurface = Color(0xFFF0F0F3), scrim = Color.Black
             )
             MaterialTheme(colorScheme = colorSchemeAzul) {
                 var crashLog by remember { mutableStateOf(previousCrash) }
                 crashLog?.let { text ->
-                    AlertDialog(
-                        onDismissRequest = { crashLog = null },
-                        title = { Text("La app se cerró inesperadamente") },
-                        text = {
-                            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                                SelectionContainer { Text(text, style = MaterialTheme.typography.bodySmall) }
-                            }
-                        },
-                        confirmButton = { TextButton(onClick = { crashLog = null }) { Text("Cerrar") } }
-                    )
+                    AlertDialog(onDismissRequest = { crashLog = null }, title = { Text("La app se cerró inesperadamente") },
+                        text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { SelectionContainer { Text(text, style = MaterialTheme.typography.bodySmall) } } },
+                        confirmButton = { TextButton(onClick = { crashLog = null }) { Text("Cerrar") } })
                 }
                 var signedIn by remember { mutableStateOf(hasSignedInAccount(this)) }
-                if (!signedIn) {
-                    LoginScreen(onSignedIn = { signedIn = true })
-                    return@MaterialTheme
-                }
+                if (!signedIn) { LoginScreen(onSignedIn = { signedIn = true }); return@MaterialTheme }
                 val navController = rememberNavController()
                 val coroutineScope = rememberCoroutineScope()
                 val matrizVm: MatrizViewModel = viewModel(factory = factory)
@@ -114,17 +89,9 @@ class MainActivity : ComponentActivity() {
                 val plantillaVm: PlantillaSmsViewModel = viewModel(factory = factory)
                 val rutaIAVm: RutaIAViewModel = viewModel(factory = factory)
                 val diagnosticoVm: DiagnosticoViewModel = viewModel(factory = factory)
-                // searchInput es lo que el usuario teclea (se actualiza al instante, sin costo,
-                // porque no dispara el filtrado). searchQuery es la versión "debounced" que se
-                // pasa a las pantallas y sí dispara el filtrado de las listas; se actualiza ~180ms
-                // después de que el usuario deja de teclear, para que escribir se sienta fluido
-                // aunque la lista o la búsqueda por foto (OCR) hayan crecido.
                 var searchInput by remember { mutableStateOf("") }
                 var searchQuery by remember { mutableStateOf("") }
-                LaunchedEffect(searchInput) {
-                    delay(180)
-                    searchQuery = searchInput
-                }
+                LaunchedEffect(searchInput) { delay(180); searchQuery = searchInput }
                 var searchActive by remember { mutableStateOf(false) }
                 var buscandoPorFoto by remember { mutableStateOf(false) }
                 var mostrarSelectorFotoBusqueda by remember { mutableStateOf(false) }
@@ -135,130 +102,62 @@ class MainActivity : ComponentActivity() {
                     if (isRefreshing) return
                     isRefreshing = true
                     coroutineScope.launch {
-                        try {
-                            container.repository.refreshAll()
-                        } catch (e: Exception) {
-                            syncError = e.stackTraceToString()
-                        }
-                        // Reporte de versión (para Diagnóstico -> Dispositivos): nunca debe
-                        // bloquear ni fallar el refresh normal si algo sale mal aquí.
-                        try {
-                            container.repository.reportarDispositivo(
-                                DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId
-                            )
-                        } catch (e: Exception) { }
+                        try { container.repository.refreshAll() } catch (e: Exception) { syncError = e.stackTraceToString() }
+                        try { container.repository.reportarDispositivo(DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId) } catch (e: Exception) { }
                         isRefreshing = false
                     }
                 }
                 LaunchedEffect(signedIn) { refreshData() }
-                // Antes solo sincronizaba una vez al iniciar sesión -- si el equipo dejaba la
-                // app abierta en segundo plano y volvía más tarde, o esperaba a ver datos
-                // nuevos sin tocar el botón manual, no se refrescaba solo. Ahora también
-                // sincroniza cada vez que la app vuelve a primer plano, y cada 3 minutos
-                // mientras sigue abierta y con sesión iniciada.
                 val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
                 DisposableEffect(lifecycleOwner, signedIn) {
-                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && signedIn) refreshData()
-                    }
-                    lifecycleOwner.lifecycle.addObserver(observer)
-                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event -> if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && signedIn) refreshData() }
+                    lifecycleOwner.lifecycle.addObserver(observer); onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
                 LaunchedEffect(signedIn) {
                     if (!signedIn) return@LaunchedEffect
-                    while (true) {
-                        delay(3 * 60 * 1000L)
-                        refreshData()
-                    }
+                    while (true) { delay(3 * 60 * 1000L); refreshData() }
                 }
                 syncError?.let { errorText ->
-                    AlertDialog(
-                        onDismissRequest = { syncError = null },
-                        title = { Text("Error al sincronizar") },
-                        text = {
-                            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                                SelectionContainer { Text(errorText, style = MaterialTheme.typography.bodySmall) }
-                            }
-                        },
-                        confirmButton = { TextButton(onClick = { syncError = null }) { Text("Cerrar") } }
-                    )
+                    AlertDialog(onDismissRequest = { syncError = null }, title = { Text("Error al sincronizar") },
+                        text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { SelectionContainer { Text(errorText, style = MaterialTheme.typography.bodySmall) } } },
+                        confirmButton = { TextButton(onClick = { syncError = null }) { Text("Cerrar") } })
                 }
-                val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-                    if (!it.values.all { p -> p }) Toast.makeText(this, "Permisos necesarios", Toast.LENGTH_SHORT).show()
-                }
-                // Buscar con foto: OCR local (ML Kit) sobre una foto tomada o elegida de galería,
-                // intenta detectar el nombre del cliente en la imagen y lo usa como búsqueda.
+                val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { if (!it.values.all { p -> p }) Toast.makeText(this, "Permisos necesarios", Toast.LENGTH_SHORT).show() }
                 fun procesarFotoBusqueda(uri: Uri?) {
                     if (uri == null) return
                     buscandoPorFoto = true
                     coroutineScope.launch {
-                        val nombre = extraerNombreDeImagen(this@MainActivity, uri)
-                        buscandoPorFoto = false
-                        if (nombre.isNullOrBlank()) {
-                            Toast.makeText(this@MainActivity, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
-                        } else {
-                            searchActive = true
-                            searchInput = nombre
-                            searchQuery = nombre
-                        }
+                        val nombre = extraerNombreDeImagen(this@MainActivity, uri); buscandoPorFoto = false
+                        if (nombre.isNullOrBlank()) Toast.makeText(this@MainActivity, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
+                        else { searchActive = true; searchInput = nombre; searchQuery = nombre }
                     }
                 }
-                val ocrTakePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-                    if (success) procesarFotoBusqueda(fotoBusquedaUri)
-                }
-                val ocrPickImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                    procesarFotoBusqueda(uri)
-                }
-                // Búsqueda por voz: delega la grabación al reconocedor del sistema (Google u
-                // otro instalado) en vez de manejar SpeechRecognizer manualmente -- así no hace
-                // falta lidiar con permisos/callbacks propios ni con diferencias entre fabricantes.
+                val ocrTakePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success -> if (success) procesarFotoBusqueda(fotoBusquedaUri) }
+                val ocrPickImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> procesarFotoBusqueda(uri) }
                 val vozBusquedaLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                     val texto = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-                    if (!texto.isNullOrBlank()) {
-                        searchActive = true
-                        searchInput = texto
-                        searchQuery = texto
-                    }
+                    if (!texto.isNullOrBlank()) { searchActive = true; searchInput = texto; searchQuery = texto }
                 }
                 fun iniciarBusquedaPorVoz() {
                     val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-MX")
-                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Di el nombre a buscar")
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-MX"); putExtra(RecognizerIntent.EXTRA_PROMPT, "Di el nombre a buscar")
                     }
-                    try {
-                        vozBusquedaLauncher.launch(intent)
-                    } catch (e: ActivityNotFoundException) {
-                        Toast.makeText(this, "Este dispositivo no tiene reconocimiento de voz instalado", Toast.LENGTH_LONG).show()
-                    }
+                    try { vozBusquedaLauncher.launch(intent) } catch (e: ActivityNotFoundException) { Toast.makeText(this, "Este dispositivo no tiene reconocimiento de voz instalado", Toast.LENGTH_LONG).show() }
                 }
                 if (mostrarSelectorFotoBusqueda) {
-                    AlertDialog(
-                        onDismissRequest = { mostrarSelectorFotoBusqueda = false },
-                        title = { Text("Buscar con foto") },
+                    AlertDialog(onDismissRequest = { mostrarSelectorFotoBusqueda = false }, title = { Text("Buscar con foto") },
                         text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para buscar por nombre.") },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                mostrarSelectorFotoBusqueda = false
-                                val photoFile = File(getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "busqueda_${System.currentTimeMillis()}.jpg")
-                                val uri = FileProvider.getUriForFile(this@MainActivity, "com.example.matrizapp.fileprovider", photoFile)
-                                fotoBusquedaUri = uri
-                                ocrTakePictureLauncher.launch(uri)
-                            }) { Text("Cámara") }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = {
-                                mostrarSelectorFotoBusqueda = false
-                                ocrPickImageLauncher.launch("image/*")
-                            }) { Text("Galería") }
-                        }
-                    )
+                        confirmButton = { TextButton(onClick = {
+                            mostrarSelectorFotoBusqueda = false
+                            val photoFile = File(getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "busqueda_${System.currentTimeMillis()}.jpg")
+                            val uri = FileProvider.getUriForFile(this@MainActivity, "com.example.matrizapp.fileprovider", photoFile); fotoBusquedaUri = uri; ocrTakePictureLauncher.launch(uri)
+                        }) { Text("Cámara") } },
+                        dismissButton = { TextButton(onClick = { mostrarSelectorFotoBusqueda = false; ocrPickImageLauncher.launch("image/*") }) { Text("Galería") } })
                 }
                 LaunchedEffect(Unit) {
                     val permisos = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        permisos.add(Manifest.permission.POST_NOTIFICATIONS)
-                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) permisos.add(Manifest.permission.POST_NOTIFICATIONS)
                     permLauncher.launch(permisos.toTypedArray())
                 }
                 val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -266,129 +165,55 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntryForDrawer by navController.currentBackStackEntryAsState()
                 val currentRouteForDrawer = navBackStackEntryForDrawer?.destination?.route ?: Screen.Matriz.route
                 LaunchedEffect(currentRouteForDrawer) { searchInput = ""; searchQuery = ""; searchActive = false }
-                AppNavigationDrawer(
-                    currentRoute = currentRouteForDrawer,
-                    lastSyncTime = lastSyncLabel,
-                    isSyncing = isRefreshing,
-                    onNavigate = { route ->
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true; restoreState = true
-                        }
-                    },
-                    onSyncClick = { refreshData() },
-                    drawerState = drawerState
-                ) {
-                Scaffold(
-                    topBar = {
-                        TopAppBar(
-                            title = {
-                                if (searchActive) {
-                                    val focusRequester = remember { FocusRequester() }
-                                    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-                                    TextField(
-                                        value = searchInput,
-                                        onValueChange = { searchInput = it },
-                                        placeholder = { Text("Buscar en esta pantalla...") },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                                        colors = TextFieldDefaults.colors(
-                                            focusedContainerColor = Color.Transparent,
-                                            unfocusedContainerColor = Color.Transparent,
-                                            focusedIndicatorColor = Color.Transparent,
-                                            unfocusedIndicatorColor = Color.Transparent
-                                        )
-                                    )
-                                } else {
-                                    Text("")
-                                }
-                            },
-                            navigationIcon = {
-                                IconButton(onClick = {
-                                    if (searchActive) { searchActive = false; searchInput = ""; searchQuery = "" }
-                                    else coroutineScope.launch { drawerState.open() }
-                                }) {
-                                    Icon(
-                                        if (searchActive) Icons.Default.ArrowBack else Icons.Default.Menu,
-                                        contentDescription = if (searchActive) "Cerrar búsqueda" else "Menú"
-                                    )
-                                }
-                            },
-                            actions = {
-                                if (searchActive) {
-                                    if (buscandoPorFoto) {
-                                        CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp), strokeWidth = 2.dp)
-                                    } else {
-                                        IconButton(onClick = { mostrarSelectorFotoBusqueda = true }) {
-                                            Icon(Icons.Default.CameraAlt, contentDescription = "Buscar con foto")
-                                        }
-                                        IconButton(onClick = { iniciarBusquedaPorVoz() }) {
-                                            Icon(Icons.Default.Mic, contentDescription = "Buscar por voz")
-                                        }
-                                    }
-                                    if (searchInput.isNotEmpty()) {
-                                        IconButton(onClick = { searchInput = ""; searchQuery = "" }) {
-                                            Icon(Icons.Default.Close, contentDescription = "Limpiar búsqueda")
-                                        }
-                                    }
-                                } else {
-                                    IconButton(onClick = { searchActive = true }) {
-                                        Icon(Icons.Default.Search, contentDescription = "Buscar")
-                                    }
-                                    // En las pantallas con orden (Filtro Fecha, Sem6, Solicitud) el botón de
-                                    // ordenar ocupa el lugar del ícono de sincronizar, para no empujar la
-                                    // lista hacia abajo con una fila extra. La sincronización en background
-                                    // sigue funcionando igual; en el resto de pantallas el ícono de sync
-                                    // sigue disponible como antes.
-                                    when (currentRouteForDrawer) {
-                                        Screen.Matriz.route -> {
-                                            val orden by matrizVm.orden.collectAsState()
-                                            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> matrizVm.setOrden(o, loc) })
-                                        }
-                                        Screen.FiltroFecha.route -> {
-                                            val orden by filtroVm.orden.collectAsState()
-                                            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> filtroVm.setOrden(o, loc) })
-                                        }
-                                        Screen.Sem6.route -> {
-                                            val orden by sem6Vm.orden.collectAsState()
-                                            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> sem6Vm.setOrden(o, loc) })
-                                        }
-                                        Screen.Solicitud.route -> {
-                                            val orden by solicitudVm.orden.collectAsState()
-                                            OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> solicitudVm.setOrden(o, loc) })
-                                        }
-                                        else -> {
-                                            IconButton(onClick = { refreshData() }) {
-                                                if (isRefreshing) {
-                                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                                } else {
-                                                    Icon(Icons.Default.Sync, contentDescription = "Sincronizar")
-                                                }
-                                            }
-                                        }
-                                    }
+                AppNavigationDrawer(currentRoute = currentRouteForDrawer, lastSyncTime = lastSyncLabel, isSyncing = isRefreshing,
+                    onNavigate = { route -> navController.navigate(route) { popUpTo(navController.graph.findStartDestination().id) { saveState = true }; launchSingleTop = true; restoreState = true } },
+                    onSyncClick = { refreshData() }, drawerState = drawerState) {
+                    Scaffold(topBar = {
+                        TopAppBar(title = {
+                            if (searchActive) {
+                                val focusRequester = remember { FocusRequester() }; LaunchedEffect(Unit) { focusRequester.requestFocus() }
+                                TextField(value = searchInput, onValueChange = { searchInput = it }, placeholder = { Text("Buscar en esta pantalla...") }, singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester), colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
+                            } else Text("")
+                        }, navigationIcon = {
+                            IconButton(onClick = { if (searchActive) { searchActive = false; searchInput = ""; searchQuery = "" } else coroutineScope.launch { drawerState.open() } }) {
+                                Icon(if (searchActive) Icons.Default.ArrowBack else Icons.Default.Menu, contentDescription = if (searchActive) "Cerrar búsqueda" else "Menú")
+                            }
+                        }, actions = {
+                            if (searchActive) {
+                                if (buscandoPorFoto) CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp), strokeWidth = 2.dp)
+                                else { IconButton(onClick = { mostrarSelectorFotoBusqueda = true }) { Icon(Icons.Default.CameraAlt, contentDescription = "Buscar con foto") }; IconButton(onClick = { iniciarBusquedaPorVoz() }) { Icon(Icons.Default.Mic, contentDescription = "Buscar por voz") } }
+                                if (searchInput.isNotEmpty()) IconButton(onClick = { searchInput = ""; searchQuery = "" }) { Icon(Icons.Default.Close, contentDescription = "Limpiar búsqueda") }
+                            } else {
+                                IconButton(onClick = { searchActive = true }) { Icon(Icons.Default.Search, contentDescription = "Buscar") }
+                                when (currentRouteForDrawer) {
+                                    Screen.Matriz.route -> { val orden by matrizVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> matrizVm.setOrden(o, loc) }) }
+                                    Screen.FiltroFecha.route -> { val orden by filtroVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> filtroVm.setOrden(o, loc) }) }
+                                    Screen.Sem6.route -> { val orden by sem6Vm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> sem6Vm.setOrden(o, loc) }) }
+                                    Screen.Solicitud.route -> { val orden by solicitudVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> solicitudVm.setOrden(o, loc) }) }
+                                    else -> IconButton(onClick = { refreshData() }) { if (isRefreshing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Sync, contentDescription = "Sincronizar") }
                                 }
                             }
-                        )
+                        })
+                    }) { innerPadding ->
+                        NavHost(navController, Screen.Matriz.route, Modifier.padding(innerPadding)) {
+                            composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery) }
+                            composable(Screen.PaseCartera.route) { PaseCarteraScreen(paseVm, searchQuery) }
+                            composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
+                            composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, container.notificacionesHelper, searchQuery) }
+                            composable(Screen.Filtrar.route) { FiltrarScreen(filtrarVm, searchQuery) }
+                            composable(Screen.Control.route) { ControlScreen(controlVm) }
+                            composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
+                            composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
+                            composable(Screen.Sms.route) { SmsScreen(smsVm) }
+                            composable(Screen.Llamadas.route) { CallScreen(callVm) }
+                            composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
+                            composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
+                            composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm) }
+                            composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
+                            composable(Screen.ExportarMatriz.route) { ExportarMatrizScreen(matrizVm) }
+                        }
                     }
-                ) { innerPadding ->
-                    NavHost(navController, Screen.Matriz.route, Modifier.padding(innerPadding)) {
-                        composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery) }
-                        composable(Screen.PaseCartera.route) { PaseCarteraScreen(paseVm, searchQuery) }
-                        composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
-                        composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, container.notificacionesHelper, searchQuery) }
-                        composable(Screen.Filtrar.route) { FiltrarScreen(filtrarVm, searchQuery) }
-                        composable(Screen.Control.route) { ControlScreen(controlVm) }
-                        composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
-                        composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
-                        composable(Screen.Sms.route) { SmsScreen(smsVm) }
-                        composable(Screen.Llamadas.route) { CallScreen(callVm) }
-                        composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
-                        composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
-                        composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm) }
-                        composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
-                    }
-                }
                 }
             }
         }
@@ -409,4 +234,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object PlantillasSms : Screen("plantillas_sms", "Plantillas de SMS", Icons.Default.Message)
     object RutaIA : Screen("ruta_ia", "Ruta IA", Icons.Default.Route)
     object Diagnostico : Screen("diagnostico", "Diagnóstico", Icons.Default.BugReport)
+    object ExportarMatriz : Screen("exportar_matriz", "Exportar Matriz", Icons.Default.FileDownload)
 }

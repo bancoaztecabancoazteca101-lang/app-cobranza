@@ -2,7 +2,6 @@ package com.example.matrizapp
 
 import android.content.Intent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -87,6 +86,7 @@ fun AppNavigationDrawer(
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Assignment, contentDescription = null) }, label = { Text("Pase") }, selected = currentRoute == "pase", onClick = { onNavigate("pase"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Description, contentDescription = null) }, label = { Text("Solicitud") }, selected = currentRoute == "solicitud", onClick = { onNavigate("solicitud"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Route, contentDescription = null) }, label = { Text("Ruta IA") }, selected = currentRoute == "ruta_ia", onClick = { onNavigate("ruta_ia"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.FileDownload, contentDescription = null) }, label = { Text("Exportar Matriz") }, selected = currentRoute == "exportar_matriz", onClick = { onNavigate("exportar_matriz"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
 
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
                     Text(text = "HERRAMIENTAS", style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
