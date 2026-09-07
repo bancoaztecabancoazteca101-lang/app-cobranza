@@ -1,5 +1,6 @@
 package com.example.matrizapp
 
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,6 +25,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+
+private const val EXTRA_ABRIR_MATRIZ_ID = "com.example.matrizapp.EXTRA_ABRIR_MATRIZ_ID"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,6 +55,19 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
             } else mensaje ?: "No se pudo importar"
             Toast.makeText(context, texto, Toast.LENGTH_LONG).show()
         }
+    }
+
+    fun abrirClienteEnMatriz(item: RutaIAEntity) {
+        val matrizId = item.cuMatrizMatch
+        if (matrizId.isNullOrBlank()) {
+            Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra(EXTRA_ABRIR_MATRIZ_ID, matrizId)
+        }
+        context.startActivity(intent)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -100,8 +116,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     itemsIndexed(ruta, key = { _, item -> item.id }) { index, item ->
                         RutaIANuevaCard(item, index + 1, index > 0, index < ruta.lastIndex, { viewModel.alternarVisitado(item) }, { viewModel.moverManualmente(item.id, -1) }, { viewModel.moverManualmente(item.id, 1) }) {
-                            if (item.cuMatrizMatch == null) Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
-                            else Toast.makeText(context, "Coincide en Matriz: ${item.nombre}", Toast.LENGTH_SHORT).show()
+                            abrirClienteEnMatriz(item)
                         }
                     }
                 }
@@ -142,11 +157,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            DireccionSelector(
-                                titulo = "Orden de días de atraso",
-                                direccion = configuracionDraft.direccionDiasAtraso,
-                                onChange = { configuracionDraft = configuracionDraft.copy(direccionDiasAtraso = it) }
-                            )
+                            DireccionSelector("Orden de días de atraso", configuracionDraft.direccionDiasAtraso) { configuracionDraft = configuracionDraft.copy(direccionDiasAtraso = it) }
                         }
                     }
                     item {
@@ -163,11 +174,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            DireccionSelector(
-                                titulo = "Orden de saldo en atraso",
-                                direccion = configuracionDraft.direccionSaldoAtraso,
-                                onChange = { configuracionDraft = configuracionDraft.copy(direccionSaldoAtraso = it) }
-                            )
+                            DireccionSelector("Orden de saldo en atraso", configuracionDraft.direccionSaldoAtraso) { configuracionDraft = configuracionDraft.copy(direccionSaldoAtraso = it) }
                         }
                     }
                     item {
@@ -193,11 +200,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                                 Text("Continuar por cercanía entre puntos")
                             }
                             Text("La siguiente parada se calcula desde el punto anterior, no nuevamente desde mi GPS.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            DireccionSelector(
-                                titulo = "Orden de cercanía",
-                                direccion = configuracionDraft.direccionCercania,
-                                onChange = { configuracionDraft = configuracionDraft.copy(direccionCercania = it) }
-                            )
+                            DireccionSelector("Orden de cercanía", configuracionDraft.direccionCercania) { configuracionDraft = configuracionDraft.copy(direccionCercania = it) }
                         } else {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 RadioButton(true, {})
