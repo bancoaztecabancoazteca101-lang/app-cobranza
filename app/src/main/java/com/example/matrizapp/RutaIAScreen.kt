@@ -27,7 +27,7 @@ import androidx.compose.ui.window.DialogProperties
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
+fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, onAbrirMatriz: (String) -> Unit = {}) {
     val context = LocalContext.current
     val ruta by viewModel.rutaOrdenada.collectAsState()
     val configuracionGuardada by viewModel.configuracion.collectAsState()
@@ -100,8 +100,12 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     itemsIndexed(ruta, key = { _, item -> item.id }) { index, item ->
                         RutaIANuevaCard(item, index + 1, index > 0, index < ruta.lastIndex, { viewModel.alternarVisitado(item) }, { viewModel.moverManualmente(item.id, -1) }, { viewModel.moverManualmente(item.id, 1) }) {
-                            if (item.cuMatrizMatch == null) Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
-                            else Toast.makeText(context, "Coincide en Matriz: ${item.nombre}", Toast.LENGTH_SHORT).show()
+                            val matrizId = item.cuMatrizMatch
+                            if (matrizId.isNullOrBlank()) {
+                                Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
+                            } else {
+                                onAbrirMatriz(matrizId)
+                            }
                         }
                     }
                 }
