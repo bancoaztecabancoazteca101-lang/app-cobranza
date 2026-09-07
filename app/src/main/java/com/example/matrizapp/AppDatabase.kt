@@ -24,7 +24,6 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
-
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 val tables = listOf("matriz_table", "pase_cartera_table", "solicitud_table", "filtro_fecha_table")
@@ -46,7 +45,7 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_9_10 = object : Migration(9, 10) { override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("ALTER TABLE solicitud_table ADD COLUMN gestorAsignado TEXT NOT NULL DEFAULT 'Flores'"); db.execSQL("ALTER TABLE solicitud_table ADD COLUMN fechaHora INTEGER") } }
         private val MIGRATION_10_11 = object : Migration(10, 11) { override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("ALTER TABLE filtro_fecha_table ADD COLUMN req TEXT") } }
         private val MIGRATION_11_12 = object : Migration(11, 12) { override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("""CREATE TABLE IF NOT EXISTS bloques_horario_table (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, hora INTEGER NOT NULL, minuto INTEGER NOT NULL, activo INTEGER NOT NULL DEFAULT 1)""") } }
-        private val MIGRATION_12_13 = object : Migration(12, 13) { override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("""CREATE TABLE IF NOT EXISTS contacto_log_table (id INTEGER PRIMARY KEY NOT NULL, clienteId TEXT NOT NULL, fechaDia INTEGER NOT NULL, bloqueIndex INTEGER NOT NULL, timestamp INTEGER NOT NULL)"""); db.execSQL("CREATE INDEX IF NOT EXISTS index_contacto_log_table_clienteId_fechaDia ON contacto_log_table(clienteId, fechaDia)") } }
+        private val MIGRATION_12_13 = object : Migration(12, 13) { override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("""CREATE TABLE IF NOT EXISTS contacto_log_table (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, clienteId TEXT NOT NULL, fechaDia INTEGER NOT NULL, bloqueIndex INTEGER NOT NULL, timestamp INTEGER NOT NULL)"""); db.execSQL("CREATE INDEX IF NOT EXISTS index_contacto_log_table_clienteId_fechaDia ON contacto_log_table(clienteId, fechaDia)") } }
         private val MIGRATION_13_14 = object : Migration(13, 14) { override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("""CREATE TABLE IF NOT EXISTS plantilla_sms_table (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, tipo TEXT NOT NULL, semana INTEGER NOT NULL, slot INTEGER NOT NULL, texto TEXT NOT NULL)"""); db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_plantilla_sms_table_tipo_semana_slot ON plantilla_sms_table(tipo, semana, slot)") } }
         private val MIGRATION_14_15 = object : Migration(14, 15) { override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("""CREATE TABLE IF NOT EXISTS config_automatizacion_table (id INTEGER PRIMARY KEY NOT NULL, simSeleccionada INTEGER, ocultarNumero INTEGER NOT NULL DEFAULT 0, segundosPausaEntreLlamadas INTEGER NOT NULL DEFAULT 5, duracionMaximaLlamada INTEGER NOT NULL DEFAULT 45)"""); db.execSQL("INSERT OR IGNORE INTO config_automatizacion_table (id, simSeleccionada, ocultarNumero, segundosPausaEntreLlamadas, duracionMaximaLlamada) VALUES (1, NULL, 0, 5, 45)") } }
         private val MIGRATION_15_16 = object : Migration(15, 16) { override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("""CREATE TABLE IF NOT EXISTS regla_semana_table (semana INTEGER PRIMARY KEY NOT NULL, offsets TEXT NOT NULL)"""); val defaults = mapOf(1 to "0,5", 2 to "0,4,8", 3 to "0,2,4,6,8", 4 to "0,1,3,4,6,7,9", 5 to "0,1,2,3,4,5,6,7,8,9"); defaults.forEach { (sem, offsets) -> db.execSQL("INSERT OR IGNORE INTO regla_semana_table (semana, offsets) VALUES ($sem, '$offsets')") } } }
@@ -65,7 +64,6 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE ruta_ia_table ADD COLUMN saldoAtraso REAL")
             }
         }
-
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "matriz_database")
