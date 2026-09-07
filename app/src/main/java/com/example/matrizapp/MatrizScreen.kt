@@ -21,7 +21,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (MatrizEntity) -> Boolean = { true }) {
+fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (MatrizEntity) -> Boolean = { true }, openClientId: String? = null, onClientOpened: () -> Unit = {}) {
     val context = LocalContext.current
     val allItems by viewModel.matrizList.collectAsState()
     val deleteInProgress by viewModel.deleteInProgress.collectAsState()
@@ -39,6 +39,17 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
             }
         }
     }
+
+    LaunchedEffect(openClientId, allItems) {
+        if (!openClientId.isNullOrBlank()) {
+            val target = allItems.firstOrNull { it.id == openClientId }
+            if (target != null) {
+                itemToView = target
+                onClientOpened()
+            }
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Column {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
