@@ -30,31 +30,26 @@ import androidx.compose.ui.window.DialogProperties
 fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     val context = LocalContext.current
     val ruta by viewModel.rutaOrdenada.collectAsState()
+    val configuracionGuardada by viewModel.configuracion.collectAsState()
     val procesando by viewModel.procesando.collectAsState()
     val progreso by viewModel.progreso.collectAsState()
-    var estrategia by remember { mutableStateOf(EstrategiaRutaIA.INTELIGENTE) }
     var mostrarMenu by remember { mutableStateOf(false) }
     var mostrarFiltros by remember { mutableStateOf(false) }
     var mostrarMapa by remember { mutableStateOf(false) }
     var mostrarAyuda by remember { mutableStateOf(false) }
-    var selectorEstrategia by remember { mutableStateOf(false) }
-    var minimoDiasTexto by remember { mutableStateOf("") }
-    var minimoRequeridoTexto by remember { mutableStateOf("") }
-    var exigirDireccion by remember { mutableStateOf(true) }
-    var direccion by remember { mutableStateOf(DireccionOrdenRutaIA.ASC) }
+    var configuracionDraft by remember { mutableStateOf(configuracionGuardada) }
+
+    LaunchedEffect(mostrarFiltros) {
+        if (mostrarFiltros) configuracionDraft = configuracionGuardada
+    }
 
     val importarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
-        val minimoDias = minimoDiasTexto.trim().toIntOrNull()
-        val minimoRequerido = minimoRequeridoTexto.trim().replace(",", ".").toDoubleOrNull()
-        if (minimoDiasTexto.isNotBlank() && (minimoDias == null || minimoDias < 0)) {
-            Toast.makeText(context, "Mínimo de atraso inválido", Toast.LENGTH_SHORT).show(); return@rememberLauncherForActivityResult
-        }
-        if (minimoRequeridoTexto.isNotBlank() && (minimoRequerido == null || minimoRequerido < 0)) {
-            Toast.makeText(context, "Mínimo requerido inválido", Toast.LENGTH_SHORT).show(); return@rememberLauncherForActivityResult
-        }
-        viewModel.importarJson(uri, estrategia, direccion, minimoDias, minimoRequerido, exigirDireccion) { exito, mensaje, advertencias ->
-            val texto = if (exito) buildString { append(mensaje ?: "Ruta generada"); if (advertencias.isNotEmpty()) append("\nAdvertencias: ${advertencias.size}") } else mensaje ?: "No se pudo importar"
+        viewModel.importarJson(uri, configuracionGuardada) { exito, mensaje, advertencias ->
+            val texto = if (exito) buildString {
+                append(mensaje ?: "Ruta generada")
+                if (advertencias.isNotEmpty()) append("\nAdvertencias: ${advertencias.size}")
+            } else mensaje ?: "No se pudo importar"
             Toast.makeText(context, texto, Toast.LENGTH_LONG).show()
         }
     }
@@ -96,7 +91,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
             if (ruta.isEmpty() && !procesando) {
                 Box(Modifier.fillMaxSize().weight(1f), Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-                        Icon(Icons.Default.Route, null, tint = Color.Gray, modifier = Modifier.size(56.dp)); Spacer(Modifier.height(10.dp))
+                        Icon(Icons.Default.Route, null, tint = Color.Gray, modifier = Modifier.size(56.dp))
+                        Spacer(Modifier.height(10.dp))
                         Text("Sube las fotos a Gemini, guarda el JSON y después impórtalo aquí.", textAlign = TextAlign.Center, color = Color.Gray)
                     }
                 }
@@ -113,7 +109,13 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
         }
         if (procesando) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .35f)), Alignment.Center) {
-                Card(shape = RoundedCornerShape(16.dp)) { Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { CircularProgressIndicator(); Spacer(Modifier.height(12.dp)); Text(progreso.ifBlank { "Procesando..." }) } }
+                Card(shape = RoundedCornerShape(16.dp)) {
+                    Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(12.dp))
+                        Text(progreso.ifBlank { "Procesando..." })
+                    }
+                }
             }
         }
     }
@@ -123,47 +125,117 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
             onDismissRequest = { mostrarFiltros = false },
             title = { Text("Filtros y configuración") },
             text = {
-                Column {
-                    ExposedDropdownMenuBox(expanded = selectorEstrategia, onExpandedChange = { selectorEstrategia = !selectorEstrategia }) {
-                        OutlinedTextField(value = estrategia.etiqueta, onValueChange = {}, readOnly = true, label = { Text("Cómo ordenar") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(selectorEstrategia) }, modifier = Modifier.fillMaxWidth().menuAnchor())
-                        ExposedDropdownMenu(expanded = selectorEstrategia, onDismissRequest = { selectorEstrategia = false }) {
-                            EstrategiaRutaIA.values().forEach { opcion -> DropdownMenuItem(text = { Text(opcion.etiqueta) }, onClick = { estrategia = opcion; selectorEstrategia = false }) }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.heightIn(max = 560.dp)) {
+                    item {
+                        Text("FILTROS", fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(configuracionDraft.usarDiasAtraso, { configuracionDraft = configuracionDraft.copy(usarDiasAtraso = it) })
+                            Text("Días de atraso", fontWeight = FontWeight.SemiBold)
+                        }
+                        if (configuracionDraft.usarDiasAtraso) {
+                            OutlinedTextField(
+                                value = configuracionDraft.minimoDiasAtraso?.toString() ?: "",
+                                onValueChange = { valor -> configuracionDraft = configuracionDraft.copy(minimoDiasAtraso = valor.filter(Char::isDigit).toIntOrNull()) },
+                                label = { Text("Atraso mínimo") },
+                                placeholder = { Text("Opcional") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            DireccionSelector(
+                                titulo = "Orden de días de atraso",
+                                direccion = configuracionDraft.direccionDiasAtraso,
+                                onChange = { configuracionDraft = configuracionDraft.copy(direccionDiasAtraso = it) }
+                            )
                         }
                     }
-                    Spacer(Modifier.height(10.dp))
-                    Text("Dirección de cercanía", fontWeight = FontWeight.Bold)
-                    Text("Controla el sentido de la ruta inteligente.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                    Spacer(Modifier.height(6.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (direccion == DireccionOrdenRutaIA.ASC) {
-                            Button(onClick = { direccion = DireccionOrdenRutaIA.ASC }, modifier = Modifier.weight(1f)) { Text("Menor a mayor") }
-                            OutlinedButton(onClick = { direccion = DireccionOrdenRutaIA.DESC }, modifier = Modifier.weight(1f)) { Text("Mayor a menor") }
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(configuracionDraft.usarSaldoAtraso, { configuracionDraft = configuracionDraft.copy(usarSaldoAtraso = it) })
+                            Text("Saldo en atraso", fontWeight = FontWeight.SemiBold)
+                        }
+                        if (configuracionDraft.usarSaldoAtraso) {
+                            OutlinedTextField(
+                                value = configuracionDraft.minimoSaldoAtraso?.toString() ?: "",
+                                onValueChange = { valor -> configuracionDraft = configuracionDraft.copy(minimoSaldoAtraso = valor.filter { it.isDigit() || it == '.' || it == ',' }.replace(',', '.').toDoubleOrNull()) },
+                                label = { Text("Saldo mínimo") },
+                                placeholder = { Text("Opcional") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            DireccionSelector(
+                                titulo = "Orden de saldo en atraso",
+                                direccion = configuracionDraft.direccionSaldoAtraso,
+                                onChange = { configuracionDraft = configuracionDraft.copy(direccionSaldoAtraso = it) }
+                            )
+                        }
+                    }
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(configuracionDraft.excluirNoVisitables, { configuracionDraft = configuracionDraft.copy(excluirNoVisitables = it) })
+                            Text("Excluir registros no visitables")
+                        }
+                    }
+                    item {
+                        Spacer(Modifier.height(4.dp))
+                        Text("RUTA", fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(configuracionDraft.modoRuta == ModoRutaIA.AUTOMATICA, { configuracionDraft = configuracionDraft.copy(modoRuta = ModoRutaIA.AUTOMATICA) })
+                            Text("Ruta automática")
+                        }
+                        if (configuracionDraft.modoRuta == ModoRutaIA.AUTOMATICA) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(configuracionDraft.usarGpsInicio, { configuracionDraft = configuracionDraft.copy(usarGpsInicio = it) })
+                                Text("Iniciar por punto más cercano a mi GPS")
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(configuracionDraft.usarCercaniaEncadenada, { configuracionDraft = configuracionDraft.copy(usarCercaniaEncadenada = it) })
+                                Text("Continuar por cercanía entre puntos")
+                            }
+                            Text("La siguiente parada se calcula desde el punto anterior, no nuevamente desde mi GPS.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            DireccionSelector(
+                                titulo = "Orden de cercanía",
+                                direccion = configuracionDraft.direccionCercania,
+                                onChange = { configuracionDraft = configuracionDraft.copy(direccionCercania = it) }
+                            )
                         } else {
-                            OutlinedButton(onClick = { direccion = DireccionOrdenRutaIA.ASC }, modifier = Modifier.weight(1f)) { Text("Menor a mayor") }
-                            Button(onClick = { direccion = DireccionOrdenRutaIA.DESC }, modifier = Modifier.weight(1f)) { Text("Mayor a menor") }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(true, {})
+                                Text("Ruta manual")
+                            }
+                            Text("Yo ordeno las paradas. La aplicación respeta el orden manual y solamente mantiene activos los filtros seleccionados.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text("Filtros", fontWeight = FontWeight.Bold)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = minimoDiasTexto, onValueChange = { minimoDiasTexto = it.filter(Char::isDigit) }, label = { Text("Atraso mínimo") }, placeholder = { Text("Opcional") }, singleLine = true, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = minimoRequeridoTexto, onValueChange = { minimoRequeridoTexto = it.filter { c -> c.isDigit() || c == '.' || c == ',' } }, label = { Text("Requerido mínimo") }, placeholder = { Text("Opcional") }, singleLine = true, modifier = Modifier.weight(1f))
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = exigirDireccion, onCheckedChange = { exigirDireccion = it })
-                        Text("Excluir registros sin dirección válida")
                     }
                 }
             },
-            confirmButton = { Button(onClick = { mostrarFiltros = false }) { Text("Aplicar") } },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.actualizarConfiguracion(configuracionDraft)
+                    mostrarFiltros = false
+                }) { Text("Aplicar") }
+            },
             dismissButton = { TextButton(onClick = { mostrarFiltros = false }) { Text("Cancelar") } }
         )
     }
 
-    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("1. Sube las fotos a Gemini.\n2. Pide el JSON con el formato de Ruta IA.\n3. Guarda el archivo.\n4. Abre ⋮ para configurar estrategia y filtros.\n5. Desde el mismo menú importa el JSON.\n6. La app valida, cruza con Matriz, geocodifica, filtra y construye la ruta.\n\nGemini extrae los datos; la app decide qué registros pasan los filtros y el orden.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
+    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. La ruta manual respeta el orden que establezcas.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
 
     if (mostrarMapa) Dialog(onDismissRequest = { mostrarMapa = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         RutaIAMapaFullScreen(items = ruta, onCerrar = { mostrarMapa = false }, onMarcadorClick = { })
+    }
+}
+
+@Composable
+private fun DireccionSelector(titulo: String, direccion: DireccionOrdenRutaIA, onChange: (DireccionOrdenRutaIA) -> Unit) {
+    Text(titulo, style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (direccion == DireccionOrdenRutaIA.ASC) {
+            Button(onClick = { onChange(DireccionOrdenRutaIA.ASC) }, modifier = Modifier.weight(1f)) { Text("Menor → mayor") }
+            OutlinedButton(onClick = { onChange(DireccionOrdenRutaIA.DESC) }, modifier = Modifier.weight(1f)) { Text("Mayor → menor") }
+        } else {
+            OutlinedButton(onClick = { onChange(DireccionOrdenRutaIA.ASC) }, modifier = Modifier.weight(1f)) { Text("Menor → mayor") }
+            Button(onClick = { onChange(DireccionOrdenRutaIA.DESC) }, modifier = Modifier.weight(1f)) { Text("Mayor → menor") }
+        }
     }
 }
 
@@ -186,6 +258,7 @@ private fun RutaIANuevaCard(item: RutaIAEntity, posicion: Int, puedeSubir: Boole
                 Text(item.direccion, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 Row(Modifier.padding(top = 5.dp)) {
                     item.diasAtraso?.let { Text("Atraso: $it d.  ", style = MaterialTheme.typography.labelSmall) }
+                    item.saldoAtraso?.let { Text("Saldo: $${"%,.0f".format(it)}  ", style = MaterialTheme.typography.labelSmall) }
                     item.pagoRequerido?.let { Text("Req.: $${"%,.0f".format(it)}", style = MaterialTheme.typography.labelSmall) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
