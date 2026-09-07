@@ -175,6 +175,42 @@ class RutaIAViewModel(
         }
     }
 
+    fun moverSeleccionados(ids: Set<String>, delta: Int) {
+        if (ids.isEmpty() || delta == 0) return
+        viewModelScope.launch {
+            val actual = rutaOrdenada.value.toMutableList()
+            val seleccionados = ids.intersect(actual.map { it.id }.toSet())
+            if (seleccionados.isEmpty()) return@launch
+
+            if (delta < 0) {
+                for (i in 1 until actual.size) {
+                    if (actual[i].id in seleccionados && actual[i - 1].id !in seleccionados) {
+                        val tmp = actual[i - 1]
+                        actual[i - 1] = actual[i]
+                        actual[i] = tmp
+                    }
+                }
+            } else {
+                for (i in actual.lastIndex - 1 downTo 0) {
+                    if (actual[i].id in seleccionados && actual[i + 1].id !in seleccionados) {
+                        val tmp = actual[i + 1]
+                        actual[i + 1] = actual[i]
+                        actual[i] = tmp
+                    }
+                }
+            }
+
+            actual.forEachIndexed { i, item -> rutaIADao.updateOrden(item.id, i) }
+            if (_configuracion.value.modoRuta != ModoRutaIA.MANUAL) {
+                val manual = _configuracion.value.copy(modoRuta = ModoRutaIA.MANUAL)
+                _configuracion.value = manual
+                filtroDao.guardar(RutaIAFiltroEntity(id = 1, criteriosOrden = serializarConfiguracionRutaIA(manual)))
+                _criterios.value = criteriosDesdeConfiguracion(manual)
+            }
+            programarSincronizacionRutaIA()
+        }
+    }
+
     suspend fun buscarMatrizPorId(id: String): MatrizEntity? = matrizDao.getById(id)
 
     fun limpiarRutaAhora() {
