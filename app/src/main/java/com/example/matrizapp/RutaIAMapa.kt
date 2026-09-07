@@ -1,9 +1,13 @@
 package com.example.matrizapp
+
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -27,10 +31,6 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 
-/** Dibuja el mismo estilo de "chichón" numerado que usa la navegación de Google Maps para
- * marcar paradas (círculo de color con borde blanco y el número al centro) -- referencia que
- * mandó Diego -- en vez del pin clásico en forma de gota. Naranja = pendiente, verde =
- * visitado, para que coincida con el color que ya usa la tarjeta de la lista. */
 private fun crearIconoNumerado(context: Context, numero: Int, visitado: Boolean): BitmapDescriptor {
     val densidad = context.resources.displayMetrics.density
     val diametro = (40 * densidad).toInt()
@@ -38,12 +38,10 @@ private fun crearIconoNumerado(context: Context, numero: Int, visitado: Boolean)
     val canvas = Canvas(bitmap)
     val centro = diametro / 2f
     val colorRelleno = if (visitado) android.graphics.Color.parseColor("#4CAF50") else android.graphics.Color.parseColor("#FF6B00")
-
     val paintBorde = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE; style = Paint.Style.FILL }
     canvas.drawCircle(centro, centro, centro, paintBorde)
     val paintRelleno = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colorRelleno; style = Paint.Style.FILL }
     canvas.drawCircle(centro, centro, centro - (3 * densidad), paintRelleno)
-
     val paintTexto = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = android.graphics.Color.WHITE
         textSize = 16 * densidad
@@ -55,10 +53,25 @@ private fun crearIconoNumerado(context: Context, numero: Int, visitado: Boolean)
     return BitmapDescriptorFactory.fromBitmap(bitmap)
 }
 
-/** Mapa a pantalla completa con una parada por cada cliente de la ruta que sí quedó
- * geocodificado -- se abre con el botón redondo "Ver mapa" del encabezado, igual que el botón
- * "Ver mapa" de la app de trabajo pero sin ocupar toda la fila. Tocar un marcador dispara la
- * misma acción que tocar la tarjeta en la lista (abre Matriz si hay match, avisa si es nuevo). */
+private fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
+    val lat = item.lat ?: return
+    val lng = item.lng ?: return
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$lat,$lng&mode=d")).apply {
+        setPackage("com.google.android.apps.maps")
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    try {
+        context.startActivity(intent)
+    } catch (_: Exception) {
+        val fallback = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(item.nombre)})")).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try { context.startActivity(fallback) }
+        catch (_: Exception) { Toast.makeText(context, "No se encontró una aplicación de mapas", Toast.LENGTH_SHORT).show() }
+    }
+}
+
+/** Mapa a pantalla completa. Tocar una parada abre directamente Google Maps para navegar hacia ella. */
 @Composable
 fun RutaIAMapaFullScreen(items: List<RutaIAEntity>, onCerrar: () -> Unit, onMarcadorClick: (RutaIAEntity) -> Unit) {
     val context = LocalContext.current
@@ -73,15 +86,19 @@ fun RutaIAMapaFullScreen(items: List<RutaIAEntity>, onCerrar: () -> Unit, onMarc
 
     Box(Modifier.fillMaxSize()) {
         GoogleMap(modifier = Modifier.fillMaxSize(), cameraPositionState = cameraPositionState) {
-            puntos.forEachIndexed { idx, item ->
+            puntos.forEach { item ->
                 val posicion = items.indexOf(item) + 1
                 val visitado = item.estado.equals("Visitado", ignoreCase = true)
                 Marker(
                     state = MarkerState(position = LatLng(item.lat!!, item.lng!!)),
                     title = "$posicion. ${item.nombre}",
-                    snippet = if (item.esNuevo) "Nuevo · sin registro en Matriz" else "Toca para abrir en Matriz",
+                    snippet = "Toca para abrir en Google Maps",
                     icon = remember(posicion, visitado) { crearIconoNumerado(context, posicion, visitado) },
-                    onClick = { onMarcadorClick(item); false }
+                    onClick = {
+                        onMarcadorClick(item)
+                        abrirEnGoogleMaps(context, item)
+                        true
+                    }
                 )
             }
         }
