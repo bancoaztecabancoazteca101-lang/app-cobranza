@@ -72,16 +72,10 @@ fun parsearConfiguracionRutaIA(texto: String?): FiltrosRutaIA {
     )
 }
 
-fun aplicarFiltrosRutaIA(
-    items: List<RutaIAEntity>,
-    filtros: FiltrosRutaIA = FiltrosRutaIA()
-): List<RutaIAEntity> = items.filter { item ->
-    val cumpleDias = !filtros.usarDiasAtraso || filtros.minimoDiasAtraso == null ||
-        (item.diasAtraso != null && item.diasAtraso >= filtros.minimoDiasAtraso)
-    val cumpleSaldo = !filtros.usarSaldoAtraso || filtros.minimoSaldoAtraso == null ||
-        (item.saldoAtraso != null && item.saldoAtraso >= filtros.minimoSaldoAtraso)
-    val cumpleVisitabilidad = !filtros.excluirNoVisitables ||
-        (item.direccion.isNotBlank() && item.lat != null && item.lng != null)
+fun aplicarFiltrosRutaIA(items: List<RutaIAEntity>, filtros: FiltrosRutaIA = FiltrosRutaIA()): List<RutaIAEntity> = items.filter { item ->
+    val cumpleDias = !filtros.usarDiasAtraso || filtros.minimoDiasAtraso == null || (item.diasAtraso != null && item.diasAtraso >= filtros.minimoDiasAtraso)
+    val cumpleSaldo = !filtros.usarSaldoAtraso || filtros.minimoSaldoAtraso == null || (item.saldoAtraso != null && item.saldoAtraso >= filtros.minimoSaldoAtraso)
+    val cumpleVisitabilidad = !filtros.excluirNoVisitables || (item.direccion.isNotBlank() && item.lat != null && item.lng != null)
     cumpleDias && cumpleSaldo && cumpleVisitabilidad
 }
 
@@ -91,9 +85,7 @@ private fun distanciaRutaIA(a: Pair<Double, Double>, b: Pair<Double, Double>): D
     val dLon = Math.toRadians(b.second - a.second)
     val lat1 = Math.toRadians(a.first)
     val lat2 = Math.toRadians(b.first)
-    val h = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
-        kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2) *
-        kotlin.math.cos(lat1) * kotlin.math.cos(lat2)
+    val h = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) + kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2) * kotlin.math.cos(lat1) * kotlin.math.cos(lat2)
     return 2 * radio * kotlin.math.asin(kotlin.math.sqrt(h.coerceIn(0.0, 1.0)))
 }
 
@@ -111,11 +103,7 @@ private fun compararPrioridades(a: RutaIAEntity, b: RutaIAEntity, filtros: Filtr
     return 0
 }
 
-fun construirRutaIAConfigurada(
-    items: List<RutaIAEntity>,
-    inicio: Pair<Double, Double>?,
-    filtros: FiltrosRutaIA
-): List<RutaIAEntity> {
+fun construirRutaIAConfigurada(items: List<RutaIAEntity>, inicio: Pair<Double, Double>?, filtros: FiltrosRutaIA): List<RutaIAEntity> {
     val filtrados = aplicarFiltrosRutaIA(items, filtros)
     if (filtros.modoRuta == ModoRutaIA.MANUAL) return filtrados.sortedBy { it.orden }
 
@@ -125,9 +113,7 @@ fun construirRutaIAConfigurada(
 
     if (!filtros.usarCercaniaEncadenada) {
         val base = if (filtros.usarGpsInicio && inicio != null) {
-            pendientes.sortedWith(compareBy<RutaIAEntity> {
-                distanciaRutaIA(inicio, it.lat!! to it.lng!!)
-            }.thenComparator { a, b -> compararPrioridades(a, b, filtros) })
+            pendientes.sortedWith(compareBy<RutaIAEntity> { distanciaRutaIA(inicio, it.lat!! to it.lng!!) }.thenComparator { a, b -> compararPrioridades(a, b, filtros) })
         } else {
             pendientes.sortedWith(Comparator { a, b -> compararPrioridades(a, b, filtros) })
         }
@@ -136,7 +122,6 @@ fun construirRutaIAConfigurada(
 
     val resultado = mutableListOf<RutaIAEntity>()
     var puntoActual = if (filtros.usarGpsInicio) inicio else null
-
     while (pendientes.isNotEmpty()) {
         val siguiente = if (puntoActual != null) {
             val distanciaComparator = Comparator<RutaIAEntity> { a, b ->
@@ -156,20 +141,13 @@ fun construirRutaIAConfigurada(
     return resultado + sinUbicar
 }
 
-fun construirRutaIAInteligente(
-    items: List<RutaIAEntity>,
-    inicio: Pair<Double, Double>?,
-    estrategia: EstrategiaRutaIA,
-    filtros: FiltrosRutaIA = FiltrosRutaIA(),
-    direccion: DireccionOrdenRutaIA = DireccionOrdenRutaIA.ASC
-): List<RutaIAEntity> {
+fun construirRutaIAInteligente(items: List<RutaIAEntity>, inicio: Pair<Double, Double>?, estrategia: EstrategiaRutaIA, filtros: FiltrosRutaIA = FiltrosRutaIA(), direccion: DireccionOrdenRutaIA = DireccionOrdenRutaIA.ASC): List<RutaIAEntity> {
     val config = filtros.copy(
         usarDiasAtraso = estrategia == EstrategiaRutaIA.MAYOR_ATRASO || estrategia == EstrategiaRutaIA.PRIORIDAD_COBRANZA,
         usarSaldoAtraso = estrategia == EstrategiaRutaIA.MAYOR_REQUERIDO,
         direccionDiasAtraso = if (estrategia == EstrategiaRutaIA.MAYOR_ATRASO || estrategia == EstrategiaRutaIA.PRIORIDAD_COBRANZA) DireccionOrdenRutaIA.DESC else filtros.direccionDiasAtraso,
         direccionSaldoAtraso = if (estrategia == EstrategiaRutaIA.MAYOR_REQUERIDO) DireccionOrdenRutaIA.DESC else filtros.direccionSaldoAtraso,
-        modoRuta = if (estrategia == EstrategiaRutaIA.PERSONALIZADO) ModoRutaIA.MANUAL else filtros.modoRuta,
-        usarCercaniaEncadenada = estrategia == EstrategiaRutaIA.INTELIGENTE || estrategia == EstrategiaRutaIA.PERSONALIZADO,
+        usarCercaniaEncadenada = estrategia == EstrategiaRutaIA.INTELIGENTE,
         direccionCercania = direccion
     )
     return construirRutaIAConfigurada(items, inicio, config)
