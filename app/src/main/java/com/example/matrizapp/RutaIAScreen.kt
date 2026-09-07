@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -70,33 +71,15 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
                     if (ruta.any { it.lat != null && it.lng != null }) IconButton(onClick = { mostrarMapa = true }) { Icon(Icons.Default.Map, "Mapa") }
                     IconButton(onClick = { mostrarMenu = true }) { Icon(Icons.Default.MoreVert, "Más opciones") }
                     DropdownMenu(expanded = mostrarMenu, onDismissRequest = { mostrarMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Filtros y configuración") },
-                            leadingIcon = { Icon(Icons.Default.Tune, null) },
-                            onClick = { mostrarMenu = false; mostrarFiltros = true }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Importar JSON de Gemini") },
-                            leadingIcon = { Icon(Icons.Default.UploadFile, null) },
-                            enabled = !procesando,
-                            onClick = { mostrarMenu = false; importarLauncher.launch(arrayOf("application/json", "text/plain", "text/*")) }
-                        )
-                        if (ruta.isNotEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text("Limpiar ruta") },
-                                leadingIcon = { Icon(Icons.Default.DeleteSweep, null) },
-                                onClick = { mostrarMenu = false; viewModel.limpiarRutaAhora() }
-                            )
-                        }
+                        DropdownMenuItem(text = { Text("Filtros y configuración") }, leadingIcon = { Icon(Icons.Default.Tune, null) }, onClick = { mostrarMenu = false; mostrarFiltros = true })
+                        DropdownMenuItem(text = { Text("Importar JSON de Gemini") }, leadingIcon = { Icon(Icons.Default.UploadFile, null) }, enabled = !procesando, onClick = { mostrarMenu = false; importarLauncher.launch(arrayOf("application/json", "text/plain", "text/*")) })
+                        if (ruta.isNotEmpty()) DropdownMenuItem(text = { Text("Limpiar ruta") }, leadingIcon = { Icon(Icons.Default.DeleteSweep, null) }, onClick = { mostrarMenu = false; viewModel.limpiarRutaAhora() })
                     }
                 }
             }
 
             if (modoManual && ruta.isNotEmpty()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.DragHandle, null, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(8.dp))
@@ -123,6 +106,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
                             item = item,
                             posicion = index + 1,
                             modoManual = modoManual,
+                            onMover = { delta -> viewModel.moverManualmente(item.id, delta) },
                             onVisitado = { viewModel.alternarVisitado(item) }
                         ) {
                             val matrizId = item.cuMatrizMatch
@@ -163,19 +147,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
                             Text("Días de atraso", fontWeight = FontWeight.SemiBold)
                         }
                         if (configuracionDraft.usarDiasAtraso) {
-                            OutlinedTextField(
-                                value = configuracionDraft.minimoDiasAtraso?.toString() ?: "",
-                                onValueChange = { valor -> configuracionDraft = configuracionDraft.copy(minimoDiasAtraso = valor.filter(Char::isDigit).toIntOrNull()) },
-                                label = { Text("Atraso mínimo") },
-                                placeholder = { Text("Opcional") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            DireccionSelector(
-                                titulo = "Orden de días de atraso",
-                                direccion = configuracionDraft.direccionDiasAtraso,
-                                onChange = { configuracionDraft = configuracionDraft.copy(direccionDiasAtraso = it) }
-                            )
+                            OutlinedTextField(value = configuracionDraft.minimoDiasAtraso?.toString() ?: "", onValueChange = { valor -> configuracionDraft = configuracionDraft.copy(minimoDiasAtraso = valor.filter(Char::isDigit).toIntOrNull()) }, label = { Text("Atraso mínimo") }, placeholder = { Text("Opcional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            DireccionSelector("Orden de días de atraso", configuracionDraft.direccionDiasAtraso) { configuracionDraft = configuracionDraft.copy(direccionDiasAtraso = it) }
                         }
                     }
                     item {
@@ -184,19 +157,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
                             Text("Saldo en atraso", fontWeight = FontWeight.SemiBold)
                         }
                         if (configuracionDraft.usarSaldoAtraso) {
-                            OutlinedTextField(
-                                value = configuracionDraft.minimoSaldoAtraso?.toString() ?: "",
-                                onValueChange = { valor -> configuracionDraft = configuracionDraft.copy(minimoSaldoAtraso = valor.filter { it.isDigit() || it == '.' || it == ',' }.replace(',', '.').toDoubleOrNull()) },
-                                label = { Text("Saldo mínimo") },
-                                placeholder = { Text("Opcional") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            DireccionSelector(
-                                titulo = "Orden de saldo en atraso",
-                                direccion = configuracionDraft.direccionSaldoAtraso,
-                                onChange = { configuracionDraft = configuracionDraft.copy(direccionSaldoAtraso = it) }
-                            )
+                            OutlinedTextField(value = configuracionDraft.minimoSaldoAtraso?.toString() ?: "", onValueChange = { valor -> configuracionDraft = configuracionDraft.copy(minimoSaldoAtraso = valor.filter { it.isDigit() || it == '.' || it == ',' }.replace(',', '.').toDoubleOrNull()) }, label = { Text("Saldo mínimo") }, placeholder = { Text("Opcional") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                            DireccionSelector("Orden de saldo en atraso", configuracionDraft.direccionSaldoAtraso) { configuracionDraft = configuracionDraft.copy(direccionSaldoAtraso = it) }
                         }
                     }
                     item {
@@ -223,11 +185,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
                                 Text("Continuar por cercanía entre puntos")
                             }
                             Text("La siguiente parada se calcula desde el punto anterior, no nuevamente desde mi GPS.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            DireccionSelector(
-                                titulo = "Orden de cercanía",
-                                direccion = configuracionDraft.direccionCercania,
-                                onChange = { configuracionDraft = configuracionDraft.copy(direccionCercania = it) }
-                            )
+                            DireccionSelector("Orden de cercanía", configuracionDraft.direccionCercania) { configuracionDraft = configuracionDraft.copy(direccionCercania = it) }
                         } else {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 RadioButton(true, {})
@@ -238,17 +196,12 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, o
                     }
                 }
             },
-            confirmButton = {
-                Button(onClick = {
-                    viewModel.actualizarConfiguracion(configuracionDraft)
-                    mostrarFiltros = false
-                }) { Text("Aplicar") }
-            },
+            confirmButton = { Button(onClick = { viewModel.actualizarConfiguracion(configuracionDraft); mostrarFiltros = false }) { Text("Aplicar") } },
             dismissButton = { TextButton(onClick = { mostrarFiltros = false }) { Text("Cancelar") } }
         )
     }
 
-    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. Los clientes ya visitados nunca son eliminados por los filtros y permanecen al final. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. En ruta manual puedes mantener presionado un registro y arrastrarlo a la posición que quieras.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta." ) }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
+    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. Los clientes ya visitados nunca son eliminados por los filtros y permanecen al final. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. En ruta manual puedes mantener presionado un registro y arrastrarlo a la posición que quieras.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
 
     if (mostrarMapa) Dialog(onDismissRequest = { mostrarMapa = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         RutaIAMapaFullScreen(items = ruta, onCerrar = { mostrarMapa = false }, onMarcadorClick = { })
@@ -274,12 +227,15 @@ private fun RutaIANuevaCard(
     item: RutaIAEntity,
     posicion: Int,
     modoManual: Boolean,
+    onMover: (Int) -> Unit,
     onVisitado: () -> Unit,
     onMatriz: () -> Unit
 ) {
     val visitado = item.estado.equals("Visitado", ignoreCase = true)
     var arrastrando by remember(item.id) { mutableStateOf(false) }
     var desplazamientoPendiente by remember(item.id) { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val umbralPx = with(density) { 90.dp.toPx() }
 
     val dragModifier = if (modoManual) {
         Modifier.pointerInput(item.id) {
@@ -299,13 +255,12 @@ private fun RutaIANuevaCard(
                 onDrag = { change, dragAmount ->
                     change.consume()
                     desplazamientoPendiente += dragAmount.y
-                    val umbral = 90.dp.value * androidx.compose.ui.platform.LocalDensity.current.density
-                    while (desplazamientoPendiente <= -umbral) {
-                        desplazamientoPendiente += umbral
+                    while (desplazamientoPendiente <= -umbralPx) {
+                        desplazamientoPendiente += umbralPx
                         onMover(-1)
                     }
-                    while (desplazamientoPendiente >= umbral) {
-                        desplazamientoPendiente -= umbral
+                    while (desplazamientoPendiente >= umbralPx) {
+                        desplazamientoPendiente -= umbralPx
                         onMover(1)
                     }
                 }
@@ -326,13 +281,8 @@ private fun RutaIANuevaCard(
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (modoManual) {
-                    Icon(Icons.Default.DragHandle, "Mantener presionado para mover", modifier = Modifier.size(28.dp))
-                } else {
-                    Spacer(Modifier.height(28.dp))
-                }
+                Icon(Icons.Default.DragHandle, "Mantener presionado para mover", modifier = Modifier.size(28.dp))
                 Box(Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), Alignment.Center) { Text("$posicion", fontWeight = FontWeight.Bold) }
-                if (!modoManual) Spacer(Modifier.height(28.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -353,8 +303,4 @@ private fun RutaIANuevaCard(
             }
         }
     }
-}
-
-private fun onMover(delta: Int) {
-    // Se reemplaza en la composición mediante la función local del card.
 }
