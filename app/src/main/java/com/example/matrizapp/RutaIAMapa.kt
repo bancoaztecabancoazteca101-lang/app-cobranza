@@ -1,7 +1,9 @@
 package com.example.matrizapp
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -22,11 +24,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
@@ -60,22 +65,23 @@ private fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
         setPackage("com.google.android.apps.maps")
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-    try {
-        context.startActivity(intent)
-    } catch (_: Exception) {
-        val fallback = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(item.nombre)})")).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+    try { context.startActivity(intent) }
+    catch (_: Exception) {
+        val fallback = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(item.nombre)})")).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         try { context.startActivity(fallback) }
         catch (_: Exception) { Toast.makeText(context, "No se encontró una aplicación de mapas", Toast.LENGTH_SHORT).show() }
     }
 }
 
-/** Mapa a pantalla completa. Tocar una parada abre directamente Google Maps para navegar hacia ella. */
+/** Mapa a pantalla completa con puntos de ruta y ubicación GPS actual del gestor. */
 @Composable
 fun RutaIAMapaFullScreen(items: List<RutaIAEntity>, onCerrar: () -> Unit, onMarcadorClick: (RutaIAEntity) -> Unit) {
     val context = LocalContext.current
     val puntos = remember(items) { items.filter { it.lat != null && it.lng != null } }
+    val tienePermisoUbicacion = remember {
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
     val cdmx = LatLng(19.36, -99.13)
     val cameraPositionState = rememberCameraPositionState {
         val primero = puntos.firstOrNull()
@@ -83,9 +89,18 @@ fun RutaIAMapaFullScreen(items: List<RutaIAEntity>, onCerrar: () -> Unit, onMarc
             if (primero != null) LatLng(primero.lat!!, primero.lng!!) else cdmx, 14f
         )
     }
+    val mapProperties = remember(tienePermisoUbicacion) { MapProperties(isMyLocationEnabled = tienePermisoUbicacion) }
+    val mapUiSettings = remember(tienePermisoUbicacion) {
+        MapUiSettings(myLocationButtonEnabled = tienePermisoUbicacion, zoomControlsEnabled = false)
+    }
 
     Box(Modifier.fillMaxSize()) {
-        GoogleMap(modifier = Modifier.fillMaxSize(), cameraPositionState = cameraPositionState) {
+        GoogleMap(
+            modifier = Modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            properties = mapProperties,
+            uiSettings = mapUiSettings
+        ) {
             puntos.forEach { item ->
                 val posicion = items.indexOf(item) + 1
                 val visitado = item.estado.equals("Visitado", ignoreCase = true)
