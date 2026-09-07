@@ -41,7 +41,6 @@ import androidx.compose.material3.SmallTopAppBar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,18 +59,12 @@ import java.util.Date
 import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import javax.xml.XMLConstants
-import javax.xml.transform.stream.StreamResult
-import javax.xml.transform.stream.StreamSource
-import javax.xml.validation.SchemaFactory
-import kotlin.math.min
 
-/**
- * Pantalla independiente para construir una selección de registros de Matriz y exportarla.
- *
- * La foto no es la fuente de datos del Excel: sirve únicamente para obtener un texto de búsqueda.
- * El registro exportado siempre sale de MatrizEntity, evitando perder columnas por OCR.
- */
+private data class FotoPendiente(
+    val textoOcr: String,
+    val candidatos: List<MatrizEntity>
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
@@ -82,59 +75,80 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
     var textoBusqueda by remember { mutableStateOf("") }
     var seleccionados by remember { mutableStateOf<List<MatrizEntity>>(emptyList()) }
     var mostrandoResultados by remember { mutableStateOf(false) }
-    var buscandoPorFoto by remember { mutableStateOf(false) }
+    var procesandoFotos by remember { mutableStateOf(false) }
+    var progresoFotos by remember { mutableStateOf("") }
     var generandoExcel by remember { mutableStateOf(false) }
     var mostrarConfirmacionLimpiar by remember { mutableStateOf(false) }
+    var pendientesRevision by remember { mutableStateOf<List<FotoPendiente>>(emptyList()) }
 
     val resultados = remember(todosLosRegistros, textoBusqueda, seleccionados) {
-        val q = normalizarNombreParaExportacion(textoBusqueda)
-        if (q.isBlank()) {
-            emptyList()
-        } else {
-            todosLosRegistros
-                .asSequence()
-                .filter { registro ->
-                    val nombre = normalizarNombreParaExportacion(registro.nombre)
-                    val tt = normalizarNombreParaExportacion(registro.numTT)
-                    val cu = normalizarNombreParaExportacion(registro.folioP)
-                    nombre.contains(q) || tt.contains(q) || cu.contains(q)
-                }
-                .filterNot { candidato -> seleccionados.any { it.id == candidato.id } }
-                .take(30)
-                .toList()
-        }
+        buscarCoincidenciasExportacion(todosLosRegistros, textoBusqueda, seleccionados)
     }
 
-    val selectorFoto = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        buscandoPorFoto = true
+    val selectorFotos = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+
+        procesandoFotos = true
         scope.launch {
-            val nombreDetectado = extraerNombreDeImagen(context, uri)
-            buscandoPorFoto = false
-            if (nombreDetectado.isNullOrBlank()) {
-                Toast.makeText(
-                    context,
-                    "No se detectó un nombre. Puedes buscarlo manualmente.",
-                    Toast.LENGTH_LONG
-                ).show()
-            } else {
-                textoBusqueda = nombreDetectado
-                mostrandoResultados = true
+            var agregadosAutomaticamente = 0
+            var sinResultado = 0
+            val nuevosPendientes = mutableListOf<FotoPendiente>()
+
+            uris.forEachIndexed { index, uri ->
+                progresoFotos = "Procesando foto ${index + 1} de ${uris.size}…"
+                val nombreDetectado = extraerNombreDeImagen(context, uri)
+                if (nombreDetectado.isNullOrBlank()) {
+                    sinResultado++
+                } else {
+                    val candidatos = buscarCoincidenciasExportacion(
+                        todosLosRegistros,
+                        nombreDetectado,
+                        seleccionados
+                    )
+
+                    val nombreNormalizado = normalizarNombreParaExportacion(nombreDetectado)
+                    val coincidenciasExactas = candidatos.filter {
+                        normalizarNombreParaExportacion(it.nombre) == nombreNormalizado
+                    }
+
+                    if (coincidenciasExactas.size == 1) {
+                        val coincidenciaExacta = coincidenciasExactas.first()
+                        if (seleccionados.none { it.id == coincidenciaExacta.id }) {
+                            seleccionados = seleccionados + coincidenciaExacta
+                            agregadosAutomaticamente++
+                        }
+                    } else if (candidatos.isNotEmpty()) {
+                        nuevosPendientes += FotoPendiente(nombreDetectado, candidatos.take(10))
+                    } else {
+                        sinResultado++
+                    }
+                }
             }
+
+            pendientesRevision = pendientesRevision + nuevosPendientes
+            procesandoFotos = false
+            progresoFotos = ""
+
+            val mensaje = buildString {
+                append("Fotos procesadas: ${uris.size}. ")
+                append("Agregados automáticamente: $agregadosAutomaticamente.")
+                if (nuevosPendientes.isNotEmpty()) {
+                    append(" Para revisar: ${nuevosPendientes.size}.")
+                }
+                if (sinResultado > 0) {
+                    append(" Sin coincidencia: $sinResultado.")
+                }
+            }
+            Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
         }
     }
 
     Scaffold(
         topBar = {
             SmallTopAppBar(
-                title = { Text("Exportar Matriz") },
-                actions = {
-                    IconButton(onClick = { selectorFoto.launch("image/*") }) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "Buscar desde foto")
-                    }
-                }
+                title = { Text("Exportar Matriz") }
             )
         }
     ) { padding ->
@@ -168,7 +182,10 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     trailingIcon = {
                         if (textoBusqueda.isNotBlank()) {
-                            IconButton(onClick = { textoBusqueda = ""; mostrandoResultados = false }) {
+                            IconButton(onClick = {
+                                textoBusqueda = ""
+                                mostrandoResultados = false
+                            }) {
                                 Icon(Icons.Default.Close, contentDescription = "Limpiar")
                             }
                         }
@@ -176,21 +193,36 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                 )
                 Spacer(Modifier.width(6.dp))
                 IconButton(
-                    onClick = { selectorFoto.launch("image/*") },
-                    enabled = !buscandoPorFoto
+                    onClick = { selectorFotos.launch("image/*") },
+                    enabled = !procesandoFotos
                 ) {
-                    if (buscandoPorFoto) {
-                        CircularProgressIndicator(modifier = Modifier.width(20.dp), strokeWidth = 2.dp)
+                    if (procesandoFotos) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.width(20.dp),
+                            strokeWidth = 2.dp
+                        )
                     } else {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "Leer foto")
+                        Icon(
+                            Icons.Default.CameraAlt,
+                            contentDescription = "Agregar fotos"
+                        )
                     }
                 }
+            }
+
+            if (procesandoFotos && progresoFotos.isNotBlank()) {
+                Text(
+                    progresoFotos,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
 
             if (mostrandoResultados && textoBusqueda.isNotBlank()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
                     Column(Modifier.fillMaxWidth().padding(10.dp)) {
                         Text("Coincidencias", style = MaterialTheme.typography.titleSmall)
@@ -200,18 +232,25 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                         } else {
                             resultados.forEach { registro ->
                                 Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 5.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(Modifier.weight(1f)) {
-                                        Text(registro.nombre, style = MaterialTheme.typography.bodyLarge)
+                                        Text(
+                                            registro.nombre,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
                                         Text(
                                             "TT: ${registro.numTT}  ·  CU: ${registro.folioP.orEmpty()}",
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                     }
                                     IconButton(onClick = {
-                                        seleccionados = seleccionados + registro
+                                        if (seleccionados.none { it.id == registro.id }) {
+                                            seleccionados = seleccionados + registro
+                                        }
                                         textoBusqueda = ""
                                         mostrandoResultados = false
                                     }) {
@@ -220,6 +259,49 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                                 }
                                 Divider()
                             }
+                        }
+                    }
+                }
+            }
+
+            if (pendientesRevision.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                        Text(
+                            "Revisar fotos (${pendientesRevision.size})",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        pendientesRevision.forEachIndexed { index, pendiente ->
+                            Text(
+                                "OCR: ${pendiente.textoOcr}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            pendiente.candidatos.forEach { candidato ->
+                                TextButton(
+                                    onClick = {
+                                        if (seleccionados.none { it.id == candidato.id }) {
+                                            seleccionados = seleccionados + candidato
+                                        }
+                                        pendientesRevision = pendientesRevision.toMutableList().also {
+                                            it.removeAt(index)
+                                        }
+                                    }
+                                ) {
+                                    Text("${candidato.nombre}  ·  TT ${candidato.numTT}")
+                                }
+                            }
+                            Divider()
+                        }
+                        TextButton(
+                            onClick = { pendientesRevision = emptyList() }
+                        ) {
+                            Text("Cerrar revisiones")
                         }
                     }
                 }
@@ -252,7 +334,7 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                     Text("Aún no hay clientes seleccionados.")
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Puedes buscarlos manualmente o leer una foto.",
+                        "Puedes buscarlos manualmente o agregar una o varias fotos.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -265,11 +347,16 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                     items(seleccionados, key = { it.id }) { registro ->
                         Card(Modifier.fillMaxWidth()) {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(registro.nombre, style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        registro.nombre,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
                                     Text(
                                         "TT: ${registro.numTT}  ·  CU: ${registro.folioP.orEmpty()}",
                                         style = MaterialTheme.typography.bodySmall
@@ -278,7 +365,10 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                                 IconButton(onClick = {
                                     seleccionados = seleccionados.filterNot { it.id == registro.id }
                                 }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Quitar")
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Quitar"
+                                    )
                                 }
                             }
                         }
@@ -308,7 +398,10 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (generandoExcel) {
-                    CircularProgressIndicator(modifier = Modifier.width(20.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(
+                        modifier = Modifier.width(20.dp),
+                        strokeWidth = 2.dp
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text("Generando…")
                 } else {
@@ -325,22 +418,55 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
         AlertDialog(
             onDismissRequest = { mostrarConfirmacionLimpiar = false },
             title = { Text("Limpiar selección") },
-            text = { Text("Se quitarán todos los clientes acumulados. Los datos de Matriz no se modificarán.") },
+            text = {
+                Text(
+                    "Se quitarán todos los clientes acumulados. " +
+                        "Los datos de Matriz no se modificarán."
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     seleccionados = emptyList()
                     mostrarConfirmacionLimpiar = false
-                }) { Text("Limpiar") }
+                }) {
+                    Text("Limpiar")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { mostrarConfirmacionLimpiar = false }) { Text("Cancelar") }
+                TextButton(onClick = { mostrarConfirmacionLimpiar = false }) {
+                    Text("Cancelar")
+                }
             }
         )
     }
 }
 
+private fun buscarCoincidenciasExportacion(
+    registros: List<MatrizEntity>,
+    texto: String,
+    seleccionados: List<MatrizEntity>
+): List<MatrizEntity> {
+    val q = normalizarNombreParaExportacion(texto)
+    if (q.isBlank()) return emptyList()
+
+    return registros
+        .asSequence()
+        .filter { registro ->
+            val nombre = normalizarNombreParaExportacion(registro.nombre)
+            val tt = normalizarNombreParaExportacion(registro.numTT)
+            val cu = normalizarNombreParaExportacion(registro.folioP)
+            nombre.contains(q) || tt.contains(q) || cu.contains(q)
+        }
+        .filterNot { candidato -> seleccionados.any { it.id == candidato.id } }
+        .take(30)
+        .toList()
+}
+
 private fun normalizarNombreParaExportacion(valor: String?): String =
-    java.text.Normalizer.normalize(valor.orEmpty(), java.text.Normalizer.Form.NFD)
+    java.text.Normalizer.normalize(
+        valor.orEmpty(),
+        java.text.Normalizer.Form.NFD
+    )
         .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
         .uppercase(Locale.ROOT)
         .replace("Ñ", "N")
@@ -355,21 +481,27 @@ private fun abrirArchivoExcel(context: Context, archivo: File) {
         archivo
     )
     val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        setDataAndType(
+            uri,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     try {
         context.startActivity(Intent.createChooser(intent, "Abrir Excel"))
     } catch (_: Exception) {
-        Toast.makeText(context, "Excel generado: ${archivo.name}", Toast.LENGTH_LONG).show()
+        Toast.makeText(
+            context,
+            "Excel generado: ${archivo.name}",
+            Toast.LENGTH_LONG
+        ).show()
     }
 }
 
-/**
- * Genera un XLSX mínimo válido usando OOXML directamente, sin agregar una dependencia pesada.
- * Se incluyen todas las columnas reales de MatrizEntity que corresponden a la hoja Matriz.
- */
-private fun generarExcelMatriz(context: Context, registros: List<MatrizEntity>): File {
+private fun generarExcelMatriz(
+    context: Context,
+    registros: List<MatrizEntity>
+): File {
     val carpeta = File(context.cacheDir, "exportaciones").apply { mkdirs() }
     val nombre = "matriz_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.xlsx"
     val archivo = File(carpeta, nombre)
@@ -410,82 +542,89 @@ private fun generarExcelMatriz(context: Context, registros: List<MatrizEntity>):
             "Nombre", "Sem", "Req", "NumTT", "Ref1", "Ref2", "Obs", "Estado",
             "Ubicación", "Img", "Img2", "Fecha", "Id", "Hora", "Ruta", "CU"
         )
+
+        val relacionesImagenes = mutableListOf<Pair<String, String>>()
         val filas = buildString {
             append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
-            append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>")
+            append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheetData>")
             append(filaExcel(encabezados, 1))
+
             registros.forEachIndexed { index, registro ->
+                val fila = index + 2
                 val fecha = registro.fecha?.let {
                     SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it))
                 }.orEmpty()
-                append(
-                    filaExcel(
-                        listOf(
-                            registro.nombre,
-                            registro.semana,
-                            registro.requisito,
-                            registro.numTT,
-                            registro.ref1,
-                            registro.ref2,
-                            registro.observaciones.orEmpty(),
-                            registro.estado,
-                            registro.ubicacion.orEmpty(),
-                            registro.imagenUrl.orEmpty(),
-                            registro.imagenUrl2.orEmpty(),
-                            fecha,
-                            registro.id,
-                            registro.hora.orEmpty(),
-                            registro.ruta.orEmpty(),
-                            registro.folioP.orEmpty()
-                        ),
-                        index + 2
-                    )
+
+                val valores = listOf(
+                    registro.nombre,
+                    registro.semana,
+                    registro.requisito,
+                    registro.numTT,
+                    registro.ref1,
+                    registro.ref2,
+                    registro.observaciones.orEmpty(),
+                    registro.estado,
+                    registro.ubicacion.orEmpty(),
+                    if (registro.imagenUrl.isNullOrBlank()) "" else "Ver imagen",
+                    if (registro.imagenUrl2.isNullOrBlank()) "" else "Ver imagen",
+                    fecha,
+                    registro.id,
+                    registro.hora.orEmpty(),
+                    registro.ruta.orEmpty(),
+                    registro.folioP.orEmpty()
                 )
+
+                append(filaExcel(valores, fila))
+
+                registro.imagenUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                    relacionesImagenes += "J$fila" to url
+                }
+                registro.imagenUrl2?.takeIf { it.isNotBlank() }?.let { url ->
+                    relacionesImagenes += "K$fila" to url
+                }
             }
-            append("</sheetData></worksheet>")
+
+            append("</sheetData>")
+            if (relacionesImagenes.isNotEmpty()) {
+                append("<hyperlinks>")
+                relacionesImagenes.forEachIndexed { index, (celda, _) ->
+                    append("<hyperlink ref=\"$celda\" r:id=\"rId${index + 1}\" display=\"Ver imagen\"/>")
+                }
+                append("</hyperlinks>")
+            }
+            append("</worksheet>")
         }
+
         escribirEntrada(zip, "xl/worksheets/sheet1.xml", filas)
+
+        if (relacionesImagenes.isNotEmpty()) {
+            val relaciones = buildString {
+                append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
+                append("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">")
+                relacionesImagenes.forEachIndexed { index, (_, url) ->
+                    append("<Relationship Id=\"rId${index + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"${escaparXmlAtributo(url)}\" TargetMode=\"External\"/>")
+                }
+                append("</Relationships>")
+            }
+            escribirEntrada(zip, "xl/worksheets/_rels/sheet1.xml.rels", relaciones)
+        }
     }
 
     return archivo
 }
 
-private fun filaExcel(valores: List<String>, numeroFila: Int): String = buildString {
-    append("<row r=\"").append(numeroFila).append("\">")
-    valores.forEachIndexed { index, valor ->
-        val columna = nombreColumnaExcel(index)
-        append("<c r=\"").append(columna).append(numeroFila).append("\" t=\"inlineStr\"><is><t>")
-        append(escaparXml(valor))
-        append("</t></is></c>")
-    }
-    append("</row>")
-}
-
-private fun nombreColumnaExcel(indice: Int): String {
-    var n = indice + 1
-    val resultado = StringBuilder()
-    while (n > 0) {
-        val resto = (n - 1) % 26
-        resultado.insert(0, ('A'.code + resto).toChar())
-        n = (n - 1) / 26
-    }
-    return resultado.toString()
-}
-
-private fun escaparXml(valor: String): String = buildString {
-    valor.forEach { caracter ->
-        when (caracter) {
-            '&' -> append("&amp;")
-            '<' -> append("&lt;")
-            '>' -> append("&gt;")
-            '"' -> append("&quot;")
-            '\'' -> append("&apos;")
-            else -> {
-                if (caracter == '\t' || caracter == '\n' || caracter == '\r' || caracter.code >= 32) {
-                    append(caracter)
-                }
-            }
+private fun filaExcel(valores: List<String>, numeroFila: Int): String {
+    val columnas = listOf(
+        "A", "B", "C", "D", "E", "F", "G", "H",
+        "I", "J", "K", "L", "M", "N", "O", "P"
+    )
+    return buildString {
+        append("<row r=\"$numeroFila\">")
+        valores.forEachIndexed { index, valor ->
+            val referencia = "${columnas[index]}$numeroFila"
+            append("<c r=\"$referencia\" t=\"inlineStr\"><is><t>${escaparXml(valor)}</t></is></c>")
         }
+        append("</row>")
     }
 }
 
@@ -494,3 +633,13 @@ private fun escribirEntrada(zip: ZipOutputStream, nombre: String, contenido: Str
     zip.write(contenido.toByteArray(Charsets.UTF_8))
     zip.closeEntry()
 }
+
+private fun escaparXml(valor: String): String =
+    valor
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+
+private fun escaparXmlAtributo(valor: String): String = escaparXml(valor)
