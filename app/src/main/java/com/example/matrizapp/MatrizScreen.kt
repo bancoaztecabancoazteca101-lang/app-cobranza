@@ -20,6 +20,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private const val EXTRA_ABRIR_MATRIZ_ID = "com.example.matrizapp.EXTRA_ABRIR_MATRIZ_ID"
+
 @Composable
 fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (MatrizEntity) -> Boolean = { true }) {
     val context = LocalContext.current
@@ -29,6 +31,7 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
     var itemToView by remember { mutableStateOf<MatrizEntity?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<MatrizEntity?>(null) }
+    var autoOpenHandled by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val items = remember(allItems, searchQuery, filtro) {
@@ -39,6 +42,22 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
             }
         }
     }
+
+    LaunchedEffect(allItems) {
+        if (!autoOpenHandled) {
+            val requestedId = (context as? android.app.Activity)?.intent?.getStringExtra(EXTRA_ABRIR_MATRIZ_ID)
+            if (!requestedId.isNullOrBlank()) {
+                val requestedItem = allItems.firstOrNull { it.id == requestedId }
+                if (requestedItem != null) {
+                    itemToView = requestedItem
+                    autoOpenHandled = true
+                }
+            } else {
+                autoOpenHandled = true
+            }
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Column {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -176,62 +195,4 @@ fun MatrizDetailDialog(item: MatrizEntity, driveHelper: DriveHelper, onDismiss: 
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
     )
     if (showPaymentChannels) PaymentChannelsDialog(customerName = item.nombre, ubicacion = item.ubicacion, onDismiss = { showPaymentChannels = false })
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MatrizItemCard(
-    item: MatrizEntity,
-    driveHelper: DriveHelper,
-    onCardClick: () -> Unit,
-    onDeleteClick: () -> Unit = {},
-    contiene: String? = null,
-    capitales: String? = null,
-    resaltarPagado: Boolean = false,
-    onEditClick: (() -> Unit)? = null
-) {
-    val pagado = resaltarPagado && item.estado.equals("Pagado", ignoreCase = true)
-    Card(
-        onClick = onCardClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (pagado) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-            PortadaThumbnail(item.imagenUrl, driveHelper)
-            Column(Modifier.weight(1f)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                    Text(item.nombre, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        StatusBadge(item.estado)
-                        IconButton(onClick = onDeleteClick, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Delete, contentDescription = "Eliminar registro", tint = Color.Gray)
-                        }
-                        if (onEditClick != null) {
-                            IconButton(onClick = onEditClick, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Default.Edit, contentDescription = "Editar registro")
-                            }
-                        }
-                    }
-                }
-                if (!item.folioP.isNullOrBlank()) Text("CU: ${item.folioP}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                ColoniaLabel(item.ubicacion)
-                if (!contiene.isNullOrBlank() || !capitales.isNullOrBlank()) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (!contiene.isNullOrBlank()) Text("Contiene: ${formatearMontoMatriz(contiene)}", style = MaterialTheme.typography.bodySmall)
-                        if (!capitales.isNullOrBlank()) Text("Capitales: ${formatearMontoMatriz(capitales)}", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    ContactActionsRow(numTT = item.numTT, ref1 = item.ref1, ubicacion = item.ubicacion)
-                    Spacer(Modifier.weight(1f))
-                    if (item.isDirty) Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color.Red, modifier = Modifier.size(18.dp))
-                }
-            }
-        }
-    }
 }
