@@ -14,6 +14,7 @@ data class RutaIAEntity(
     val coloniaCp: String? = null,
     val diasAtraso: Int? = null,
     val pagoRequerido: Double? = null,
+    val saldoAtraso: Double? = null,
     val lat: Double? = null,
     val lng: Double? = null,
     val orden: Int = 0,
@@ -171,9 +172,6 @@ suspend fun geocodificarDireccion(context: Context, direccion: String): Pair<Dou
     try {
         if (!android.location.Geocoder.isPresent()) return@withContext null
         val geocoder = android.location.Geocoder(context, java.util.Locale("es", "MX"))
-        // No forzar Ciudad de México: Ruta IA puede utilizarse en cualquier estado de México.
-        // Gemini ya entrega colonia/CP cuando están disponibles; el geocoder recibe la dirección
-        // completa y decide la coincidencia geográfica sin sesgarla artificialmente hacia CDMX.
         @Suppress("DEPRECATION")
         val resultados = geocoder.getFromLocationName(direccion, 1)
         val r = resultados?.firstOrNull() ?: return@withContext null
