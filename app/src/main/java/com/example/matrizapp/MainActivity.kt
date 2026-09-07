@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
                 var fotoBusquedaUri by remember { mutableStateOf<Uri?>(null) }
                 var isRefreshing by remember { mutableStateOf(false) }
                 var syncError by remember { mutableStateOf<String?>(null) }
+                var openMatrizClientId by remember { mutableStateOf<String?>(null) }
                 fun refreshData() {
                     if (isRefreshing) return
                     isRefreshing = true
@@ -197,7 +198,7 @@ class MainActivity : ComponentActivity() {
                         })
                     }) { innerPadding ->
                         NavHost(navController, Screen.Matriz.route, Modifier.padding(innerPadding)) {
-                            composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery) }
+                            composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery, openClientId = openMatrizClientId, onClientOpened = { openMatrizClientId = null }) }
                             composable(Screen.PaseCartera.route) { PaseCarteraScreen(paseVm, searchQuery) }
                             composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
                             composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, container.notificacionesHelper, searchQuery) }
@@ -209,7 +210,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Llamadas.route) { CallScreen(callVm) }
                             composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
                             composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
-                            composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm) }
+                            composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm, onAbrirMatriz = { id -> openMatrizClientId = id; navController.navigate(Screen.Matriz.route) { launchSingleTop = true } }) }
                             composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
                             composable(Screen.ExportarMatriz.route) { ExportarMatrizScreen(matrizVm) }
                         }
