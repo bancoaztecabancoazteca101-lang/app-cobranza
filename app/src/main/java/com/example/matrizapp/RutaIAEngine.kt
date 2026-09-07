@@ -1,5 +1,12 @@
 package com.example.matrizapp
 
+enum class EstrategiaRutaIA(val etiqueta: String) {
+    INTELIGENTE("Ruta inteligente"),
+    MAYOR_ATRASO("Mayor atraso"),
+    MAYOR_REQUERIDO("Mayor requerido / saldo"),
+    PRIORIDAD_COBRANZA("Prioridad de cobranza")
+}
+
 enum class ModoRutaIA(val etiqueta: String) {
     AUTOMATICA("Ruta automática"),
     MANUAL("Ruta manual")
@@ -113,7 +120,11 @@ fun construirRutaIAConfigurada(items: List<RutaIAEntity>, inicio: Pair<Double, D
 
     if (!filtros.usarCercaniaEncadenada) {
         val base = if (filtros.usarGpsInicio && inicio != null) {
-            pendientes.sortedWith(compareBy<RutaIAEntity> { distanciaRutaIA(inicio, it.lat!! to it.lng!!) }.thenComparator { a, b -> compararPrioridades(a, b, filtros) })
+            pendientes.sortedWith(Comparator { a, b ->
+                val da = distanciaRutaIA(inicio, a.lat!! to a.lng!!)
+                val db = distanciaRutaIA(inicio, b.lat!! to b.lng!!)
+                if (da != db) da.compareTo(db) else compararPrioridades(a, b, filtros)
+            })
         } else {
             pendientes.sortedWith(Comparator { a, b -> compararPrioridades(a, b, filtros) })
         }
