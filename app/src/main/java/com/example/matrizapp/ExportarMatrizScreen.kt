@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
@@ -144,15 +146,22 @@ fun ExportarMatrizScreen(viewModel: MatrizViewModel) {
                     Column(Modifier.fillMaxWidth().padding(10.dp)) {
                         Text("Revisar fotos (${pendientesRevision.size})", style = MaterialTheme.typography.titleSmall)
                         Spacer(Modifier.height(6.dp))
-                        pendientesRevision.forEachIndexed { index, pendiente ->
-                            Text("OCR: ${pendiente.textoOcr}", style = MaterialTheme.typography.bodySmall)
-                            pendiente.candidatos.forEach { candidato ->
-                                TextButton(onClick = {
-                                    if (seleccionados.none { it.id == candidato.id }) seleccionados = seleccionados + candidato
-                                    pendientesRevision = pendientesRevision.toMutableList().also { it.removeAt(index) }
-                                }) { Text("${candidato.nombre}  ·  TT ${candidato.numTT}") }
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 280.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            pendientesRevision.forEachIndexed { index, pendiente ->
+                                Text("OCR: ${pendiente.textoOcr}", style = MaterialTheme.typography.bodySmall)
+                                pendiente.candidatos.forEach { candidato ->
+                                    TextButton(onClick = {
+                                        if (seleccionados.none { it.id == candidato.id }) seleccionados = seleccionados + candidato
+                                        pendientesRevision = pendientesRevision.toMutableList().also { it.removeAt(index) }
+                                    }) { Text("${candidato.nombre}  ·  TT ${candidato.numTT}") }
+                                }
+                                Divider()
                             }
-                            Divider()
                         }
                         TextButton(onClick = { pendientesRevision = emptyList() }) { Text("Cerrar revisiones") }
                     }
