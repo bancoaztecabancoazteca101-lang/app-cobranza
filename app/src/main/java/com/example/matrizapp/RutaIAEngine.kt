@@ -80,6 +80,8 @@ fun parsearConfiguracionRutaIA(texto: String?): FiltrosRutaIA {
 }
 
 fun aplicarFiltrosRutaIA(items: List<RutaIAEntity>, filtros: FiltrosRutaIA = FiltrosRutaIA()): List<RutaIAEntity> = items.filter { item ->
+    // Un cliente ya visitado nunca es eliminado por los filtros.
+    if (item.estado.equals("Visitado", ignoreCase = true)) return@filter true
     val cumpleDias = !filtros.usarDiasAtraso || filtros.minimoDiasAtraso == null || (item.diasAtraso != null && item.diasAtraso >= filtros.minimoDiasAtraso)
     val cumpleSaldo = !filtros.usarSaldoAtraso || filtros.minimoSaldoAtraso == null || (item.saldoAtraso != null && item.saldoAtraso >= filtros.minimoSaldoAtraso)
     val cumpleVisitabilidad = !filtros.excluirNoVisitables || (item.direccion.isNotBlank() && item.lat != null && item.lng != null)
@@ -112,11 +114,15 @@ private fun compararPrioridades(a: RutaIAEntity, b: RutaIAEntity, filtros: Filtr
 
 fun construirRutaIAConfigurada(items: List<RutaIAEntity>, inicio: Pair<Double, Double>?, filtros: FiltrosRutaIA): List<RutaIAEntity> {
     val filtrados = aplicarFiltrosRutaIA(items, filtros)
-    if (filtros.modoRuta == ModoRutaIA.MANUAL) return filtrados.sortedBy { it.orden }
+    val visitados = filtrados.filter { it.estado.equals("Visitado", ignoreCase = true) }.sortedBy { it.orden }
+    val pendientesFiltrados = filtrados.filterNot { it.estado.equals("Visitado", ignoreCase = true) }
 
-    val pendientes = filtrados.filter { it.lat != null && it.lng != null }.toMutableList()
-    val sinUbicar = filtrados.filter { it.lat == null || it.lng == null }
-    if (pendientes.isEmpty()) return sinUbicar.sortedBy { it.orden }
+    // Los visitados siempre quedan al final, independientemente de filtros u orden automático/manual.
+    if (filtros.modoRuta == ModoRutaIA.MANUAL) return pendientesFiltrados.sortedBy { it.orden } + visitados
+
+    val pendientes = pendientesFiltrados.filter { it.lat != null && it.lng != null }.toMutableList()
+    val sinUbicar = pendientesFiltrados.filter { it.lat == null || it.lng == null }
+    if (pendientes.isEmpty()) return sinUbicar.sortedBy { it.orden } + visitados
 
     if (!filtros.usarCercaniaEncadenada) {
         val base = if (filtros.usarGpsInicio && inicio != null) {
@@ -128,7 +134,7 @@ fun construirRutaIAConfigurada(items: List<RutaIAEntity>, inicio: Pair<Double, D
         } else {
             pendientes.sortedWith(Comparator { a, b -> compararPrioridades(a, b, filtros) })
         }
-        return base + sinUbicar
+        return base + sinUbicar + visitados
     }
 
     val resultado = mutableListOf<RutaIAEntity>()
@@ -149,7 +155,7 @@ fun construirRutaIAConfigurada(items: List<RutaIAEntity>, inicio: Pair<Double, D
         pendientes.remove(siguiente)
         puntoActual = siguiente.lat!! to siguiente.lng!!
     }
-    return resultado + sinUbicar
+    return resultado + sinUbicar + visitados
 }
 
 fun construirRutaIAInteligente(items: List<RutaIAEntity>, inicio: Pair<Double, Double>?, estrategia: EstrategiaRutaIA, filtros: FiltrosRutaIA = FiltrosRutaIA(), direccion: DireccionOrdenRutaIA = DireccionOrdenRutaIA.ASC): List<RutaIAEntity> {
