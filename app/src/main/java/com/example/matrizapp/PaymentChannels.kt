@@ -26,15 +26,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
 import java.io.OutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 import java.nio.charset.Charset
 import java.util.Locale
 import java.util.UUID
@@ -45,18 +42,9 @@ private const val SEARCH_RADIUS_METERS = 5000
 private const val MAX_CHANNELS = 3
 private const val TICKET_WIDTH = 32
 private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-
-/** Varios espejos porque overpass-api.de (el público de siempre) se satura seguido y truena
- * por timeout aunque la señal del teléfono esté bien -- si el primero falla o tarda, se prueba
- * el siguiente antes de rendirse. Orden: el oficial primero, luego dos espejos comunitarios
- * conocidos por ser más estables en horas pico. */
-private val OVERPASS_URLS = listOf(
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-    "https://overpass.openstreetmap.ru/api/interpreter"
-)
-private const val PER_MIRROR_TIMEOUT_MS = 9000
-private const val TOTAL_SEARCH_TIMEOUT_MS = 28000
+/** Si el catálogo local nunca se ha sincronizado o ya tiene más de esto sin refrescar, se
+ * intenta una sincronización con la hoja antes de buscar (best-effort, no bloquea si falla). */
+private const val CATALOGO_MAX_EDAD_MS = 30L * 24 * 60 * 60 * 1000 // 30 días
 
 data class PaymentChannel(val name: String, val type: String, val categoria: CategoriaCanalPago, val address: String, val distanceKm: Double, val lat: Double, val lng: Double)
 data class PaymentChannelSearchResult(val channels: List<PaymentChannel>, val error: String? = null)
@@ -84,75 +72,38 @@ suspend fun resolverUbicacionCliente(context: Context, ubicacion: String?): Pair
     return geocodificarDireccion(context, ubicacion)
 }
 
-/** Le pone límite de TOTAL_SEARCH_TIMEOUT_MS a TODO el flujo (geocodificar + Overpass, probando
- * espejos en cascada) -- Geocoder.getFromLocationName es una llamada bloqueante sin timeout
- * propio, y en equipos MIUI con señal débil se puede quedar colgada para siempre en vez de
- * tronar, dejando el diálogo pegado en "Buscando...". Con withTimeoutOrNull, si no resuelve a
- * tiempo se cancela y se regresa un error en vez de quedarse cargando indefinidamente. */
-suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): PaymentChannelSearchResult =
-    withTimeoutOrNull(TOTAL_SEARCH_TIMEOUT_MS.toLong()) {
-        val coords = resolverUbicacionCliente(context, ubicacion)
-            ?: return@withTimeoutOrNull PaymentChannelSearchResult(emptyList(), "No se pudo ubicar el domicilio del cliente.")
-        withContext(Dispatchers.IO) {
-            var lastError: String? = null
-            for (url in OVERPASS_URLS) {
-                val attempt = consultarOverpass(url, coords)
-                if (!attempt.retryable) return@withContext attempt.result
-                lastError = attempt.result.error
-            }
-            PaymentChannelSearchResult(emptyList(), lastError ?: "No fue posible consultar lugares de pago (todos los servidores fallaron).")
-        }
-    } ?: PaymentChannelSearchResult(emptyList(), "La búsqueda tardó demasiado (posible señal débil). Cierra e inténtalo de nuevo.")
-
-/** Resultado de un intento contra un espejo de Overpass. retryable=true significa "esto fue
- * una falla de red/timeout/HTTP, vale la pena probar el siguiente espejo"; retryable=false
- * significa "el servidor sí contestó y esto ya es la respuesta final" (con lugares, o
- * legítimamente sin lugares cercanos -- no tiene caso preguntarle lo mismo a otro espejo). */
-private data class OverpassAttempt(val result: PaymentChannelSearchResult, val retryable: Boolean)
-
-private fun consultarOverpass(url: String, coords: Pair<Double, Double>): OverpassAttempt {
-    val query = """
-        [out:json][timeout:20];
-        (
-          nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["name"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
-          nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["brand"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
-        );
-        out center tags;
-    """.trimIndent()
-    return try {
-        val c = (URL(url).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = PER_MIRROR_TIMEOUT_MS; readTimeout = PER_MIRROR_TIMEOUT_MS; doOutput = true
-            setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-            setRequestProperty("User-Agent", "MatrizApp/1.0")
-        }
-        c.outputStream.use { it.write(("data=" + URLEncoder.encode(query, "UTF-8")).toByteArray(Charsets.UTF_8)) }
-        val code = c.responseCode
-        if (code !in 200..299) return OverpassAttempt(PaymentChannelSearchResult(emptyList(), "No se pudo consultar el catálogo de lugares de pago ($code)."), retryable = true)
-        val body = c.inputStream.bufferedReader().use { it.readText() }
-        c.disconnect()
-        OverpassAttempt(parseOverpassChannels(body, coords), retryable = false)
-    } catch (e: Exception) {
-        OverpassAttempt(PaymentChannelSearchResult(emptyList(), "No fue posible consultar lugares de pago: ${e.message ?: "error de red"}"), retryable = true)
+/** Busca en el catálogo LOCAL (tabla canal_pago_table, sincronizada desde la hoja "Catálogo
+ * Canales Pago") en vez de hablarle a Overpass en vivo -- así la búsqueda es instantánea y no
+ * depende de que la red del teléfono en campo deje salir a servidores externos (ver
+ * PLAN_TICKET_VISTA_PREVIA.md, incidente de timeout persistente en los 3 espejos de Overpass).
+ * El catálogo lo llena AppsScript/SincronizarCanalesPago.gs corriendo del lado de Google, y la
+ * app solo lo sincroniza vía Sheets API (que sí funciona en este teléfono, es lo mismo que usa
+ * Matriz/Pase de Cartera/etc). Si el catálogo local está vacío se intenta sincronizar una vez
+ * en el momento; si ya no está vacío pero es viejo, se dispara un refresh en segundo plano sin
+ * bloquear la búsqueda actual (mejora la próxima vez, no esta). */
+suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): PaymentChannelSearchResult {
+    val coords = resolverUbicacionCliente(context, ubicacion)
+        ?: return PaymentChannelSearchResult(emptyList(), "No se pudo ubicar el domicilio del cliente.")
+    val repository = (context.applicationContext as MainApplication).container.repository
+    var catalogo = withContext(Dispatchers.IO) { repository.catalogoCanalesPagoLocal() }
+    if (catalogo.isEmpty()) {
+        val sync = withTimeoutOrNull(15000) { withContext(Dispatchers.IO) { repository.sincronizarCatalogoCanalesPago() } }
+        if (sync?.isSuccess == true) catalogo = withContext(Dispatchers.IO) { repository.catalogoCanalesPagoLocal() }
+        else return PaymentChannelSearchResult(
+            emptyList(),
+            "El catálogo de lugares de pago está vacío y no se pudo sincronizar" +
+                (sync?.exceptionOrNull()?.message?.let { ": $it" } ?: " (sin conexión).")
+        )
+    } else if (withContext(Dispatchers.IO) { repository.catalogoCanalesPagoDesactualizado(CATALOGO_MAX_EDAD_MS) }) {
+        CoroutineScope(Dispatchers.IO).launch { runCatching { repository.sincronizarCatalogoCanalesPago() } }
     }
-}
-
-private fun parseOverpassChannels(json: String, origin: Pair<Double, Double>): PaymentChannelSearchResult {
-    val elements = JSONObject(json).optJSONArray("elements") ?: return PaymentChannelSearchResult(emptyList(), "La consulta no devolvió lugares de pago.")
-    val candidates = mutableListOf<PaymentChannel>()
-    for (i in 0 until elements.length()) {
-        val e = elements.optJSONObject(i) ?: continue
-        val tags = e.optJSONObject("tags") ?: continue
-        val name = tags.optString("name").trim()
-        val brand = tags.optString("brand").trim()
-        val raw = if (name.isNotBlank()) name else brand
-        val clasificacion = classifyChannel(raw, brand, tags.optString("operator")) ?: continue
-        val center = e.optJSONObject("center")
-        val lat = if (e.has("lat")) e.optDouble("lat", Double.NaN) else center?.optDouble("lat", Double.NaN) ?: Double.NaN
-        val lng = if (e.has("lon")) e.optDouble("lon", Double.NaN) else center?.optDouble("lon", Double.NaN) ?: Double.NaN
-        if (lat.isNaN() || lng.isNaN()) continue
-        candidates += PaymentChannel(raw, clasificacion.tipo, clasificacion.categoria, buildAddress(tags), distanciaKm(origin, lat to lng), lat, lng)
+    val candidatos = catalogo.mapNotNull { c ->
+        val clasificacion = classifyChannel(c.nombre, c.empresa ?: "", "") ?: return@mapNotNull null
+        val distancia = distanciaKm(coords, c.lat to c.lng)
+        if (distancia * 1000 > SEARCH_RADIUS_METERS * 3) return@mapNotNull null // margen amplio, el catálogo ya viene acotado a la zona
+        PaymentChannel(if (c.nombre.isNotBlank()) c.nombre else clasificacion.tipo, clasificacion.tipo, clasificacion.categoria, c.direccion?.takeIf { it.isNotBlank() } ?: "Dirección no disponible", distancia, c.lat, c.lng)
     }
-    val unique = candidates.sortedBy { it.distanceKm }
+    val unique = candidatos.sortedBy { it.distanceKm }
         .distinctBy { "${it.name.lowercase(Locale.getDefault())}|${"%.5f".format(Locale.US, it.lat)}|${"%.5f".format(Locale.US, it.lng)}" }
         .take(MAX_CHANNELS)
     return if (unique.isEmpty()) PaymentChannelSearchResult(emptyList(), "No se encontraron lugares de pago cercanos en el catálogo disponible.") else PaymentChannelSearchResult(unique)
@@ -214,10 +165,6 @@ private fun classifyChannel(name: String, brand: String, operator: String): Clas
         else -> null
     }
 }
-
-private fun buildAddress(tags: JSONObject): String = listOf(
-    tags.optString("addr:street"), tags.optString("addr:housenumber"), tags.optString("addr:suburb"), tags.optString("addr:postcode")
-).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Dirección no disponible" }
 
 @SuppressLint("MissingPermission")
 private fun pairedPrinters(context: Context): List<BluetoothDevice> {

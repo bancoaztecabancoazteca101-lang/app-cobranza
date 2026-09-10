@@ -145,3 +145,17 @@ interface RutaIAFiltroDao {
     @Query("SELECT * FROM ruta_ia_filtro_table WHERE id = 1") fun getFlow(): Flow<RutaIAFiltroEntity?>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun guardar(item: RutaIAFiltroEntity)
 }
+
+@Dao
+interface CanalPagoDao {
+    @Query("SELECT * FROM canal_pago_table")
+    suspend fun getAll(): List<CanalPagoEntity>
+    @Query("SELECT COUNT(*) FROM canal_pago_table")
+    suspend fun count(): Int
+    @Query("SELECT MIN(lastSync) FROM canal_pago_table")
+    suspend fun oldestSync(): Long?
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<CanalPagoEntity>)
+    @Query("DELETE FROM canal_pago_table")
+    suspend fun deleteAll()
+}

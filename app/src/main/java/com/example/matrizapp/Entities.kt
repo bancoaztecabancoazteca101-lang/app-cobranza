@@ -68,3 +68,22 @@ data class ControlEntity(
     val requerido: String,
     val lastSync: Long = System.currentTimeMillis()
 )
+
+/** Catálogo local de sucursales/lugares de pago (Elektra, Banco Azteca, OXXO, etc.) para la
+ * zona de trabajo -- se llena por sync desde la hoja "Catálogo Canales Pago" (poblada por un
+ * script de Apps Script que sí puede hablarle a Overpass sin el problema de red del teléfono
+ * en campo, ver AppsScript/SincronizarCanalesPago.gs). Guarda los datos crudos (nombre/empresa
+ * como posible brand/operator, dirección ya armada como texto) -- la clasificación
+ * (Elektra/OXXO/etc, Principal/Afiliado) se hace en PaymentChannels.kt con classifyChannel(),
+ * igual que antes con los datos que venían directo de Overpass, para no duplicar esa lógica. */
+@Entity(tableName = "canal_pago_table")
+data class CanalPagoEntity(
+    @PrimaryKey val id: String,
+    val nombre: String,
+    val empresa: String?,
+    val direccion: String?,
+    val lat: Double,
+    val lng: Double,
+    val lastSync: Long = System.currentTimeMillis()
+)
+
