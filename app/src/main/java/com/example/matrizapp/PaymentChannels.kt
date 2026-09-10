@@ -103,9 +103,13 @@ suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): Pay
         if (distancia * 1000 > SEARCH_RADIUS_METERS * 3) return@mapNotNull null // margen amplio, el catálogo ya viene acotado a la zona
         PaymentChannel(if (c.nombre.isNotBlank()) c.nombre else clasificacion.tipo, clasificacion.tipo, clasificacion.categoria, c.direccion?.takeIf { it.isNotBlank() } ?: "Dirección no disponible", distancia, c.lat, c.lng)
     }
-    val unique = candidatos.sortedBy { it.distanceKm }
+    val dedup = candidatos.sortedBy { it.distanceKm }
         .distinctBy { "${it.name.lowercase(Locale.getDefault())}|${"%.5f".format(Locale.US, it.lat)}|${"%.5f".format(Locale.US, it.lng)}" }
-        .take(MAX_CHANNELS)
+    // Prioridad pedida por Diego: el punto oficial de Grupo Salinas (Elektra/Italika/Banco
+    // Azteca) más cercano va primero SIEMPRE, aunque un OXXO/7-Eleven/etc esté más cerca -- el
+    // resto de los slots sí se llena por cercanía normal (puede incluir más PRINCIPAL o AFILIADO).
+    val masCercanoPrincipal = dedup.firstOrNull { it.categoria == CategoriaCanalPago.PRINCIPAL }
+    val unique = (listOfNotNull(masCercanoPrincipal) + dedup.filter { it !== masCercanoPrincipal }).take(MAX_CHANNELS)
     return if (unique.isEmpty()) PaymentChannelSearchResult(emptyList(), "No se encontraron lugares de pago cercanos en el catálogo disponible.") else PaymentChannelSearchResult(unique)
 }
 
