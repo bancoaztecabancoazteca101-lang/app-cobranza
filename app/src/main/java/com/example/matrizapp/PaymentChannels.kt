@@ -40,11 +40,23 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.*
 
-private const val OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+
 private const val SEARCH_RADIUS_METERS = 5000
 private const val MAX_CHANNELS = 3
 private const val TICKET_WIDTH = 32
 private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+/** Varios espejos porque overpass-api.de (el público de siempre) se satura seguido y truena
+ * por timeout aunque la señal del teléfono esté bien -- si el primero falla o tarda, se prueba
+ * el siguiente antes de rendirse. Orden: el oficial primero, luego dos espejos comunitarios
+ * conocidos por ser más estables en horas pico. */
+private val OVERPASS_URLS = listOf(
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter"
+)
+private const val PER_MIRROR_TIMEOUT_MS = 9000
+private const val TOTAL_SEARCH_TIMEOUT_MS = 28000
 
 data class PaymentChannel(val name: String, val type: String, val categoria: CategoriaCanalPago, val address: String, val distanceKm: Double, val lat: Double, val lng: Double)
 data class PaymentChannelSearchResult(val channels: List<PaymentChannel>, val error: String? = null)
@@ -72,41 +84,57 @@ suspend fun resolverUbicacionCliente(context: Context, ubicacion: String?): Pair
     return geocodificarDireccion(context, ubicacion)
 }
 
-/** Le pone límite de 15s a TODO el flujo (geocodificar + Overpass) -- Geocoder.getFromLocationName
- * es una llamada bloqueante sin timeout propio, y en equipos MIUI con señal débil se puede
- * quedar colgada para siempre en vez de tronar, dejando el diálogo pegado en "Buscando...".
- * Con withTimeoutOrNull, si no resuelve a tiempo se cancela y se regresa un error en vez de
- * quedarse cargando indefinidamente. */
+/** Le pone límite de TOTAL_SEARCH_TIMEOUT_MS a TODO el flujo (geocodificar + Overpass, probando
+ * espejos en cascada) -- Geocoder.getFromLocationName es una llamada bloqueante sin timeout
+ * propio, y en equipos MIUI con señal débil se puede quedar colgada para siempre en vez de
+ * tronar, dejando el diálogo pegado en "Buscando...". Con withTimeoutOrNull, si no resuelve a
+ * tiempo se cancela y se regresa un error en vez de quedarse cargando indefinidamente. */
 suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): PaymentChannelSearchResult =
-    withTimeoutOrNull(15000) {
+    withTimeoutOrNull(TOTAL_SEARCH_TIMEOUT_MS.toLong()) {
         val coords = resolverUbicacionCliente(context, ubicacion)
             ?: return@withTimeoutOrNull PaymentChannelSearchResult(emptyList(), "No se pudo ubicar el domicilio del cliente.")
         withContext(Dispatchers.IO) {
-            try {
-                val query = """
-                    [out:json][timeout:20];
-                    (
-                      nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["name"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
-                      nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["brand"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
-                    );
-                    out center tags;
-                """.trimIndent()
-                val c = (URL(OVERPASS_URL).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"; connectTimeout = 12000; readTimeout = 12000; doOutput = true
-                    setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                    setRequestProperty("User-Agent", "MatrizApp/1.0")
-                }
-                c.outputStream.use { it.write(("data=" + URLEncoder.encode(query, "UTF-8")).toByteArray(Charsets.UTF_8)) }
-                val code = c.responseCode
-                if (code !in 200..299) return@withContext PaymentChannelSearchResult(emptyList(), "No se pudo consultar el catálogo de lugares de pago ($code).")
-                val body = c.inputStream.bufferedReader().use { it.readText() }
-                c.disconnect()
-                parseOverpassChannels(body, coords)
-            } catch (e: Exception) {
-                PaymentChannelSearchResult(emptyList(), "No fue posible consultar lugares de pago: ${e.message ?: "error de red"}")
+            var lastError: String? = null
+            for (url in OVERPASS_URLS) {
+                val attempt = consultarOverpass(url, coords)
+                if (!attempt.retryable) return@withContext attempt.result
+                lastError = attempt.result.error
             }
+            PaymentChannelSearchResult(emptyList(), lastError ?: "No fue posible consultar lugares de pago (todos los servidores fallaron).")
         }
     } ?: PaymentChannelSearchResult(emptyList(), "La búsqueda tardó demasiado (posible señal débil). Cierra e inténtalo de nuevo.")
+
+/** Resultado de un intento contra un espejo de Overpass. retryable=true significa "esto fue
+ * una falla de red/timeout/HTTP, vale la pena probar el siguiente espejo"; retryable=false
+ * significa "el servidor sí contestó y esto ya es la respuesta final" (con lugares, o
+ * legítimamente sin lugares cercanos -- no tiene caso preguntarle lo mismo a otro espejo). */
+private data class OverpassAttempt(val result: PaymentChannelSearchResult, val retryable: Boolean)
+
+private fun consultarOverpass(url: String, coords: Pair<Double, Double>): OverpassAttempt {
+    val query = """
+        [out:json][timeout:20];
+        (
+          nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["name"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
+          nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["brand"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
+        );
+        out center tags;
+    """.trimIndent()
+    return try {
+        val c = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = PER_MIRROR_TIMEOUT_MS; readTimeout = PER_MIRROR_TIMEOUT_MS; doOutput = true
+            setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            setRequestProperty("User-Agent", "MatrizApp/1.0")
+        }
+        c.outputStream.use { it.write(("data=" + URLEncoder.encode(query, "UTF-8")).toByteArray(Charsets.UTF_8)) }
+        val code = c.responseCode
+        if (code !in 200..299) return OverpassAttempt(PaymentChannelSearchResult(emptyList(), "No se pudo consultar el catálogo de lugares de pago ($code)."), retryable = true)
+        val body = c.inputStream.bufferedReader().use { it.readText() }
+        c.disconnect()
+        OverpassAttempt(parseOverpassChannels(body, coords), retryable = false)
+    } catch (e: Exception) {
+        OverpassAttempt(PaymentChannelSearchResult(emptyList(), "No fue posible consultar lugares de pago: ${e.message ?: "error de red"}"), retryable = true)
+    }
+}
 
 private fun parseOverpassChannels(json: String, origin: Pair<Double, Double>): PaymentChannelSearchResult {
     val elements = JSONObject(json).optJSONArray("elements") ?: return PaymentChannelSearchResult(emptyList(), "La consulta no devolvió lugares de pago.")
