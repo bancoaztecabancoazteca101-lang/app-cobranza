@@ -9,9 +9,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Refresh
@@ -20,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
@@ -126,6 +130,41 @@ private fun parseOverpassChannels(json: String, origin: Pair<Double, Double>): P
     return if (unique.isEmpty()) PaymentChannelSearchResult(emptyList(), "No se encontraron lugares de pago cercanos en el catálogo disponible.") else PaymentChannelSearchResult(unique)
 }
 
+/** Texto plano equivalente a lo que sendTicket() manda a la impresora (mismos saltos de línea,
+ * mismo wrapText, mismo orden), pero sin comandos ESC/POS ni QR real -- sirve para que Diego
+ * vea cómo va a quedar el ticket sin necesidad de tener la impresora conectada. Si se cambia el
+ * formato en sendTicket(), hay que reflejarlo aquí también (ver PLAN_TICKET_VISTA_PREVIA.md). */
+fun buildTicketPreviewText(customerName: String, channels: List<PaymentChannel>): String {
+    val sb = StringBuilder()
+    sb.append(customerName).append("\n\n")
+    sb.append("Ahora además puedes\npagar tu crédito Elektra\n")
+    sb.append("muy cerca de tu domicilio:\n\n")
+    channels.forEachIndexed { i, ch ->
+        sb.append(ch.name.take(TICKET_WIDTH)).append("\n")
+        sb.append(ch.categoria.etiqueta).append("\n")
+        sb.append("Distancia: ").append("%.2f".format(Locale.US, ch.distanceKm)).append(" KM\n")
+        sb.append(wrapTextPreview(ch.address, TICKET_WIDTH)).append("\n")
+        if (i != channels.lastIndex) sb.append("--------------------------------\n")
+    }
+    sb.append("\n¿Dónde puedo hacer mis pagos?\n\n")
+    sb.append("[código QR: elektra.mx/buscador-de-tiendas]\n")
+    return sb.toString()
+}
+
+/** Copia de ThermalPrinterManager.wrapText() -- se duplica a propósito porque esa es privada
+ * dentro de la clase que habla con el socket Bluetooth, y la vista previa no debe depender de
+ * esa clase (no necesita permisos de Bluetooth para mostrarse). */
+private fun wrapTextPreview(text: String, width: Int): String {
+    if (text.length <= width) return "$text\n"
+    val lines = mutableListOf<String>(); var line = ""
+    for (word in text.split(" ")) {
+        if (line.isNotEmpty() && line.length + word.length + 1 > width) { lines += line; line = "" }
+        if (line.isNotEmpty()) line += " "; line += word
+    }
+    if (line.isNotEmpty()) lines += line
+    return lines.joinToString("\n") + "\n"
+}
+
 private data class ClasificacionCanal(val tipo: String, val categoria: CategoriaCanalPago)
 
 /** Clasificación por texto, sin buscar exactitud de sucursal -- solo qué cadena es y si es
@@ -172,6 +211,7 @@ fun PaymentChannelsDialog(customerName: String, ubicacion: String?, onDismiss: (
     var message by remember { mutableStateOf<String?>(null) }
     var printers by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
     var selectedPrinter by remember { mutableStateOf<BluetoothDevice?>(null) }
+    var showPreview by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || grants[Manifest.permission.BLUETOOTH_CONNECT] == true) printers = pairedPrinters(context)
@@ -214,6 +254,24 @@ fun PaymentChannelsDialog(customerName: String, ubicacion: String?, onDismiss: (
                         }
                     }
                     result?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    if (result?.channels?.isNotEmpty() == true) {
+                        TextButton(onClick = { showPreview = !showPreview }) {
+                            Text(if (showPreview) "Ocultar vista previa del ticket" else "Ver vista previa del ticket")
+                        }
+                        if (showPreview) {
+                            Text(
+                                buildTicketPreviewText(customerName, result?.channels.orEmpty()),
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 260.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(8.dp)
+                            )
+                        }
+                    }
                 }
                 Divider()
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
