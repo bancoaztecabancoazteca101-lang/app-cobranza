@@ -78,11 +78,17 @@ function register_(p) {
   const sh = sheet_(), values = sh.getDataRange().getValues(), now = new Date();
   for (let i=1;i<values.length;i++) {
     if (String(values[i][0]) === String(p.deviceId)) {
+      const enabled = values[i][3] === '' ? true : values[i][3];
+      const wasAdmin = values[i][7] === true || String(values[i][7]).toLowerCase() === 'true';
+      // Se recalcula (en vez de solo preservar) en cada registro, así un flag de admin que se
+      // haya perdido o no se haya guardado bien en el pasado se autocorrige la próxima vez que
+      // ese dispositivo abra la pantalla, sin necesitar limpieza manual.
+      const isAdmin = wasAdmin || /kingkong/i.test(String(p.name || ''));
       sh.getRange(i+1,2,1,6).setValues([[
-        String(p.name || 'Dispositivo'), String(p.fcmToken),
-        values[i][3] === '' ? true : values[i][3], now, 'android', String(p.appVersion || '')
+        String(p.name || 'Dispositivo'), String(p.fcmToken), enabled, now, 'android', String(p.appVersion || '')
       ]]);
-      return { ok:true, deviceId:String(p.deviceId), enabled:values[i][3] === '' ? true : Boolean(values[i][3]), isAdmin: values[i][7] === true || String(values[i][7]).toLowerCase() === 'true' };
+      sh.getRange(i+1,8).setValue(isAdmin);
+      return { ok:true, deviceId:String(p.deviceId), enabled:Boolean(enabled), isAdmin:isAdmin };
     }
   }
   const isAdmin = /kingkong/i.test(String(p.name || ''));
