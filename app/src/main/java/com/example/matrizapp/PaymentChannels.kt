@@ -114,14 +114,18 @@ suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): Pay
 }
 
 /** Texto plano equivalente a lo que sendTicket() manda a la impresora (mismos saltos de línea,
- * mismo wrapText, mismo orden), pero sin comandos ESC/POS ni QR real -- sirve para que Diego
- * vea cómo va a quedar el ticket sin necesidad de tener la impresora conectada. Si se cambia el
+ * mismo wrapText, mismo orden, mismo centrado del nombre/párrafo inicial), pero sin comandos
+ * ESC/POS ni QR real (los QR se muestran como placeholder de texto) -- sirve para que Diego vea
+ * cómo va a quedar el ticket sin necesidad de tener la impresora conectada. Si se cambia el
  * formato en sendTicket(), hay que reflejarlo aquí también (ver PLAN_TICKET_VISTA_PREVIA.md). */
 fun buildTicketPreviewText(customerName: String, channels: List<PaymentChannel>): String {
     val sb = StringBuilder()
-    sb.append(customerName).append("\n\n")
-    sb.append("Ahora además puedes\npagar tu crédito Elektra\n")
-    sb.append("muy cerca de tu domicilio:\n\n")
+    fun centrada(linea: String) = centerLine(linea, TICKET_WIDTH)
+    customerName.take(TICKET_WIDTH).let { sb.append(centrada(it)).append("\n\n") }
+    listOf("Ahora además puedes", "pagar tu crédito Elektra", "muy cerca de tu domicilio:").forEach {
+        sb.append(centrada(it)).append("\n")
+    }
+    sb.append("\n")
     channels.forEachIndexed { i, ch ->
         sb.append(ch.name.take(TICKET_WIDTH)).append("\n")
         sb.append(ch.categoria.etiqueta).append("\n")
@@ -129,9 +133,19 @@ fun buildTicketPreviewText(customerName: String, channels: List<PaymentChannel>)
         sb.append(wrapTextPreview(ch.address, TICKET_WIDTH)).append("\n")
         if (i != channels.lastIndex) sb.append("--------------------------------\n")
     }
-    sb.append("\n¿Dónde puedo hacer mis pagos?\n\n")
+    sb.append("\n").append(centrada("Descarga la App")).append("\n")
+    sb.append("[código QR: descarga de la app]\n\n")
+    sb.append(centrada("Canales de pago")).append("\n")
     sb.append("[código QR: elektra.mx/buscador-de-tiendas]\n")
     return sb.toString()
+}
+
+/** Simula el centrado que hace la impresora con ESC a 1 -- rellena con espacios a la izquierda
+ * para que el texto quede centrado dentro de TICKET_WIDTH columnas, igual que se vería en papel. */
+private fun centerLine(text: String, width: Int): String {
+    if (text.length >= width) return text
+    val relleno = (width - text.length) / 2
+    return " ".repeat(relleno) + text
 }
 
 /** Copia de ThermalPrinterManager.wrapText() -- se duplica a propósito porque esa es privada
@@ -313,8 +327,9 @@ private class ThermalPrinterManager(private val context: Context) {
             write(wrapText(ch.address, TICKET_WIDTH)); write("\n")
             if (i != channels.lastIndex) write("--------------------------------\n")
         }
-        cmd(0x1B,0x61,1); write("\n¿Dónde puedo hacer mis pagos?\n\n")
-        writeQr(out, "https://www.elektra.mx/buscador-de-tiendas")
+        cmd(0x1B,0x61,1); write("\n")
+        write("Descarga la App\n"); writeQr(out, "https://www.elektra.mx/app")
+        write("\nCanales de pago\n"); writeQr(out, "https://www.elektra.mx/buscador-de-tiendas")
         write("\n\n"); cmd(0x1B,0x64,5); cmd(0x1D,0x56,0)
     }
 
