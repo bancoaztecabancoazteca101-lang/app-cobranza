@@ -131,9 +131,21 @@ private fun NotificacionesDispositivosScreen() {
         if (isAdmin) {
             Spacer(Modifier.height(4.dp))
             Text(
-                "Como administrador puedes activar/desactivar o eliminar cualquier dispositivo (útil para quitar duplicados).",
+                "Como administrador puedes activar/desactivar o eliminar cualquier dispositivo.",
                 style = MaterialTheme.typography.bodySmall
             )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = {
+                scope.launch {
+                    manager.cleanupDuplicates()
+                        .onSuccess { removed ->
+                            val msg = if (removed > 0) "Se fusionaron $removed duplicados" else "No había duplicados"
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            refresh()
+                        }
+                        .onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                }
+            }) { Text("Fusionar dispositivos duplicados") }
         }
         Spacer(Modifier.height(8.dp))
 

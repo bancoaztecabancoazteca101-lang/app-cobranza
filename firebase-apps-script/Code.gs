@@ -27,13 +27,24 @@ function doPost(e) {
 function handle_(p) {
   if (p.apiKey !== CONFIG.API_KEY) return { ok: false, error: 'unauthorized' };
   const action = String(p.action || '').toLowerCase();
-  if (action === 'register') return register_(p);
+  if (action === 'register') return withLock_(() => register_(p));
   if (action === 'list') return list_();
-  if (action === 'toggle') return toggle_(p);
-  if (action === 'delete') return delete_(p);
+  if (action === 'toggle') return withLock_(() => toggle_(p));
+  if (action === 'delete') return withLock_(() => delete_(p));
+  if (action === 'cleanup') return withLock_(() => cleanup_());
   if (action === 'test') return test_(p);
   if (action === 'poll') return pollRetornos_();
   return { ok: false, error: 'unknown_action' };
+}
+
+// Serializa los escritores (register/toggle/delete/cleanup) para que dos llamadas casi
+// simultáneas no lean la hoja antes de que la primera termine de escribir su fila —
+// eso era lo que producía filas duplicadas con el mismo deviceId.
+function withLock_(fn) {
+  const lock = LockService.getScriptLock();
+  const acquired = lock.tryLock(10000);
+  if (!acquired) return { ok:false, error:'backend_ocupado_reintenta' };
+  try { return fn(); } finally { lock.releaseLock(); }
 }
 
 // Header de la hoja: deviceId | name | fcmToken | enabled | lastSeen | platform | appVersion | isAdmin
@@ -80,13 +91,21 @@ function register_(p) {
 }
 
 function list_() {
-  return { ok:true, devices:rows_().map(r => ({
-    deviceId:String(r[0]), name:String(r[1]),
-    enabled:r[3] === true || String(r[3]).toLowerCase() === 'true',
-    lastSeen:r[4] instanceof Date ? r[4].toISOString() : String(r[4] || ''),
-    platform:String(r[5] || 'android'), appVersion:String(r[6] || ''),
-    isAdmin:r[7] === true || String(r[7]).toLowerCase() === 'true'
-  })) };
+  const seen = {};
+  const devices = [];
+  rows_().forEach(r => {
+    const deviceId = String(r[0]);
+    if (!deviceId || seen[deviceId]) return; // red de seguridad extra contra deviceId duplicado
+    seen[deviceId] = true;
+    devices.push({
+      deviceId:deviceId, name:String(r[1]),
+      enabled:r[3] === true || String(r[3]).toLowerCase() === 'true',
+      lastSeen:r[4] instanceof Date ? r[4].toISOString() : String(r[4] || ''),
+      platform:String(r[5] || 'android'), appVersion:String(r[6] || ''),
+      isAdmin:r[7] === true || String(r[7]).toLowerCase() === 'true'
+    });
+  });
+  return { ok:true, devices:devices };
 }
 
 function toggle_(p) {
@@ -112,6 +131,35 @@ function delete_(p) {
     }
   }
   return { ok:false, error:'device_not_found' };
+}
+
+// Fusiona filas duplicadas con el mismo deviceId (dejando la de lastSeen más reciente,
+// conservando enabled/isAdmin=true si cualquiera de las copias lo tenía en true).
+function cleanup_() {
+  const sh = sheet_(), values = sh.getDataRange().getValues();
+  const bestByDeviceId = {};
+  for (let i = 1; i < values.length; i++) {
+    const id = String(values[i][0]);
+    if (!id) continue;
+    const row = values[i];
+    const enabled = row[3] === true || String(row[3]).toLowerCase() === 'true';
+    const isAdmin = row[7] === true || String(row[7]).toLowerCase() === 'true';
+    const lastSeen = row[4] instanceof Date ? row[4].getTime() : new Date(row[4] || 0).getTime();
+    const prev = bestByDeviceId[id];
+    if (!prev || lastSeen >= prev.lastSeen) {
+      bestByDeviceId[id] = {
+        row: [id, row[1], row[2], enabled || (prev ? prev.row[3] : false), row[4], row[5], row[6], isAdmin || (prev ? prev.row[7] : false)],
+        lastSeen: lastSeen
+      };
+    } else {
+      prev.row[3] = prev.row[3] || enabled;
+      prev.row[7] = prev.row[7] || isAdmin;
+    }
+  }
+  const removed = values.length - 1 - Object.keys(bestByDeviceId).length;
+  if (values.length > 1) sh.deleteRows(2, values.length - 1);
+  Object.values(bestByDeviceId).forEach(v => sh.appendRow(v.row));
+  return { ok:true, removedDuplicates: Math.max(removed, 0), remaining: Object.keys(bestByDeviceId).length };
 }
 
 function test_(p) {

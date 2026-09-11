@@ -56,7 +56,7 @@ class MultiDeviceNotificationManager(private val context: Context) {
 
     suspend fun listDevices(): Result<List<RemoteDevice>> = request("list").map { root ->
         val array = root.optJSONArray("devices") ?: JSONArray()
-        buildList {
+        val raw = buildList {
             for (i in 0 until array.length()) {
                 val o = array.getJSONObject(i)
                 add(RemoteDevice(
@@ -69,7 +69,13 @@ class MultiDeviceNotificationManager(private val context: Context) {
                 ))
             }
         }
+        // Red de seguridad: nunca dejar pasar deviceId repetidos hacia la UI, aunque el
+        // backend ya deduplica — un LazyColumn con llaves repetidas hace crashear la app.
+        raw.distinctBy { it.deviceId }
     }
+
+    /** Fusiona filas duplicadas en el backend (mismo deviceId). Solo debe llamarse desde el admin. */
+    suspend fun cleanupDuplicates(): Result<Int> = request("cleanup").map { it.optInt("removedDuplicates", 0) }
 
     suspend fun setRemoteEnabled(deviceId: String, enabled: Boolean): Result<Unit> = request("toggle", JSONObject().apply {
         put("deviceId", deviceId)
