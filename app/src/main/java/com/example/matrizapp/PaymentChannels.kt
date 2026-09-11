@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,8 +23,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -114,10 +117,10 @@ suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): Pay
 }
 
 /** Texto plano equivalente a lo que sendTicket() manda a la impresora (mismos saltos de línea,
- * mismo wrapText, mismo orden, mismo centrado del nombre/párrafo inicial), pero sin comandos
- * ESC/POS ni QR real (los QR se muestran como placeholder de texto) -- sirve para que Diego vea
- * cómo va a quedar el ticket sin necesidad de tener la impresora conectada. Si se cambia el
- * formato en sendTicket(), hay que reflejarlo aquí también (ver PLAN_TICKET_VISTA_PREVIA.md). */
+ * mismo wrapText, mismo orden, mismo centrado del nombre/párrafo inicial) hasta el final de la
+ * lista de sucursales -- sin la sección de QR, que en la vista previa se muestra como imagen
+ * real (ver generarQrBitmap) en vez de texto. Si se cambia el formato de esta parte en
+ * sendTicket(), hay que reflejarlo aquí también (ver PLAN_TICKET_VISTA_PREVIA.md). */
 fun buildTicketPreviewText(customerName: String, channels: List<PaymentChannel>): String {
     val sb = StringBuilder()
     fun centrada(linea: String) = centerLine(linea, TICKET_WIDTH)
@@ -133,12 +136,26 @@ fun buildTicketPreviewText(customerName: String, channels: List<PaymentChannel>)
         sb.append(wrapTextPreview(ch.address, TICKET_WIDTH)).append("\n")
         if (i != channels.lastIndex) sb.append("--------------------------------\n")
     }
-    sb.append("\n").append(centrada("Descarga la App")).append("\n")
-    sb.append("[código QR: descarga de la app]\n\n")
-    sb.append(centrada("Canales de pago")).append("\n")
-    sb.append("[código QR: elektra.mx/buscador-de-tiendas]\n")
     return sb.toString()
 }
+
+/** URLs de los QR del ticket -- deben ser EXACTAMENTE las mismas que usa sendTicket() (ver
+ * TICKET_QR_APP/TICKET_QR_CANALES), tanto para la vista previa como para lo que de verdad se
+ * imprime. No es grave que no resuelvan a una página real -- Diego pidió los QR por completitud
+ * visual del ticket, igual que trae el ticket de referencia, no que funcionen. */
+const val TICKET_QR_APP = "https://www.elektra.mx/app"
+const val TICKET_QR_CANALES = "https://www.elektra.mx/buscador-de-tiendas"
+
+/** Genera el bitmap del QR con ZXing para mostrarlo de verdad en la vista previa (antes solo
+ * había un texto "[código QR: ...]" y Diego pidió ver el código real antes de imprimir). */
+fun generarQrBitmap(data: String, sizePx: Int = 220): android.graphics.Bitmap? = try {
+    val matrix = com.google.zxing.qrcode.QRCodeWriter().encode(data, com.google.zxing.BarcodeFormat.QR_CODE, sizePx, sizePx)
+    val bmp = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.RGB_565)
+    for (x in 0 until sizePx) for (y in 0 until sizePx) {
+        bmp.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+    }
+    bmp
+} catch (_: Exception) { null }
 
 /** Simula el centrado que hace la impresora con ESC a 1 -- rellena con espacios a la izquierda
  * para que el texto quede centrado dentro de TICKET_WIDTH columnas, igual que se vería en papel. */
@@ -252,17 +269,27 @@ fun PaymentChannelsDialog(customerName: String, ubicacion: String?, onDismiss: (
                             Text(if (showPreview) "Ocultar vista previa del ticket" else "Ver vista previa del ticket")
                         }
                         if (showPreview) {
-                            Text(
-                                buildTicketPreviewText(customerName, result?.channels.orEmpty()),
-                                fontFamily = FontFamily.Monospace,
-                                style = MaterialTheme.typography.bodySmall,
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(max = 260.dp)
+                                    .heightIn(max = 420.dp)
                                     .verticalScroll(rememberScrollState())
                                     .background(MaterialTheme.colorScheme.surfaceVariant)
                                     .padding(8.dp)
-                            )
+                            ) {
+                                Text(
+                                    buildTicketPreviewText(customerName, result?.channels.orEmpty()),
+                                    fontFamily = FontFamily.Monospace,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                listOf("Descarga la App" to TICKET_QR_APP, "Canales de pago" to TICKET_QR_CANALES).forEach { (etiqueta, url) ->
+                                    Text(etiqueta, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().padding(top = 12.dp), textAlign = TextAlign.Center)
+                                    val qrBitmap = remember(url) { generarQrBitmap(url) }
+                                    qrBitmap?.let {
+                                        Image(it.asImageBitmap(), contentDescription = "Código QR: $etiqueta", modifier = Modifier.size(140.dp).align(Alignment.CenterHorizontally).padding(top = 4.dp))
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -328,8 +355,8 @@ private class ThermalPrinterManager(private val context: Context) {
             if (i != channels.lastIndex) write("--------------------------------\n")
         }
         cmd(0x1B,0x61,1); write("\n")
-        write("Descarga la App\n"); writeQr(out, "https://www.elektra.mx/app")
-        write("\nCanales de pago\n"); writeQr(out, "https://www.elektra.mx/buscador-de-tiendas")
+        write("Descarga la App\n"); writeQr(out, TICKET_QR_APP)
+        write("\nCanales de pago\n"); writeQr(out, TICKET_QR_CANALES)
         write("\n\n"); cmd(0x1B,0x64,5); cmd(0x1D,0x56,0)
     }
 
