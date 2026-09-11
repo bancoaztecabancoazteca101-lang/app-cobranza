@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -136,6 +135,7 @@ fun buildTicketPreviewText(customerName: String, channels: List<PaymentChannel>)
         sb.append(wrapTextPreview(ch.address, TICKET_WIDTH)).append("\n")
         if (i != channels.lastIndex) sb.append("--------------------------------\n")
     }
+    sb.append("\n").append(centrada("¿Dónde puedo hacer mis pagos?")).append("\n")
     return sb.toString()
 }
 
@@ -156,6 +156,64 @@ fun generarQrBitmap(data: String, sizePx: Int = 220): android.graphics.Bitmap? =
     }
     bmp
 } catch (_: Exception) { null }
+
+/** Arma UNA sola imagen con los 2 QR lado a lado + su etiqueta debajo de cada uno (igual que el
+ * ticket de referencia). Se necesita como una sola imagen porque el comando nativo de QR de la
+ * impresora (GS ( k) siempre imprime uno tras otro verticalmente, no permite ponerlos en la
+ * misma fila -- armando el layout nosotros mismos como bitmap y mandándolo con el comando
+ * genérico de imagen (GS v 0) sí se puede poner cualquier layout, incluido lado a lado. Se usa
+ * tanto para la vista previa (Image en Compose) como para lo que se manda a imprimir de verdad
+ * (bitmapToEscPosRaster) -- un solo lugar define el layout para que preview e impresión real no
+ * se desincronicen. anchoTotalPx=384 es el ancho típico de una impresora térmica de 58mm a
+ * 203dpi; si la impresora de Diego es de 80mm se puede subir a 576 más adelante. */
+fun renderQrDual(label1: String, url1: String, label2: String, url2: String, anchoTotalPx: Int = 384): android.graphics.Bitmap? {
+    val qrSize = anchoTotalPx / 2 - 24
+    val qr1 = generarQrBitmap(url1, qrSize) ?: return null
+    val qr2 = generarQrBitmap(url2, qrSize) ?: return null
+    val labelHeightPx = 36
+    val totalHeight = qrSize + labelHeightPx + 12
+    val bmp = android.graphics.Bitmap.createBitmap(anchoTotalPx, totalHeight, android.graphics.Bitmap.Config.RGB_565)
+    val canvas = android.graphics.Canvas(bmp)
+    canvas.drawColor(android.graphics.Color.WHITE)
+    val col1CenterX = anchoTotalPx / 4f
+    val col2CenterX = anchoTotalPx * 3f / 4f
+    canvas.drawBitmap(qr1, col1CenterX - qrSize / 2f, 0f, null)
+    canvas.drawBitmap(qr2, col2CenterX - qrSize / 2f, 0f, null)
+    val paint = android.graphics.Paint().apply {
+        color = android.graphics.Color.BLACK
+        textSize = 22f
+        textAlign = android.graphics.Paint.Align.CENTER
+        isAntiAlias = true
+    }
+    canvas.drawText(label1, col1CenterX, qrSize + 26f, paint)
+    canvas.drawText(label2, col2CenterX, qrSize + 26f, paint)
+    return bmp
+}
+
+/** Convierte un bitmap B/N al formato de imagen raster de ESC/POS (GS v 0) -- es el comando
+ * genérico de "imprime este bitmap" que soportan prácticamente todas las impresoras térmicas,
+ * a diferencia del comando nativo de QR que solo sabe imprimir un QR aislado. */
+private fun bitmapToEscPosRaster(bmp: android.graphics.Bitmap): ByteArray {
+    val width = bmp.width; val height = bmp.height
+    val bytesPerRow = (width + 7) / 8
+    val datos = ByteArray(bytesPerRow * height)
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            val p = bmp.getPixel(x, y)
+            val gris = (android.graphics.Color.red(p) + android.graphics.Color.green(p) + android.graphics.Color.blue(p)) / 3
+            if (gris < 128) {
+                val idx = y * bytesPerRow + x / 8
+                datos[idx] = (datos[idx].toInt() or (1 shl (7 - (x % 8)))).toByte()
+            }
+        }
+    }
+    val header = byteArrayOf(
+        0x1D, 0x76, 0x30, 0x00,
+        (bytesPerRow and 0xFF).toByte(), ((bytesPerRow shr 8) and 0xFF).toByte(),
+        (height and 0xFF).toByte(), ((height shr 8) and 0xFF).toByte()
+    )
+    return header + datos
+}
 
 /** Simula el centrado que hace la impresora con ESC a 1 -- rellena con espacios a la izquierda
  * para que el texto quede centrado dentro de TICKET_WIDTH columnas, igual que se vería en papel. */
@@ -282,12 +340,16 @@ fun PaymentChannelsDialog(customerName: String, ubicacion: String?, onDismiss: (
                                     fontFamily = FontFamily.Monospace,
                                     style = MaterialTheme.typography.bodySmall
                                 )
-                                listOf("Descarga la App" to TICKET_QR_APP, "Canales de pago" to TICKET_QR_CANALES).forEach { (etiqueta, url) ->
-                                    Text(etiqueta, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().padding(top = 12.dp), textAlign = TextAlign.Center)
-                                    val qrBitmap = remember(url) { generarQrBitmap(url) }
-                                    qrBitmap?.let {
-                                        Image(it.asImageBitmap(), contentDescription = "Código QR: $etiqueta", modifier = Modifier.size(140.dp).align(Alignment.CenterHorizontally).padding(top = 4.dp))
-                                    }
+                                // Se usa renderQrDual (la misma función que arma el bitmap que se manda a
+                                // imprimir) para que la vista previa muestre EXACTAMENTE el mismo layout
+                                // -- los 2 QR juntos en una fila, como pidió Diego -- y no se desincronice.
+                                val qrDual = remember(result) { renderQrDual("Descarga la App", TICKET_QR_APP, "Canales de pago", TICKET_QR_CANALES) }
+                                qrDual?.let {
+                                    Image(
+                                        it.asImageBitmap(),
+                                        contentDescription = "Códigos QR: Descarga la App / Canales de pago",
+                                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                    )
                                 }
                             }
                         }
@@ -354,9 +416,16 @@ private class ThermalPrinterManager(private val context: Context) {
             write(wrapText(ch.address, TICKET_WIDTH)); write("\n")
             if (i != channels.lastIndex) write("--------------------------------\n")
         }
-        cmd(0x1B,0x61,1); write("\n")
-        write("Descarga la App\n"); writeQr(out, TICKET_QR_APP)
-        write("\nCanales de pago\n"); writeQr(out, TICKET_QR_CANALES)
+        cmd(0x1B,0x61,1); write("\n¿Dónde puedo hacer mis pagos?\n\n")
+        val qrDual = renderQrDual("Descarga la App", TICKET_QR_APP, "Canales de pago", TICKET_QR_CANALES)
+        if (qrDual != null) {
+            out.write(bitmapToEscPosRaster(qrDual))
+        } else {
+            // Respaldo si por lo que sea no se pudo armar el bitmap combinado (ej. memoria):
+            // se imprimen uno tras otro, igual que antes.
+            write("Descarga la App\n"); writeQr(out, TICKET_QR_APP)
+            write("\nCanales de pago\n"); writeQr(out, TICKET_QR_CANALES)
+        }
         write("\n\n"); cmd(0x1B,0x64,5); cmd(0x1D,0x56,0)
     }
 
