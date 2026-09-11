@@ -9,9 +9,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Refresh
@@ -19,28 +23,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
 import java.io.OutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 import java.nio.charset.Charset
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.*
 
-private const val OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+
 private const val SEARCH_RADIUS_METERS = 5000
 private const val MAX_CHANNELS = 3
 private const val TICKET_WIDTH = 32
 private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+/** Si el catálogo local nunca se ha sincronizado o ya tiene más de esto sin refrescar, se
+ * intenta una sincronización con la hoja antes de buscar (best-effort, no bloquea si falla). */
+private const val CATALOGO_MAX_EDAD_MS = 30L * 24 * 60 * 60 * 1000 // 30 días
 
 data class PaymentChannel(val name: String, val type: String, val categoria: CategoriaCanalPago, val address: String, val distanceKm: Double, val lat: Double, val lng: Double)
 data class PaymentChannelSearchResult(val channels: List<PaymentChannel>, val error: String? = null)
@@ -68,62 +74,167 @@ suspend fun resolverUbicacionCliente(context: Context, ubicacion: String?): Pair
     return geocodificarDireccion(context, ubicacion)
 }
 
-/** Le pone límite de 15s a TODO el flujo (geocodificar + Overpass) -- Geocoder.getFromLocationName
- * es una llamada bloqueante sin timeout propio, y en equipos MIUI con señal débil se puede
- * quedar colgada para siempre en vez de tronar, dejando el diálogo pegado en "Buscando...".
- * Con withTimeoutOrNull, si no resuelve a tiempo se cancela y se regresa un error en vez de
- * quedarse cargando indefinidamente. */
-suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): PaymentChannelSearchResult =
-    withTimeoutOrNull(15000) {
-        val coords = resolverUbicacionCliente(context, ubicacion)
-            ?: return@withTimeoutOrNull PaymentChannelSearchResult(emptyList(), "No se pudo ubicar el domicilio del cliente.")
-        withContext(Dispatchers.IO) {
-            try {
-                val query = """
-                    [out:json][timeout:20];
-                    (
-                      nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["name"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
-                      nwr(around:$SEARCH_RADIUS_METERS,${coords.first},${coords.second})["brand"~"Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui",i];
-                    );
-                    out center tags;
-                """.trimIndent()
-                val c = (URL(OVERPASS_URL).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"; connectTimeout = 12000; readTimeout = 12000; doOutput = true
-                    setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                    setRequestProperty("User-Agent", "MatrizApp/1.0")
-                }
-                c.outputStream.use { it.write(("data=" + URLEncoder.encode(query, "UTF-8")).toByteArray(Charsets.UTF_8)) }
-                val code = c.responseCode
-                if (code !in 200..299) return@withContext PaymentChannelSearchResult(emptyList(), "No se pudo consultar el catálogo de lugares de pago ($code).")
-                val body = c.inputStream.bufferedReader().use { it.readText() }
-                c.disconnect()
-                parseOverpassChannels(body, coords)
-            } catch (e: Exception) {
-                PaymentChannelSearchResult(emptyList(), "No fue posible consultar lugares de pago: ${e.message ?: "error de red"}")
+/** Busca en el catálogo LOCAL (tabla canal_pago_table, sincronizada desde la hoja "Catálogo
+ * Canales Pago") en vez de hablarle a Overpass en vivo -- así la búsqueda es instantánea y no
+ * depende de que la red del teléfono en campo deje salir a servidores externos (ver
+ * PLAN_TICKET_VISTA_PREVIA.md, incidente de timeout persistente en los 3 espejos de Overpass).
+ * El catálogo lo llena AppsScript/SincronizarCanalesPago.gs corriendo del lado de Google, y la
+ * app solo lo sincroniza vía Sheets API (que sí funciona en este teléfono, es lo mismo que usa
+ * Matriz/Pase de Cartera/etc). Si el catálogo local está vacío se intenta sincronizar una vez
+ * en el momento; si ya no está vacío pero es viejo, se dispara un refresh en segundo plano sin
+ * bloquear la búsqueda actual (mejora la próxima vez, no esta). */
+suspend fun buscarCanalesPagoCercanos(context: Context, ubicacion: String?): PaymentChannelSearchResult {
+    val coords = resolverUbicacionCliente(context, ubicacion)
+        ?: return PaymentChannelSearchResult(emptyList(), "No se pudo ubicar el domicilio del cliente.")
+    val repository = (context.applicationContext as MainApplication).container.repository
+    var catalogo = withContext(Dispatchers.IO) { repository.catalogoCanalesPagoLocal() }
+    if (catalogo.isEmpty()) {
+        val sync = withTimeoutOrNull(15000) { withContext(Dispatchers.IO) { repository.sincronizarCatalogoCanalesPago() } }
+        if (sync?.isSuccess == true) catalogo = withContext(Dispatchers.IO) { repository.catalogoCanalesPagoLocal() }
+        else return PaymentChannelSearchResult(
+            emptyList(),
+            "El catálogo de lugares de pago está vacío y no se pudo sincronizar" +
+                (sync?.exceptionOrNull()?.message?.let { ": $it" } ?: " (sin conexión).")
+        )
+    } else if (withContext(Dispatchers.IO) { repository.catalogoCanalesPagoDesactualizado(CATALOGO_MAX_EDAD_MS) }) {
+        CoroutineScope(Dispatchers.IO).launch { runCatching { repository.sincronizarCatalogoCanalesPago() } }
+    }
+    val candidatos = catalogo.mapNotNull { c ->
+        val clasificacion = classifyChannel(c.nombre, c.empresa ?: "", "") ?: return@mapNotNull null
+        val distancia = distanciaKm(coords, c.lat to c.lng)
+        if (distancia * 1000 > SEARCH_RADIUS_METERS * 3) return@mapNotNull null // margen amplio, el catálogo ya viene acotado a la zona
+        PaymentChannel(if (c.nombre.isNotBlank()) c.nombre else clasificacion.tipo, clasificacion.tipo, clasificacion.categoria, c.direccion?.takeIf { it.isNotBlank() } ?: "Dirección no disponible", distancia, c.lat, c.lng)
+    }
+    val dedup = candidatos.sortedBy { it.distanceKm }
+        .distinctBy { "${it.name.lowercase(Locale.getDefault())}|${"%.5f".format(Locale.US, it.lat)}|${"%.5f".format(Locale.US, it.lng)}" }
+    // Prioridad pedida por Diego: el punto oficial de Grupo Salinas (Elektra/Italika/Banco
+    // Azteca) más cercano va primero SIEMPRE, aunque un OXXO/7-Eleven/etc esté más cerca -- el
+    // resto de los slots sí se llena por cercanía normal (puede incluir más PRINCIPAL o AFILIADO).
+    val masCercanoPrincipal = dedup.firstOrNull { it.categoria == CategoriaCanalPago.PRINCIPAL }
+    val unique = (listOfNotNull(masCercanoPrincipal) + dedup.filter { it !== masCercanoPrincipal }).take(MAX_CHANNELS)
+    return if (unique.isEmpty()) PaymentChannelSearchResult(emptyList(), "No se encontraron lugares de pago cercanos en el catálogo disponible.") else PaymentChannelSearchResult(unique)
+}
+
+/** Texto plano equivalente a lo que sendTicket() manda a la impresora (mismos saltos de línea,
+ * mismo wrapText, mismo orden, mismo centrado del nombre/párrafo inicial) hasta el final de la
+ * lista de sucursales -- sin la sección de QR, que en la vista previa se muestra como imagen
+ * real (ver generarQrBitmap) en vez de texto. Si se cambia el formato de esta parte en
+ * sendTicket(), hay que reflejarlo aquí también (ver PLAN_TICKET_VISTA_PREVIA.md). */
+fun buildTicketPreviewText(customerName: String, channels: List<PaymentChannel>): String {
+    val sb = StringBuilder()
+    fun centrada(linea: String) = centerLine(linea, TICKET_WIDTH)
+    customerName.take(TICKET_WIDTH).let { sb.append(centrada(it)).append("\n\n") }
+    listOf("Ahora además puedes", "pagar tu crédito Elektra", "muy cerca de tu domicilio:").forEach {
+        sb.append(centrada(it)).append("\n")
+    }
+    sb.append("\n")
+    channels.forEachIndexed { i, ch ->
+        sb.append(ch.name.take(TICKET_WIDTH)).append("\n")
+        sb.append(ch.categoria.etiqueta).append("\n")
+        sb.append("Distancia: ").append("%.2f".format(Locale.US, ch.distanceKm)).append(" KM\n")
+        sb.append(wrapTextPreview(ch.address, TICKET_WIDTH)).append("\n")
+        if (i != channels.lastIndex) sb.append("--------------------------------\n")
+    }
+    sb.append("\n").append(centrada("¿Dónde puedo hacer mis pagos?")).append("\n")
+    return sb.toString()
+}
+
+/** URLs de los QR del ticket -- deben ser EXACTAMENTE las mismas que usa sendTicket() (ver
+ * TICKET_QR_APP/TICKET_QR_CANALES), tanto para la vista previa como para lo que de verdad se
+ * imprime. No es grave que no resuelvan a una página real -- Diego pidió los QR por completitud
+ * visual del ticket, igual que trae el ticket de referencia, no que funcionen. */
+const val TICKET_QR_APP = "https://www.elektra.mx/app"
+const val TICKET_QR_CANALES = "https://www.elektra.mx/buscador-de-tiendas"
+
+/** Genera el bitmap del QR con ZXing para mostrarlo de verdad en la vista previa (antes solo
+ * había un texto "[código QR: ...]" y Diego pidió ver el código real antes de imprimir). */
+fun generarQrBitmap(data: String, sizePx: Int = 220): android.graphics.Bitmap? = try {
+    val matrix = com.google.zxing.qrcode.QRCodeWriter().encode(data, com.google.zxing.BarcodeFormat.QR_CODE, sizePx, sizePx)
+    val bmp = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.RGB_565)
+    for (x in 0 until sizePx) for (y in 0 until sizePx) {
+        bmp.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+    }
+    bmp
+} catch (_: Exception) { null }
+
+/** Arma UNA sola imagen con los 2 QR lado a lado + su etiqueta debajo de cada uno (igual que el
+ * ticket de referencia). Se necesita como una sola imagen porque el comando nativo de QR de la
+ * impresora (GS ( k) siempre imprime uno tras otro verticalmente, no permite ponerlos en la
+ * misma fila -- armando el layout nosotros mismos como bitmap y mandándolo con el comando
+ * genérico de imagen (GS v 0) sí se puede poner cualquier layout, incluido lado a lado. Se usa
+ * tanto para la vista previa (Image en Compose) como para lo que se manda a imprimir de verdad
+ * (bitmapToEscPosRaster) -- un solo lugar define el layout para que preview e impresión real no
+ * se desincronicen. anchoTotalPx=384 es el ancho típico de una impresora térmica de 58mm a
+ * 203dpi; si la impresora de Diego es de 80mm se puede subir a 576 más adelante. */
+fun renderQrDual(label1: String, url1: String, label2: String, url2: String, anchoTotalPx: Int = 384): android.graphics.Bitmap? {
+    val qrSize = anchoTotalPx / 2 - 24
+    val qr1 = generarQrBitmap(url1, qrSize) ?: return null
+    val qr2 = generarQrBitmap(url2, qrSize) ?: return null
+    val labelHeightPx = 36
+    val totalHeight = qrSize + labelHeightPx + 12
+    val bmp = android.graphics.Bitmap.createBitmap(anchoTotalPx, totalHeight, android.graphics.Bitmap.Config.RGB_565)
+    val canvas = android.graphics.Canvas(bmp)
+    canvas.drawColor(android.graphics.Color.WHITE)
+    val col1CenterX = anchoTotalPx / 4f
+    val col2CenterX = anchoTotalPx * 3f / 4f
+    canvas.drawBitmap(qr1, col1CenterX - qrSize / 2f, 0f, null)
+    canvas.drawBitmap(qr2, col2CenterX - qrSize / 2f, 0f, null)
+    val paint = android.graphics.Paint().apply {
+        color = android.graphics.Color.BLACK
+        textSize = 22f
+        textAlign = android.graphics.Paint.Align.CENTER
+        isAntiAlias = true
+    }
+    canvas.drawText(label1, col1CenterX, qrSize + 26f, paint)
+    canvas.drawText(label2, col2CenterX, qrSize + 26f, paint)
+    return bmp
+}
+
+/** Convierte un bitmap B/N al formato de imagen raster de ESC/POS (GS v 0) -- es el comando
+ * genérico de "imprime este bitmap" que soportan prácticamente todas las impresoras térmicas,
+ * a diferencia del comando nativo de QR que solo sabe imprimir un QR aislado. */
+private fun bitmapToEscPosRaster(bmp: android.graphics.Bitmap): ByteArray {
+    val width = bmp.width; val height = bmp.height
+    val bytesPerRow = (width + 7) / 8
+    val datos = ByteArray(bytesPerRow * height)
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            val p = bmp.getPixel(x, y)
+            val gris = (android.graphics.Color.red(p) + android.graphics.Color.green(p) + android.graphics.Color.blue(p)) / 3
+            if (gris < 128) {
+                val idx = y * bytesPerRow + x / 8
+                datos[idx] = (datos[idx].toInt() or (1 shl (7 - (x % 8)))).toByte()
             }
         }
-    } ?: PaymentChannelSearchResult(emptyList(), "La búsqueda tardó demasiado (posible señal débil). Cierra e inténtalo de nuevo.")
-
-private fun parseOverpassChannels(json: String, origin: Pair<Double, Double>): PaymentChannelSearchResult {
-    val elements = JSONObject(json).optJSONArray("elements") ?: return PaymentChannelSearchResult(emptyList(), "La consulta no devolvió lugares de pago.")
-    val candidates = mutableListOf<PaymentChannel>()
-    for (i in 0 until elements.length()) {
-        val e = elements.optJSONObject(i) ?: continue
-        val tags = e.optJSONObject("tags") ?: continue
-        val name = tags.optString("name").trim()
-        val brand = tags.optString("brand").trim()
-        val raw = if (name.isNotBlank()) name else brand
-        val clasificacion = classifyChannel(raw, brand, tags.optString("operator")) ?: continue
-        val center = e.optJSONObject("center")
-        val lat = if (e.has("lat")) e.optDouble("lat", Double.NaN) else center?.optDouble("lat", Double.NaN) ?: Double.NaN
-        val lng = if (e.has("lon")) e.optDouble("lon", Double.NaN) else center?.optDouble("lon", Double.NaN) ?: Double.NaN
-        if (lat.isNaN() || lng.isNaN()) continue
-        candidates += PaymentChannel(raw, clasificacion.tipo, clasificacion.categoria, buildAddress(tags), distanciaKm(origin, lat to lng), lat, lng)
     }
-    val unique = candidates.sortedBy { it.distanceKm }
-        .distinctBy { "${it.name.lowercase(Locale.getDefault())}|${"%.5f".format(Locale.US, it.lat)}|${"%.5f".format(Locale.US, it.lng)}" }
-        .take(MAX_CHANNELS)
-    return if (unique.isEmpty()) PaymentChannelSearchResult(emptyList(), "No se encontraron lugares de pago cercanos en el catálogo disponible.") else PaymentChannelSearchResult(unique)
+    val header = byteArrayOf(
+        0x1D, 0x76, 0x30, 0x00,
+        (bytesPerRow and 0xFF).toByte(), ((bytesPerRow shr 8) and 0xFF).toByte(),
+        (height and 0xFF).toByte(), ((height shr 8) and 0xFF).toByte()
+    )
+    return header + datos
+}
+
+/** Simula el centrado que hace la impresora con ESC a 1 -- rellena con espacios a la izquierda
+ * para que el texto quede centrado dentro de TICKET_WIDTH columnas, igual que se vería en papel. */
+private fun centerLine(text: String, width: Int): String {
+    if (text.length >= width) return text
+    val relleno = (width - text.length) / 2
+    return " ".repeat(relleno) + text
+}
+
+/** Copia de ThermalPrinterManager.wrapText() -- se duplica a propósito porque esa es privada
+ * dentro de la clase que habla con el socket Bluetooth, y la vista previa no debe depender de
+ * esa clase (no necesita permisos de Bluetooth para mostrarse). */
+private fun wrapTextPreview(text: String, width: Int): String {
+    if (text.length <= width) return "$text\n"
+    val lines = mutableListOf<String>(); var line = ""
+    for (word in text.split(" ")) {
+        if (line.isNotEmpty() && line.length + word.length + 1 > width) { lines += line; line = "" }
+        if (line.isNotEmpty()) line += " "; line += word
+    }
+    if (line.isNotEmpty()) lines += line
+    return lines.joinToString("\n") + "\n"
 }
 
 private data class ClasificacionCanal(val tipo: String, val categoria: CategoriaCanalPago)
@@ -148,10 +259,6 @@ private fun classifyChannel(name: String, brand: String, operator: String): Clas
     }
 }
 
-private fun buildAddress(tags: JSONObject): String = listOf(
-    tags.optString("addr:street"), tags.optString("addr:housenumber"), tags.optString("addr:suburb"), tags.optString("addr:postcode")
-).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Dirección no disponible" }
-
 @SuppressLint("MissingPermission")
 private fun pairedPrinters(context: Context): List<BluetoothDevice> {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return emptyList()
@@ -172,6 +279,7 @@ fun PaymentChannelsDialog(customerName: String, ubicacion: String?, onDismiss: (
     var message by remember { mutableStateOf<String?>(null) }
     var printers by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
     var selectedPrinter by remember { mutableStateOf<BluetoothDevice?>(null) }
+    var showPreview by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || grants[Manifest.permission.BLUETOOTH_CONNECT] == true) printers = pairedPrinters(context)
@@ -214,6 +322,38 @@ fun PaymentChannelsDialog(customerName: String, ubicacion: String?, onDismiss: (
                         }
                     }
                     result?.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    if (result?.channels?.isNotEmpty() == true) {
+                        TextButton(onClick = { showPreview = !showPreview }) {
+                            Text(if (showPreview) "Ocultar vista previa del ticket" else "Ver vista previa del ticket")
+                        }
+                        if (showPreview) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 420.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    buildTicketPreviewText(customerName, result?.channels.orEmpty()),
+                                    fontFamily = FontFamily.Monospace,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                // Se usa renderQrDual (la misma función que arma el bitmap que se manda a
+                                // imprimir) para que la vista previa muestre EXACTAMENTE el mismo layout
+                                // -- los 2 QR juntos en una fila, como pidió Diego -- y no se desincronice.
+                                val qrDual = remember(result) { renderQrDual("Descarga la App", TICKET_QR_APP, "Canales de pago", TICKET_QR_CANALES) }
+                                qrDual?.let {
+                                    Image(
+                                        it.asImageBitmap(),
+                                        contentDescription = "Códigos QR: Descarga la App / Canales de pago",
+                                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 Divider()
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -277,7 +417,15 @@ private class ThermalPrinterManager(private val context: Context) {
             if (i != channels.lastIndex) write("--------------------------------\n")
         }
         cmd(0x1B,0x61,1); write("\n¿Dónde puedo hacer mis pagos?\n\n")
-        writeQr(out, "https://www.elektra.mx/buscador-de-tiendas")
+        val qrDual = renderQrDual("Descarga la App", TICKET_QR_APP, "Canales de pago", TICKET_QR_CANALES)
+        if (qrDual != null) {
+            out.write(bitmapToEscPosRaster(qrDual))
+        } else {
+            // Respaldo si por lo que sea no se pudo armar el bitmap combinado (ej. memoria):
+            // se imprimen uno tras otro, igual que antes.
+            write("Descarga la App\n"); writeQr(out, TICKET_QR_APP)
+            write("\nCanales de pago\n"); writeQr(out, TICKET_QR_CANALES)
+        }
         write("\n\n"); cmd(0x1B,0x64,5); cmd(0x1D,0x56,0)
     }
 

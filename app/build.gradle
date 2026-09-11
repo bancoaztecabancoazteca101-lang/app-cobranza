@@ -90,6 +90,7 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3'
     implementation 'com.google.maps.android:maps-compose:2.11.4'
     implementation 'com.google.mlkit:text-recognition:16.0.0'
+    implementation 'com.google.zxing:core:3.5.3'
 
     // Firebase BoM: mantiene compatibles las versiones de los SDK de Firebase.
     implementation platform('com.google.firebase:firebase-bom:34.18.0')

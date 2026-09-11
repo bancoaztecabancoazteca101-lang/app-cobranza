@@ -17,7 +17,8 @@ class SheetsRepository(
     private val filtroDao: FiltroFechaDao,
     private val filtrarDao: FiltrarDao,
     private val controlDao: ControlDao,
-    private val rutaIADao: RutaIADao
+    private val rutaIADao: RutaIADao,
+    private val canalPagoDao: CanalPagoDao
 ) {
     suspend fun findRowIndexById(sheetName: String, id: String, idColumn: String): Int = withContext(Dispatchers.IO) {
         val range = "$sheetName!$idColumn:$idColumn"
@@ -193,6 +194,37 @@ class SheetsRepository(
     suspend fun markFiltrarAsClean(id: String) = filtrarDao.markAsClean(id)
     suspend fun getDirtyFiltroFechaItems() = filtroDao.getDirtyItems()
     suspend fun markFiltroFechaAsClean(id: String) = filtroDao.markAsClean(id)
+
+    /** Catálogo local de sucursales/lugares de pago (ver CanalPagoEntity) -- la hoja la llena un
+     * script de Apps Script (AppsScript/SincronizarCanalesPago.gs) que consulta Overpass desde
+     * el servidor de Google, no desde el teléfono, así que no depende de que la red del celular
+     * en campo deje llegar a esos dominios. Esta función solo LEE la hoja y reemplaza la copia
+     * local en Room -- no crea la hoja (eso lo hace el script de Apps Script la primera vez que
+     * corre) ni escribe nada de vuelta. */
+    suspend fun sincronizarCatalogoCanalesPago(): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val yaExiste = getRealSheetTitles().values.any { it.equals(Constants.SHEET_CANALES_PAGO, ignoreCase = true) }
+            if (!yaExiste) return@withContext Result.failure(IllegalStateException("La hoja '${Constants.SHEET_CANALES_PAGO}' todavía no existe -- falta correr el script de Apps Script al menos una vez."))
+            val rows = fetchRows(Constants.SHEET_CANALES_PAGO, lastCol = "F")
+            val items = rows.mapNotNull { row ->
+                val id = cell(row, 0) ?: return@mapNotNull null
+                val nombre = cell(row, 1) ?: return@mapNotNull null
+                val lat = cell(row, 4)?.toDoubleOrNull() ?: return@mapNotNull null
+                val lng = cell(row, 5)?.toDoubleOrNull() ?: return@mapNotNull null
+                CanalPagoEntity(id = id, nombre = nombre, empresa = cell(row, 2), direccion = cell(row, 3), lat = lat, lng = lng)
+            }
+            canalPagoDao.deleteAll()
+            canalPagoDao.insertAll(items)
+            Result.success(items.size)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun catalogoCanalesPagoLocal(): List<CanalPagoEntity> = canalPagoDao.getAll()
+    suspend fun catalogoCanalesPagoCount(): Int = canalPagoDao.count()
+    suspend fun catalogoCanalesPagoDesactualizado(maxEdadMs: Long): Boolean {
+        val masViejo = canalPagoDao.oldestSync() ?: return true
+        return (System.currentTimeMillis() - masViejo) > maxEdadMs
+    }
 
     private fun asegurarHojaRutaIAExiste() {
         val yaExiste = getRealSheetTitles().values.any { it.equals(Constants.SHEET_RUTA_IA, ignoreCase = true) }
