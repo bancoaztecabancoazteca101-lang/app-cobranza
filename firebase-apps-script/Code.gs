@@ -30,17 +30,29 @@ function handle_(p) {
   if (action === 'register') return register_(p);
   if (action === 'list') return list_();
   if (action === 'toggle') return toggle_(p);
+  if (action === 'delete') return delete_(p);
   if (action === 'test') return test_(p);
   if (action === 'poll') return pollRetornos_();
   return { ok: false, error: 'unknown_action' };
 }
 
+// Header de la hoja: deviceId | name | fcmToken | enabled | lastSeen | platform | appVersion | isAdmin
 function sheet_() {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
   let sh = ss.getSheetByName(CONFIG.DEVICES_SHEET);
   if (!sh) {
     sh = ss.insertSheet(CONFIG.DEVICES_SHEET);
-    sh.appendRow(['deviceId','name','fcmToken','enabled','lastSeen','platform','appVersion']);
+    sh.appendRow(['deviceId','name','fcmToken','enabled','lastSeen','platform','appVersion','isAdmin']);
+    return sh;
+  }
+  // Migración: hojas creadas antes de que existiera la columna isAdmin.
+  if (sh.getLastColumn() < 8) {
+    sh.getRange(1,8).setValue('isAdmin');
+    const values = sh.getDataRange().getValues();
+    for (let i=1;i<values.length;i++) {
+      const isAdmin = /kingkong/i.test(String(values[i][1] || ''));
+      sh.getRange(i+1,8).setValue(isAdmin);
+    }
   }
   return sh;
 }
@@ -59,11 +71,12 @@ function register_(p) {
         String(p.name || 'Dispositivo'), String(p.fcmToken),
         values[i][3] === '' ? true : values[i][3], now, 'android', String(p.appVersion || '')
       ]]);
-      return { ok:true, deviceId:String(p.deviceId), enabled:values[i][3] === '' ? true : Boolean(values[i][3]) };
+      return { ok:true, deviceId:String(p.deviceId), enabled:values[i][3] === '' ? true : Boolean(values[i][3]), isAdmin: values[i][7] === true || String(values[i][7]).toLowerCase() === 'true' };
     }
   }
-  sh.appendRow([String(p.deviceId),String(p.name || 'Dispositivo'),String(p.fcmToken),true,now,'android',String(p.appVersion || '')]);
-  return { ok:true, deviceId:String(p.deviceId), enabled:true };
+  const isAdmin = /kingkong/i.test(String(p.name || ''));
+  sh.appendRow([String(p.deviceId),String(p.name || 'Dispositivo'),String(p.fcmToken),true,now,'android',String(p.appVersion || ''),isAdmin]);
+  return { ok:true, deviceId:String(p.deviceId), enabled:true, isAdmin:isAdmin };
 }
 
 function list_() {
@@ -71,7 +84,8 @@ function list_() {
     deviceId:String(r[0]), name:String(r[1]),
     enabled:r[3] === true || String(r[3]).toLowerCase() === 'true',
     lastSeen:r[4] instanceof Date ? r[4].toISOString() : String(r[4] || ''),
-    platform:String(r[5] || 'android'), appVersion:String(r[6] || '')
+    platform:String(r[5] || 'android'), appVersion:String(r[6] || ''),
+    isAdmin:r[7] === true || String(r[7]).toLowerCase() === 'true'
   })) };
 }
 
@@ -86,6 +100,18 @@ function toggle_(p) {
     }
   }
   return {ok:false,error:'device_not_found'};
+}
+
+function delete_(p) {
+  if (!p.deviceId) return { ok:false, error:'deviceId_required' };
+  const sh=sheet_(), values=sh.getDataRange().getValues();
+  for (let i=1;i<values.length;i++) {
+    if (String(values[i][0]) === String(p.deviceId)) {
+      sh.deleteRow(i+1);
+      return { ok:true, deviceId:String(p.deviceId) };
+    }
+  }
+  return { ok:false, error:'device_not_found' };
 }
 
 function test_(p) {
@@ -192,7 +218,7 @@ function installMinuteTrigger() {
 function configurarBackend() {
   const sh=sheet_(); installMinuteTrigger();
   Logger.log('Hoja creada: '+sh.getName()); Logger.log('Activador configurado: pollRetornos_ cada minuto');
-  return {ok:true,sheetName:sh.getName(),trigger:'pollRetornos_ cada minuto',headers:sh.getRange(1,1,1,7).getValues()[0]};
+  return {ok:true,sheetName:sh.getName(),trigger:'pollRetornos_ cada minuto',headers:sh.getRange(1,1,1,8).getValues()[0]};
 }
 
 function json_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }

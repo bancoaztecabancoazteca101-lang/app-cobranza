@@ -21,6 +21,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -56,6 +57,8 @@ private fun NotificacionesDispositivosScreen() {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    val isAdmin = devices.find { it.deviceId == manager.installationId }?.isAdmin ?: false
+
     fun refresh() {
         scope.launch {
             loading = true
@@ -77,6 +80,12 @@ private fun NotificacionesDispositivosScreen() {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("Este dispositivo", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "ID: ${manager.installationId.takeLast(6)}" + if (isAdmin) " · Administrador" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = name,
@@ -90,7 +99,11 @@ private fun NotificacionesDispositivosScreen() {
                     Switch(checked = enabled, onCheckedChange = {
                         enabled = it
                         manager.setEnabled(it)
-                        scope.launch { manager.register() }
+                        scope.launch {
+                            manager.setRemoteEnabled(manager.installationId, it)
+                                .onFailure { err -> Toast.makeText(context, err.message, Toast.LENGTH_LONG).show() }
+                            refresh()
+                        }
                     })
                 }
                 Spacer(Modifier.height(8.dp))
@@ -115,29 +128,65 @@ private fun NotificacionesDispositivosScreen() {
 
         Spacer(Modifier.height(20.dp))
         Text("Dispositivos registrados", style = MaterialTheme.typography.titleMedium)
+        if (isAdmin) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Como administrador puedes activar/desactivar o eliminar cualquier dispositivo (útil para quitar duplicados).",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         Spacer(Modifier.height(8.dp))
 
         if (loading) CircularProgressIndicator()
         error?.let { Text("Backend: $it", color = MaterialTheme.colorScheme.error) }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(devices) { device ->
+            items(devices, key = { it.deviceId }) { device ->
+                val isSelf = device.deviceId == manager.installationId
+                val canToggle = isAdmin || isSelf
                 Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column(Modifier.weight(1f)) {
-                            Text(if (device.deviceId == manager.installationId) "${device.name} (este dispositivo)" else device.name)
-                            Text(if (device.enabled) "Recibe notificaciones" else "Desactivado", style = MaterialTheme.typography.bodySmall)
+                    Column(Modifier.padding(14.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    (if (isSelf) "${device.name} (este dispositivo)" else device.name) +
+                                        if (device.isAdmin) " · Admin" else ""
+                                )
+                                Text(
+                                    "ID: ${device.deviceId.takeLast(6)} · " +
+                                        (if (device.enabled) "Recibe notificaciones" else "Desactivado"),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                if (device.lastSeen.isNotBlank()) {
+                                    Text(
+                                        "Última conexión: ${device.lastSeen.take(16).replace("T", " ")}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                            if (canToggle) {
+                                Switch(
+                                    checked = device.enabled,
+                                    onCheckedChange = { value ->
+                                        scope.launch {
+                                            manager.setRemoteEnabled(device.deviceId, value)
+                                                .onSuccess { refresh() }
+                                                .onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                                        }
+                                    }
+                                )
+                            }
                         }
-                        Switch(
-                            checked = device.enabled,
-                            onCheckedChange = { value ->
+                        if (isAdmin && !isSelf) {
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(onClick = {
                                 scope.launch {
-                                    manager.setRemoteEnabled(device.deviceId, value)
+                                    manager.deleteDevice(device.deviceId)
                                         .onSuccess { refresh() }
                                         .onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
                                 }
-                            }
-                        )
+                            }) { Text("Eliminar dispositivo") }
+                        }
                     }
                 }
             }

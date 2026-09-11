@@ -16,12 +16,18 @@ import java.util.UUID
 class MultiDeviceNotificationManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("multi_device_notifications", Context.MODE_PRIVATE)
 
+    // ID estable por dispositivo físico (ANDROID_ID sobrevive reinstalaciones de la app con la
+    // misma firma, a diferencia de un UUID guardado en SharedPreferences que se pierde al
+    // reinstalar y generaba un registro duplicado cada vez).
     val installationId: String
         get() {
-            val current = prefs.getString("installation_id", null)
+            val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+            // "9774d56d682e549c" es el valor inválido clásico de emuladores/dispositivos viejos.
+            if (!androidId.isNullOrBlank() && androidId != "9774d56d682e549c") return androidId
+            val current = prefs.getString("installation_id_fallback", null)
             if (current != null) return current
             val created = UUID.randomUUID().toString()
-            prefs.edit().putString("installation_id", created).apply()
+            prefs.edit().putString("installation_id_fallback", created).apply()
             return created
         }
 
@@ -58,7 +64,8 @@ class MultiDeviceNotificationManager(private val context: Context) {
                     name = o.optString("name", "Dispositivo"),
                     enabled = o.optBoolean("enabled", true),
                     lastSeen = o.optString("lastSeen"),
-                    platform = o.optString("platform", "android")
+                    platform = o.optString("platform", "android"),
+                    isAdmin = o.optBoolean("isAdmin", false)
                 ))
             }
         }
@@ -67,6 +74,10 @@ class MultiDeviceNotificationManager(private val context: Context) {
     suspend fun setRemoteEnabled(deviceId: String, enabled: Boolean): Result<Unit> = request("toggle", JSONObject().apply {
         put("deviceId", deviceId)
         put("enabled", enabled)
+    }).map { }
+
+    suspend fun deleteDevice(deviceId: String): Result<Unit> = request("delete", JSONObject().apply {
+        put("deviceId", deviceId)
     }).map { }
 
     suspend fun sendTest(deviceId: String? = null): Result<Int> = request("test", JSONObject().apply {
@@ -107,6 +118,7 @@ class MultiDeviceNotificationManager(private val context: Context) {
         val name: String,
         val enabled: Boolean,
         val lastSeen: String,
-        val platform: String
+        val platform: String,
+        val isAdmin: Boolean = false
     )
 }
