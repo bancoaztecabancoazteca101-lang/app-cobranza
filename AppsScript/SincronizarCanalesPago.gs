@@ -57,7 +57,11 @@ var SEMILLA_MANUAL = [
   ['CAF-0010', 'Banco Azteca - Playa Tambuco 13', 'Banco Azteca', 'Playa Tambuco 13, Militar Marte, Iztacalco, CDMX', 19.380186, -99.134589],
   ['CAF-0011', 'Banco Azteca - Calz. de Tlalpan 1077', 'Banco Azteca', 'Calz. de Tlalpan 1077, Américas Unidas, Benito Juárez, CDMX', 19.379306, -99.140502],
   ['CAF-0012', 'OXXO Prado Churubusco MEX', 'OXXO', 'Cefero y Cruz del Sur 333, Prado Churubusco, Coyoacán, CDMX', 19.358182, -99.128297],
-  ['CAF-0013', '7-Eleven Calz. Taxqueña 1333', '7-Eleven', 'Calz. Taxqueña 1333, Coyoacán, CDMX', 19.341205, -99.139515]
+  ['CAF-0013', '7-Eleven Calz. Taxqueña 1333', '7-Eleven', 'Calz. Taxqueña 1333, Coyoacán, CDMX', 19.341205, -99.139515],
+  // Agregadas 12/09/2026 -- identificadas desde captura de Google Maps que Diego compartió.
+  ['CAF-0014', '7-Eleven Tasqueña esq. Refinería (Petrolera)', '7-Eleven', 'Calz. Taxqueña 1503, Petrolera, Coyoacán, CDMX', 19.3403115, -99.1338465],
+  ['CAF-0015', '7-Eleven Erasmo Castellanos Quinto (El Centinela)', '7-Eleven', 'Av. Erasmo Castellanos Quinto 131, El Centinela, Coyoacán, CDMX', 19.3342787, -99.1372158],
+  ['CAF-0016', '7-Eleven Santa Ana', '7-Eleven', 'Av. Sta. Ana S/N, Coapa, Avante, Coyoacán, CDMX', 19.3296132, -99.130406]
 ];
 
 function sincronizarCanalesPago() {
