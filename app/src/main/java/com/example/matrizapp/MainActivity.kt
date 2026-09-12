@@ -92,7 +92,6 @@ class MainActivity : ComponentActivity() {
                 var searchInput by remember { mutableStateOf("") }
                 var searchQuery by remember { mutableStateOf("") }
                 LaunchedEffect(searchInput) { delay(180); searchQuery = searchInput }
-                var searchActive by remember { mutableStateOf(false) }
                 var buscandoPorFoto by remember { mutableStateOf(false) }
                 var mostrarSelectorFotoBusqueda by remember { mutableStateOf(false) }
                 var fotoBusquedaUri by remember { mutableStateOf<Uri?>(null) }
@@ -129,14 +128,14 @@ class MainActivity : ComponentActivity() {
                     coroutineScope.launch {
                         val nombre = extraerNombreDeImagen(this@MainActivity, uri); buscandoPorFoto = false
                         if (nombre.isNullOrBlank()) Toast.makeText(this@MainActivity, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
-                        else { searchActive = true; searchInput = nombre; searchQuery = nombre }
+                        else { searchInput = nombre; searchQuery = nombre }
                     }
                 }
                 val ocrTakePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success -> if (success) procesarFotoBusqueda(fotoBusquedaUri) }
                 val ocrPickImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> procesarFotoBusqueda(uri) }
                 val vozBusquedaLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
                     val texto = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-                    if (!texto.isNullOrBlank()) { searchActive = true; searchInput = texto; searchQuery = texto }
+                    if (!texto.isNullOrBlank()) { searchInput = texto; searchQuery = texto }
                 }
                 fun iniciarBusquedaPorVoz() {
                     val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -164,39 +163,40 @@ class MainActivity : ComponentActivity() {
                 val lastSyncLabel = if (isRefreshing) "Sincronizando…" else "Lista"
                 val navBackStackEntryForDrawer by navController.currentBackStackEntryAsState()
                 val currentRouteForDrawer = navBackStackEntryForDrawer?.destination?.route ?: Screen.Matriz.route
-                LaunchedEffect(currentRouteForDrawer) { searchInput = ""; searchQuery = ""; searchActive = false }
+                LaunchedEffect(currentRouteForDrawer) { searchInput = ""; searchQuery = "" }
                 AppNavigationDrawer(currentRoute = currentRouteForDrawer, lastSyncTime = lastSyncLabel, isSyncing = isRefreshing,
                     onNavigate = { route -> navController.navigate(route) { popUpTo(navController.graph.findStartDestination().id) { saveState = true }; launchSingleTop = true; restoreState = true } },
                     onSyncClick = { refreshData() }, drawerState = drawerState) {
                     Scaffold(topBar = {
                         TopAppBar(title = {
-                            if (searchActive) {
-                                val focusRequester = remember { FocusRequester() }; LaunchedEffect(Unit) { focusRequester.requestFocus() }
-                                TextField(value = searchInput, onValueChange = { searchInput = it }, placeholder = { Text("Buscar en esta pantalla...") }, singleLine = true,
-                                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester), colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
-                            } else Text(
-                                screenTitleFor(currentRouteForDrawer),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            TextField(
+                                value = searchInput,
+                                onValueChange = { searchInput = it },
+                                placeholder = {
+                                    Text(
+                                        "Buscar en ${screenTitleFor(currentRouteForDrawer)}...",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent)
                             )
                         }, navigationIcon = {
-                            IconButton(onClick = { if (searchActive) { searchActive = false; searchInput = ""; searchQuery = "" } else coroutineScope.launch { drawerState.open() } }) {
-                                Icon(if (searchActive) Icons.Default.ArrowBack else Icons.Default.Menu, contentDescription = if (searchActive) "Cerrar búsqueda" else "Menú")
+                            IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menú")
                             }
                         }, actions = {
-                            if (searchActive) {
-                                if (buscandoPorFoto) CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp), strokeWidth = 2.dp)
-                                else { IconButton(onClick = { mostrarSelectorFotoBusqueda = true }) { Icon(Icons.Default.CameraAlt, contentDescription = "Buscar con foto") }; IconButton(onClick = { iniciarBusquedaPorVoz() }) { Icon(Icons.Default.Mic, contentDescription = "Buscar por voz") } }
-                                if (searchInput.isNotEmpty()) IconButton(onClick = { searchInput = ""; searchQuery = "" }) { Icon(Icons.Default.Close, contentDescription = "Limpiar búsqueda") }
-                            } else {
-                                IconButton(onClick = { searchActive = true }) { Icon(Icons.Default.Search, contentDescription = "Buscar") }
-                                when (currentRouteForDrawer) {
-                                    Screen.Matriz.route -> { val orden by matrizVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> matrizVm.setOrden(o, loc) }) }
-                                    Screen.FiltroFecha.route -> { val orden by filtroVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> filtroVm.setOrden(o, loc) }) }
-                                    Screen.Sem6.route -> { val orden by sem6Vm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> sem6Vm.setOrden(o, loc) }) }
-                                    Screen.Solicitud.route -> { val orden by solicitudVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> solicitudVm.setOrden(o, loc) }) }
-                                    else -> IconButton(onClick = { refreshData() }) { if (isRefreshing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Sync, contentDescription = "Sincronizar") }
-                                }
+                            if (searchInput.isNotEmpty()) IconButton(onClick = { searchInput = ""; searchQuery = "" }) { Icon(Icons.Default.Close, contentDescription = "Limpiar búsqueda") }
+                            if (buscandoPorFoto) CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 8.dp), strokeWidth = 2.dp)
+                            else { IconButton(onClick = { mostrarSelectorFotoBusqueda = true }) { Icon(Icons.Default.CameraAlt, contentDescription = "Buscar con foto") }; IconButton(onClick = { iniciarBusquedaPorVoz() }) { Icon(Icons.Default.Mic, contentDescription = "Buscar por voz") } }
+                            when (currentRouteForDrawer) {
+                                Screen.Matriz.route -> { val orden by matrizVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> matrizVm.setOrden(o, loc) }) }
+                                Screen.FiltroFecha.route -> { val orden by filtroVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> filtroVm.setOrden(o, loc) }) }
+                                Screen.Sem6.route -> { val orden by sem6Vm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> sem6Vm.setOrden(o, loc) }) }
+                                Screen.Solicitud.route -> { val orden by solicitudVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> solicitudVm.setOrden(o, loc) }) }
+                                else -> IconButton(onClick = { refreshData() }) { if (isRefreshing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Sync, contentDescription = "Sincronizar") }
                             }
                         })
                     }) { innerPadding ->

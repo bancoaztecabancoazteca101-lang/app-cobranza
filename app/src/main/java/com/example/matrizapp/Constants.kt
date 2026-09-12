@@ -93,9 +93,11 @@ fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
     return 2 * r * kotlin.math.asin(kotlin.math.sqrt(h))
 }
 
+private val ACENTOS_REGEX = Regex("\\p{Mn}+")
+
 fun quitarAcentos(texto: String): String {
     val normalizado = java.text.Normalizer.normalize(texto, java.text.Normalizer.Form.NFD)
-    return normalizado.replace(Regex("\\p{Mn}+"), "")
+    return normalizado.replace(ACENTOS_REGEX, "")
 }
 
 fun coincideBusqueda(texto: String?, query: String): Boolean {

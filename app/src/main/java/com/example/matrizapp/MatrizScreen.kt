@@ -15,7 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -31,11 +33,14 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
     var itemToDelete by remember { mutableStateOf<MatrizEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val items = remember(allItems, searchQuery, filtro) {
-        allItems.filter(filtro).filter { item ->
-            if (searchQuery.isBlank()) true else {
-                val q = searchQuery.trim()
-                coincideBusqueda(item.nombre, q) || coincideBusqueda(item.numTT, q) || coincideBusqueda(item.ref1, q) || coincideBusqueda(item.ref2, q) || coincideBusqueda(item.observaciones, q) || coincideBusqueda(item.estado, q)
+    var items by remember { mutableStateOf(allItems) }
+    LaunchedEffect(allItems, searchQuery, filtro) {
+        items = withContext(Dispatchers.Default) {
+            allItems.filter(filtro).filter { item ->
+                if (searchQuery.isBlank()) true else {
+                    val q = searchQuery.trim()
+                    coincideBusqueda(item.nombre, q) || coincideBusqueda(item.numTT, q) || coincideBusqueda(item.ref1, q) || coincideBusqueda(item.ref2, q) || coincideBusqueda(item.observaciones, q) || coincideBusqueda(item.estado, q)
+                }
             }
         }
     }
