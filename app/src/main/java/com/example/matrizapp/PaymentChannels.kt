@@ -251,6 +251,8 @@ private fun classifyChannel(name: String, brand: String, operator: String): Clas
         "elektra" in t -> ClasificacionCanal("Elektra", CategoriaCanalPago.PRINCIPAL)
         "italika" in t -> ClasificacionCanal("Italika", CategoriaCanalPago.PRINCIPAL)
         "neto" in t -> ClasificacionCanal("Tiendas Neto", CategoriaCanalPago.PRINCIPAL)
+        "azulemex" in t -> ClasificacionCanal("Azulemex", CategoriaCanalPago.PRINCIPAL)
+        "tiendas six" in t || "tienda six" in t -> ClasificacionCanal("Tiendas Six", CategoriaCanalPago.PRINCIPAL)
         "oxxo" in t -> ClasificacionCanal("OXXO", CategoriaCanalPago.AFILIADO)
         "7-eleven" in t || "seven eleven" in t -> ClasificacionCanal("7-Eleven", CategoriaCanalPago.AFILIADO)
         "soriana" in t -> ClasificacionCanal("Soriana", CategoriaCanalPago.AFILIADO)

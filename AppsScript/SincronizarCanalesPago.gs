@@ -38,7 +38,7 @@ var BBOX_CANALES = [19.315, -99.165, 19.385, -99.100];
 
 // Mismas cadenas que reconoce classifyChannel() en PaymentChannels.kt -- si se agrega o quita
 // una marca ahí, hay que reflejarlo aquí también para que el catálogo la incluya/excluya.
-var MARCAS_REGEX = 'Elektra|Banco Azteca|Italika|Neto|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui';
+var MARCAS_REGEX = 'Elektra|Banco Azteca|Italika|Neto|Azulemex|Tiendas Six|OXXO|7-Eleven|Seven Eleven|Soriana|Chedraui';
 
 // Semilla manual que Diego ya había investigado a mano (fuentes: mxfirmas.com, listado de
 // sucursales OXXO de Afirme) -- se conserva siempre, independientemente de lo que traiga
@@ -61,7 +61,12 @@ var SEMILLA_MANUAL = [
   // Agregadas 12/09/2026 -- identificadas desde captura de Google Maps que Diego compartió.
   ['CAF-0014', '7-Eleven Tasqueña esq. Refinería (Petrolera)', '7-Eleven', 'Calz. Taxqueña 1503, Petrolera, Coyoacán, CDMX', 19.3403115, -99.1338465],
   ['CAF-0015', '7-Eleven Erasmo Castellanos Quinto (El Centinela)', '7-Eleven', 'Av. Erasmo Castellanos Quinto 131, El Centinela, Coyoacán, CDMX', 19.3342787, -99.1372158],
-  ['CAF-0016', '7-Eleven Santa Ana', '7-Eleven', 'Av. Sta. Ana S/N, Coapa, Avante, Coyoacán, CDMX', 19.3296132, -99.130406]
+  ['CAF-0016', '7-Eleven Santa Ana', '7-Eleven', 'Av. Sta. Ana S/N, Coapa, Avante, Coyoacán, CDMX', 19.3296132, -99.130406],
+  // Agregadas 12/09/2026 -- segunda tanda de capturas de Diego (Banco Azteca, Elektra, Azulemex).
+  ['CAF-0017', 'Banco Azteca - Av. Canal de Apatlaco 91', 'Banco Azteca', 'Av. Canal de Apatlaco 91, Apatlaco, Iztapalapa, CDMX', 19.3820558, -99.1187479],
+  ['CAF-0018', 'Banco Azteca (dentro de 7-Eleven Petrolera Taxqueña)', 'Banco Azteca', 'Calz. Taxqueña 1503, Petrolera, Coyoacán, CDMX', 19.3403115, -99.1338465],
+  ['CAF-0019', 'Elektra - Calz. de Tlalpan 1077', 'Elektra', 'Calz. de Tlalpan 1077, Américas Unidas, Benito Juárez, CDMX', 19.379306, -99.140502],
+  ['CAF-0020', 'Azulemex Ermita Iztapalapa', 'Azulemex', 'Ermita Iztapalapa 201, Escuadrón 201, Iztapalapa, CDMX', 19.3568027, -99.1122403]
 ];
 
 function sincronizarCanalesPago() {
