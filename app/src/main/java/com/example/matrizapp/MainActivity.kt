@@ -174,7 +174,11 @@ class MainActivity : ComponentActivity() {
                                 val focusRequester = remember { FocusRequester() }; LaunchedEffect(Unit) { focusRequester.requestFocus() }
                                 TextField(value = searchInput, onValueChange = { searchInput = it }, placeholder = { Text("Buscar en esta pantalla...") }, singleLine = true,
                                     modifier = Modifier.fillMaxWidth().focusRequester(focusRequester), colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
-                            } else Text("")
+                            } else Text(
+                                screenTitleFor(currentRouteForDrawer),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }, navigationIcon = {
                             IconButton(onClick = { if (searchActive) { searchActive = false; searchInput = ""; searchQuery = "" } else coroutineScope.launch { drawerState.open() } }) {
                                 Icon(if (searchActive) Icons.Default.ArrowBack else Icons.Default.Menu, contentDescription = if (searchActive) "Cerrar búsqueda" else "Menú")
@@ -236,3 +240,11 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Diagnostico : Screen("diagnostico", "Diagnóstico", Icons.Default.BugReport)
     object ExportarMatriz : Screen("exportar_matriz", "Exportar Matriz", Icons.Default.FileDownload)
 }
+
+/** Nombre de la pantalla actual para mostrarlo tenue en la barra superior -- así siempre se ve
+ * en cuál hoja/pantalla estás (Matriz, Filtro Fecha, Pase, etc.), cosa que antes no se mostraba. */
+fun screenTitleFor(route: String): String = listOf(
+    Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.Filtrar,
+    Screen.Control, Screen.Ubi, Screen.Sem6, Screen.Sms, Screen.Llamadas, Screen.BloquesLlamada,
+    Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz
+).find { it.route == route }?.title ?: ""
