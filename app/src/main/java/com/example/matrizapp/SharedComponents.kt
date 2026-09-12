@@ -986,7 +986,7 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
                         evaluarCandidato(textoBloque, block.boundingBox, alturaPromedio)
                     }
                 }
-                if (cont.isActive) cont.resume(mejorLinea) {}
+                if (cont.isActive) cont.resume(mejorLinea?.uppercase()) {}
             }
             .addOnFailureListener { if (cont.isActive) cont.resume(null) {} }
     } catch (e: Exception) {

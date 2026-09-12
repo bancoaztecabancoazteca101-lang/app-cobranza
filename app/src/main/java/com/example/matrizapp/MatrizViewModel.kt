@@ -110,7 +110,7 @@ class MatrizViewModel(
     ) {
         viewModelScope.launch {
             matrizDao.updateRegistroCompleto(
-                id, nombre, semana, requisito, numTT, ref1, ref2,
+                id, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
                 observaciones, estado, ubicacion, fecha, hora, ruta, folioP
             )
             triggerSync()
@@ -141,7 +141,7 @@ class MatrizViewModel(
                 }
             }
             matrizDao.updateRegistroCompleto(
-                idFinal, nombre, semana, requisito, numTT, ref1, ref2,
+                idFinal, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
                 observaciones, estado, ubicacion, fecha, hora, ruta, folioP
             )
             triggerSync()
@@ -164,7 +164,7 @@ class MatrizViewModel(
     ) {
         val idFinal = id.trim().ifBlank { java.util.UUID.randomUUID().toString().replace("-", "").take(8) }
         val nuevo = MatrizEntity(
-            id = idFinal, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT,
+            id = idFinal, nombre = nombre.trim().uppercase(), semana = semana, requisito = requisito, numTT = numTT,
             ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado,
             ubicacion = ubicacion, imagenUrl = null, imagenUrl2 = null, fecha = fecha,
             hora = hora, ruta = ruta, folioP = folioP, isDirty = true
