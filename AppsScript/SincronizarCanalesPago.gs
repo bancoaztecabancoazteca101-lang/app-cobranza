@@ -48,7 +48,16 @@ var SEMILLA_MANUAL = [
   ['CAF-0002', 'OXXO La Viga MEX', 'OXXO', 'Atanacio G. Saravia 1102, Héroes de Churubusco, Iztapalapa, CDMX', 19.36196707, -99.12203605],
   ['CAF-0003', 'OXXO Cerro de la Estrella 277', 'OXXO', 'Cerro de la Estrella 277, CDMX', 19.34473, -99.133247],
   ['CAF-0004', '7-Eleven Avenida Cerro de la Venta 12', '7-Eleven', 'Av. Cerro de la Venta 12, Coyoacán, CDMX', 19.336879, -99.13211],
-  ['CAF-0005', '7 Eleven 801 Ciclistas', '7-Eleven', 'Calle Ciclistas 1768, Coyoacán, CDMX', 19.35148, -99.144653]
+  ['CAF-0005', '7 Eleven 801 Ciclistas', '7-Eleven', 'Calle Ciclistas 1768, Coyoacán, CDMX', 19.35148, -99.144653],
+  // Agregadas 12/09/2026 -- ubicaciones reales verificadas por Google Maps dentro de la zona.
+  ['CAF-0006', 'Banco Azteca - Av. Tláhuac 771', 'Banco Azteca', 'Av. Tláhuac 771, Fuego Nuevo, Iztapalapa, CDMX', 19.338239, -99.109107],
+  ['CAF-0007', 'Banco Azteca - Calz. de la Viga 1851', 'Banco Azteca', 'Calz. de la Viga 1851, Unidad Modelo, Iztapalapa, CDMX', 19.358111, -99.122168],
+  ['CAF-0008', 'Banco Azteca - Escuela Naval Militar 577', 'Banco Azteca', 'Av. H. Escuela Naval Militar 577, San Francisco Culhuacán, Coyoacán, CDMX', 19.329715, -99.12445],
+  ['CAF-0009', 'Banco Azteca - Necaxa 68', 'Banco Azteca', 'Necaxa 68, Portales Sur, Benito Juárez, CDMX', 19.370762, -99.143119],
+  ['CAF-0010', 'Banco Azteca - Playa Tambuco 13', 'Banco Azteca', 'Playa Tambuco 13, Militar Marte, Iztacalco, CDMX', 19.380186, -99.134589],
+  ['CAF-0011', 'Banco Azteca - Calz. de Tlalpan 1077', 'Banco Azteca', 'Calz. de Tlalpan 1077, Américas Unidas, Benito Juárez, CDMX', 19.379306, -99.140502],
+  ['CAF-0012', 'OXXO Prado Churubusco MEX', 'OXXO', 'Cefero y Cruz del Sur 333, Prado Churubusco, Coyoacán, CDMX', 19.358182, -99.128297],
+  ['CAF-0013', '7-Eleven Calz. Taxqueña 1333', '7-Eleven', 'Calz. Taxqueña 1333, Coyoacán, CDMX', 19.341205, -99.139515]
 ];
 
 function sincronizarCanalesPago() {
