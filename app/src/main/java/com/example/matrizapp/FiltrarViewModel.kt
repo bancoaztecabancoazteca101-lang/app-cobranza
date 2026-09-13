@@ -56,6 +56,9 @@ data class FiltrarItem(
  * - La idea de Filtrar es traer los datos de contacto completos (Num TT, Ref1, Ref2, dirección)
  *   de los registros de Matriz encontrados a 10 metros o menos del titular, ordenados del más
  *   cercano al más lejano, máximo 7 -- del titular mismo solo se necesita nombre/foto/dirección.
+ * - Solo considera registros del día de hoy (misma fecha que usa por defecto Filtro Fecha) --
+ *   ni como titular ni como vecino entra un registro de otro día, para no comparar contra
+ *   historial viejo que ya no es relevante hoy.
  */
 private const val RADIO_CERCANOS_METROS = 10.0
 private const val MAX_VECINOS_AUTOMATICO = 1
@@ -66,8 +69,13 @@ class FiltrarViewModel(
     val driveHelper: DriveHelper
 ) : ViewModel() {
 
+    private fun inicioDeHoy(): Long = java.time.LocalDate.now()
+        .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+    private fun finDeHoy(): Long = java.time.LocalDate.now().plusDays(1)
+        .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
+
     val items: StateFlow<List<FiltrarItem>> = matrizDao.getAllMatriz()
-        .map { todos -> calcularFiltrar(todos) }
+        .map { todos -> calcularFiltrar(todos.filter { val f = it.fecha; f != null && f in inicioDeHoy()..finDeHoy() }) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private fun calcularFiltrar(todos: List<MatrizEntity>): List<FiltrarItem> {
