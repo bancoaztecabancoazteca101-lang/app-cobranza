@@ -46,13 +46,16 @@ data class FiltrarItem(
  * incluso sin conexión.
  *
  * Reglas (confirmadas con el usuario, actualizadas 13/09/2026):
- * - Detección automática por coordenadas: si un registro tiene EXACTAMENTE 1 vecino a 10 metros
- *   o menos (un par aislado), aparece solo, sin necesitar marcarlo a mano. Para no duplicar el
- *   mismo par dos veces (A cercano a B, y B cercano a A), solo se queda como titular el de id
- *   menor.
- * - Si un registro tiene 2 o más vecinos a 10 metros o menos, se trata como "vecindario" (edificio
- *   o unidad habitacional con varios domicilios pegados) y NO aparece automático -- solo si se
+ * - Detección automática por coordenadas: fuera de una zona "unidad" (ver más abajo), si un
+ *   registro tiene entre 1 y MAX_VECINOS_AUTOMATICO vecinos a 10 metros o menos (grupo de hasta
+ *   5 registros contando al titular), aparece solo, sin necesitar marcarlo a mano. Para no
+ *   duplicar el mismo grupo varias veces (mostrarlo una vez por cada miembro), solo se queda
+ *   como titular el de id menor de todo el grupo.
+ * - Si un registro tiene más de MAX_VECINOS_AUTOMATICO vecinos a 10 metros o menos, se trata como
+ *   "vecindario" (edificio con muchos domicilios pegados) y NO aparece automático -- solo si se
  *   marca su Status como "Filtrar" a mano, igual que antes.
+ * - Dentro de una zona "unidad" conocida (ver ZONAS_UNIDAD más abajo), nunca aparece automático
+ *   sin importar cuántos vecinos tenga -- siempre requiere Status="Filtrar" manual.
  * - La idea de Filtrar es traer los datos de contacto completos (Num TT, Ref1, Ref2, dirección)
  *   de los registros de Matriz encontrados a 10 metros o menos del titular, ordenados del más
  *   cercano al más lejano, máximo 7 -- del titular mismo solo se necesita nombre/foto/dirección.
@@ -61,7 +64,7 @@ data class FiltrarItem(
  *   historial viejo que ya no es relevante hoy.
  */
 private const val RADIO_CERCANOS_METROS = 10.0
-private const val MAX_VECINOS_AUTOMATICO = 1
+private const val MAX_VECINOS_AUTOMATICO = 4
 
 /** Zonas conocidas como "unidad habitacional" (varios domicilios pegados) donde, aunque el
  * algoritmo detecte exactamente 1 vecino a <= 10m, no se debe tratar como par aislado automático
@@ -116,11 +119,12 @@ class FiltrarViewModel(
         val candidatos = todos.filter { item ->
             val manual = item.estado.trim().equals("Filtrar", ignoreCase = true)
             if (manual) return@filter true
-            // Se piden hasta MAX_VECINOS_AUTOMATICO + 1 para poder distinguir "exactamente 1
-            // vecino" (par aislado, sí califica) de "2 o más" (vecindario, no califica) sin
-            // tener que traer la lista completa de vecinos en este paso.
+            // Se piden hasta MAX_VECINOS_AUTOMATICO + 1 para poder distinguir "1 a
+            // MAX_VECINOS_AUTOMATICO vecinos" (grupo aislado, sí califica) de "más que eso"
+            // (vecindario, no califica) sin tener que traer la lista completa de vecinos.
             val vecinos = cercanosDe(item, MAX_VECINOS_AUTOMATICO + 1)
-            vecinos.size == 1 && item.id < vecinos.first().first.id && !estaEnZonaUnidad(coords[item])
+            vecinos.isNotEmpty() && vecinos.size <= MAX_VECINOS_AUTOMATICO &&
+                vecinos.all { item.id < it.first.id } && !estaEnZonaUnidad(coords[item])
         }
         if (candidatos.isEmpty()) return emptyList()
 
