@@ -66,8 +66,9 @@ private const val MAX_VECINOS_AUTOMATICO = 1
 /** Zonas conocidas como "unidad habitacional" (varios domicilios pegados) donde, aunque el
  * algoritmo detecte exactamente 1 vecino a <= 10m, no se debe tratar como par aislado automático
  * -- la coordenada del titular puede caer cerca de un vecino real sin que ambos formen parte del
- * mismo edificio/unidad. Radio fijo de 100m por zona (confirmado con el usuario, 13/09/2026). */
-private data class ZonaUnidad(val nombre: String, val lat: Double, val lng: Double, val radioMetros: Double = 100.0)
+ * mismo edificio/unidad. Radio fijo de 50m por zona (ajustado de 100m a 50m el 13/09/2026,
+ * porque a 100m tapaba pares reales como Cira Balderas Alarcón / Marisela Salvador González). */
+private data class ZonaUnidad(val nombre: String, val lat: Double, val lng: Double, val radioMetros: Double = 50.0)
 
 private val ZONAS_UNIDAD = listOf(
     ZonaUnidad("Av. Canal Nacional 110", 19.347889, -99.119333),
