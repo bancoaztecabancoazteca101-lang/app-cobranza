@@ -63,6 +63,25 @@ data class FiltrarItem(
 private const val RADIO_CERCANOS_METROS = 10.0
 private const val MAX_VECINOS_AUTOMATICO = 1
 
+/** Zonas conocidas como "unidad habitacional" (varios domicilios pegados) donde, aunque el
+ * algoritmo detecte exactamente 1 vecino a <= 10m, no se debe tratar como par aislado automático
+ * -- la coordenada del titular puede caer cerca de un vecino real sin que ambos formen parte del
+ * mismo edificio/unidad. Radio fijo de 100m por zona (confirmado con el usuario, 13/09/2026). */
+private data class ZonaUnidad(val nombre: String, val lat: Double, val lng: Double, val radioMetros: Double = 100.0)
+
+private val ZONAS_UNIDAD = listOf(
+    ZonaUnidad("Av. Canal Nacional 110", 19.347889, -99.119333),
+    ZonaUnidad("San Francisco Culhuacán", 19.344294, -99.119858),
+    ZonaUnidad("Av. H. Escuela Naval Militar 180", 19.342833, -99.120278),
+    ZonaUnidad("La Viga 1416", 19.372255, -99.121199),
+    ZonaUnidad("Porto Alegre 305", 19.373484, -99.127671)
+)
+
+private fun estaEnZonaUnidad(coord: Pair<Double, Double>?): Boolean {
+    if (coord == null) return false
+    return ZONAS_UNIDAD.any { zona -> distanciaKm(coord, zona.lat to zona.lng) * 1000.0 <= zona.radioMetros }
+}
+
 class FiltrarViewModel(
     private val matrizDao: MatrizDao,
     private val workManager: WorkManager,
@@ -100,7 +119,7 @@ class FiltrarViewModel(
             // vecino" (par aislado, sí califica) de "2 o más" (vecindario, no califica) sin
             // tener que traer la lista completa de vecinos en este paso.
             val vecinos = cercanosDe(item, MAX_VECINOS_AUTOMATICO + 1)
-            vecinos.size == 1 && item.id < vecinos.first().first.id
+            vecinos.size == 1 && item.id < vecinos.first().first.id && !estaEnZonaUnidad(coords[item])
         }
         if (candidatos.isEmpty()) return emptyList()
 
