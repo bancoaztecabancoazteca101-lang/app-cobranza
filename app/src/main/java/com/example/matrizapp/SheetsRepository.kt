@@ -267,9 +267,6 @@ class SheetsRepository(
         try { refreshMatriz() } catch (e: Exception) { errors.add("Matriz: ${e.message}") }
         try { copiarPaseDesdeMatriz() } catch (e: Exception) { errors.add("Pase: ${e.message}") }
         try { refreshSolicitud() } catch (e: Exception) { errors.add("Solicitud: ${e.message}") }
-        try { refreshFiltroFecha() } catch (e: Exception) { errors.add("Filtro Fecha: ${e.message}") }
-        try { refreshFiltrar() } catch (e: Exception) { errors.add("Filtrar: ${e.message}") }
-        try { refreshControl() } catch (e: Exception) { errors.add("Control: ${e.message}") }
         if (errors.isNotEmpty()) throw Exception(errors.joinToString(" | "))
     }
 
