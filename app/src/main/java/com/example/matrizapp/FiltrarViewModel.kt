@@ -89,7 +89,8 @@ private fun estaEnZonaUnidad(coord: Pair<Double, Double>?): Boolean {
 class FiltrarViewModel(
     private val matrizDao: MatrizDao,
     private val workManager: WorkManager,
-    val driveHelper: DriveHelper
+    val driveHelper: DriveHelper,
+    private val repository: SheetsRepository
 ) : ViewModel() {
 
     private fun inicioDeHoy(): Long = java.time.LocalDate.now()
@@ -149,6 +150,34 @@ class FiltrarViewModel(
         viewModelScope.launch {
             matrizDao.updateGestionLocal(id, nuevoEstado, obs)
             triggerSync()
+        }
+    }
+
+    /** Igual que MatrizViewModel.cambiarIdYGuardar: guarda el registro completo de Matriz desde
+     * el formulario completo (MatrizFullFormDialog) abierto desde Filtrar. */
+    fun guardarRegistroCompleto(
+        idAnterior: String, idNuevo: String, nombre: String, semana: String, requisito: String, numTT: String,
+        ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
+        fecha: Long?, hora: String?, ruta: String?, folioP: String?,
+        onResult: (exito: Boolean, error: String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            val idFinal = idNuevo.trim().ifBlank { idAnterior }
+            if (idFinal != idAnterior) {
+                try {
+                    repository.renameRowId(Constants.SHEET_MATRIZ, idAnterior, idFinal, Constants.MatrizCols.COL_ID)
+                    matrizDao.renameId(idAnterior, idFinal)
+                } catch (e: Exception) {
+                    onResult(false, "No se pudo cambiar el ID en el Sheet (revisa tu conexión): ${e.message}")
+                    return@launch
+                }
+            }
+            matrizDao.updateRegistroCompleto(
+                idFinal, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
+                observaciones, estado, ubicacion, fecha, hora, ruta, folioP
+            )
+            triggerSync()
+            onResult(true, null)
         }
     }
 

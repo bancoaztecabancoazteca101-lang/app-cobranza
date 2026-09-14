@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
+    val context = LocalContext.current
     val allItems by viewModel.items.collectAsState()
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
@@ -32,6 +33,7 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
     }
     var itemToView by remember { mutableStateOf<FiltrarItem?>(null) }
     var itemToEdit by remember { mutableStateOf<FiltrarItem?>(null) }
+    var itemToFullEdit by remember { mutableStateOf<FiltrarItem?>(null) }
 
     if (items.isEmpty()) {
         Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
@@ -47,7 +49,8 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
             item = item,
             driveHelper = viewModel.driveHelper,
             onDismiss = { itemToView = null },
-            onEditClick = { itemToEdit = item; itemToView = null }
+            onEditClick = { itemToEdit = item; itemToView = null },
+            onNombreClick = { itemToFullEdit = item; itemToView = null }
         )
     }
     itemToEdit?.let { item ->
@@ -55,6 +58,19 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
             item = item.original,
             onDismiss = { itemToEdit = null },
             onConfirm = { id, estado, obs -> viewModel.guardarGestion(id, estado, obs); itemToEdit = null }
+        )
+    }
+    itemToFullEdit?.let { item ->
+        MatrizFullFormDialog(
+            item = item.original,
+            viewModel = null,
+            onDismiss = { itemToFullEdit = null },
+            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+                viewModel.guardarRegistroCompleto(item.original.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { exito, error ->
+                    if (!exito) android.widget.Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
+                }
+                itemToFullEdit = null
+            }
         )
     }
 }
@@ -69,7 +85,8 @@ fun FiltrarDetailDialog(
     item: FiltrarItem,
     driveHelper: DriveHelper,
     onDismiss: () -> Unit,
-    onEditClick: () -> Unit
+    onEditClick: () -> Unit,
+    onNombreClick: () -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
@@ -77,7 +94,7 @@ fun FiltrarDetailDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(item.nombre, modifier = Modifier.weight(1f).clickable(onClick = onEditClick))
+                Text(item.nombre, modifier = Modifier.weight(1f).clickable(onClick = onNombreClick))
                 IconButton(onClick = {
                     clipboard.setText(AnnotatedString(item.nombre))
                     Toast.makeText(context, "Nombre copiado", Toast.LENGTH_SHORT).show()
