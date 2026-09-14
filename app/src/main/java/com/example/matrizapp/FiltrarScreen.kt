@@ -44,13 +44,15 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
             }
         }
     }
-    itemToView?.let { item ->
+    itemToView?.let { snapshot ->
+        val item = items.find { it.id == snapshot.id } ?: snapshot
         FiltrarDetailDialog(
             item = item,
             driveHelper = viewModel.driveHelper,
             onDismiss = { itemToView = null },
             onEditClick = { itemToEdit = item; itemToView = null },
-            onNombreClick = { itemToFullEdit = item; itemToView = null }
+            onNombreClick = { itemToFullEdit = item; itemToView = null },
+            onAgregarContacto = { cercano -> viewModel.agregarContactoExtra(item.id, cercano) }
         )
     }
     itemToEdit?.let { item ->
@@ -86,7 +88,8 @@ fun FiltrarDetailDialog(
     driveHelper: DriveHelper,
     onDismiss: () -> Unit,
     onEditClick: () -> Unit,
-    onNombreClick: () -> Unit
+    onNombreClick: () -> Unit,
+    onAgregarContacto: (CercanoDetalle) -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
@@ -129,6 +132,20 @@ fun FiltrarDetailDialog(
                     ColoniaLabel(ubicacion = cercano.ubicacion)
                     if (!cercano.ubicacion.isNullOrBlank() && cercano.ubicacion != "N/A") {
                         ContactActionsRow(numTT = null, ubicacion = cercano.ubicacion)
+                    }
+                    // Confirmación manual (pedida por Diego): suma Ref1/Ref2 de este cercano
+                    // como contacto extra del titular -- desde ahí entran al mismo ciclo
+                    // automático de Bloques (misma plantilla de referencia, mismo %nombre% del
+                    // titular). Solo se muestra si hay al menos un teléfono y no se agregó ya.
+                    val hayTelefono = cercano.ref1.isNotBlank() || cercano.ref2.isNotBlank()
+                    if (hayTelefono) {
+                        if (cercano.yaAgregado) {
+                            Text("✓ Agregado como contacto de ${item.nombre}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
+                        } else {
+                            OutlinedButton(onClick = { onAgregarContacto(cercano) }, modifier = Modifier.padding(top = 2.dp)) {
+                                Text("Agregar como contacto de ${item.nombre}")
+                            }
+                        }
                     }
                 }
             }

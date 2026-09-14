@@ -15,7 +15,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
             modelClass.isAssignableFrom(FiltroFechaViewModel::class.java) ->
                 FiltroFechaViewModel(container.database.matrizDao(), container.driveHelper) as T
             modelClass.isAssignableFrom(FiltrarViewModel::class.java) ->
-                FiltrarViewModel(container.database.matrizDao(), container.workManager, container.driveHelper, container.repository) as T
+                FiltrarViewModel(container.database.matrizDao(), container.workManager, container.driveHelper, container.repository, container.database.contactoExtraDao()) as T
             modelClass.isAssignableFrom(ControlViewModel::class.java) ->
                 ControlViewModel(container.database.controlDao(), container.database.matrizDao()) as T
             modelClass.isAssignableFrom(Sem6ViewModel::class.java) ->

@@ -201,7 +201,7 @@ class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
 // duración máxima) — independiente de la pantalla manual de
 // Llamadas, para que ajustar una no afecte a la otra.
 // ============================================================
-private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, config: ConfiguracionAutomatizacionEntity, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao) {
+private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, config: ConfiguracionAutomatizacionEntity, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao, contactoExtraDao: ContactoExtraDao) {
     val variante = logDao.contarTotalContactos(r.id)
     val subIdLlamada = config.simSeleccionada
     val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
@@ -217,7 +217,13 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         CallHelper.silenciarMicrofono(context, false)
         SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
     }
-    listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }).forEach { tel ->
+    // Referencias propias del cliente (Ref1/Ref2 capturados en Matriz) + referencias extra
+    // confirmadas a mano desde Filtrar (números de un "cercano" que probablemente conoce al
+    // titular) -- todas reciben el mismo mensaje de referencia, mencionando siempre el nombre
+    // del titular (r.nombre), nunca el del cercano de donde salió el número.
+    val telefonosReferencia = listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }) +
+        contactoExtraDao.obtenerPara(r.id).map { it.telefono }
+    telefonosReferencia.forEach { tel ->
         SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
     }
 }
@@ -249,6 +255,7 @@ class LlamadaAutomaticaWorker(
         val plantillaDao = container.database.plantillaSmsDao()
         val configDao = container.database.configuracionAutomatizacionDao()
         val reglaSemanaDao = container.database.reglaSemanaDao()
+        val contactoExtraDao = container.database.contactoExtraDao()
 
         val bloquesActivos = bloqueDao.obtenerBloquesActivos()
         val bloqueActualIndex = bloquesActivos.indexOfFirst { it.id == bloqueId }
@@ -272,7 +279,7 @@ class LlamadaAutomaticaWorker(
 
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
             esPrimerContacto = false
-            procesarClienteLlamadaAutomatica(applicationContext, r, sem, config, logDao, plantillaDao)
+            procesarClienteLlamadaAutomatica(applicationContext, r, sem, config, logDao, plantillaDao, contactoExtraDao)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = hoyMillis, bloqueIndex = bloqueActualIndex))
         }
         return Result.success()
@@ -303,6 +310,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
         val plantillaDao = container.database.plantillaSmsDao()
         val configDao = container.database.configuracionAutomatizacionDao()
         val reglaSemanaDao = container.database.reglaSemanaDao()
+        val contactoExtraDao = container.database.contactoExtraDao()
         val registros = matrizDao.getAllMatriz().first()
         val config = configDao.obtenerOSembrar()
         val entidadesRegla = reglaSemanaDao.obtenerEntidadesOSembrar()
@@ -334,7 +342,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
 
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
             esPrimerContacto = false
-            procesarClienteLlamadaAutomatica(applicationContext, r, sem, config, logDao, plantillaDao)
+            procesarClienteLlamadaAutomatica(applicationContext, r, sem, config, logDao, plantillaDao, contactoExtraDao)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = ayerMillis, bloqueIndex = -1))
         }
 

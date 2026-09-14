@@ -8,6 +8,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -15,14 +16,17 @@ import java.util.concurrent.TimeUnit
 
 /** Un registro de Matriz encontrado cerca (<= 10 m) del titular que se está Filtrando, con sus
  * datos completos de contacto (no solo nombre/distancia) para poder llamar/mandar SMS desde
- * la vista rápida. */
+ * la vista rápida. `yaAgregado` indica si Diego ya confirmó sumar los Ref1/Ref2 de este cercano
+ * como contacto extra del titular (ver ContactoExtraEntity) -- si es true, ya entran al ciclo
+ * automático de Bloques y no hace falta mostrar el botón de agregar de nuevo. */
 data class CercanoDetalle(
     val nombre: String,
     val numTT: String,
     val ref1: String,
     val ref2: String,
     val ubicacion: String?,
-    val distanciaM: Int
+    val distanciaM: Int,
+    val yaAgregado: Boolean = false
 )
 
 /** El titular con Status = "Filtrar", solo con lo que de verdad se ocupa de él (nombre, foto,
@@ -90,7 +94,8 @@ class FiltrarViewModel(
     private val matrizDao: MatrizDao,
     private val workManager: WorkManager,
     val driveHelper: DriveHelper,
-    private val repository: SheetsRepository
+    private val repository: SheetsRepository,
+    private val contactoExtraDao: ContactoExtraDao
 ) : ViewModel() {
 
     private fun inicioDeHoy(): Long = java.time.LocalDate.now()
@@ -98,11 +103,12 @@ class FiltrarViewModel(
     private fun finDeHoy(): Long = java.time.LocalDate.now().plusDays(1)
         .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
 
-    val items: StateFlow<List<FiltrarItem>> = matrizDao.getAllMatriz()
-        .map { todos -> calcularFiltrar(todos.filter { val f = it.fecha; f != null && f in inicioDeHoy()..finDeHoy() }) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val items: StateFlow<List<FiltrarItem>> = combine(matrizDao.getAllMatriz(), contactoExtraDao.observarTodos()) { todos, extras ->
+        val agregados = extras.map { it.clienteId to it.nombreOrigen }.toSet()
+        calcularFiltrar(todos.filter { val f = it.fecha; f != null && f in inicioDeHoy()..finDeHoy() }, agregados)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private fun calcularFiltrar(todos: List<MatrizEntity>): List<FiltrarItem> {
+    private fun calcularFiltrar(todos: List<MatrizEntity>, agregados: Set<Pair<String, String>>): List<FiltrarItem> {
         // Coordenadas ya parseadas una sola vez para no repetir el parseo por cada comparación.
         val coords = todos.associateWith { parseLatLngOrden(it.ubicacion) }
 
@@ -133,7 +139,8 @@ class FiltrarViewModel(
             val cercanos = cercanosDe(item, 7).map { (otro, metros) ->
                 CercanoDetalle(
                     nombre = otro.nombre, numTT = otro.numTT, ref1 = otro.ref1, ref2 = otro.ref2,
-                    ubicacion = otro.ubicacion, distanciaM = metros.toInt()
+                    ubicacion = otro.ubicacion, distanciaM = metros.toInt(),
+                    yaAgregado = (item.id to otro.nombre) in agregados
                 )
             }
             FiltrarItem(
@@ -141,6 +148,17 @@ class FiltrarViewModel(
                 imagen = item.imagenUrl, ubicacion = item.ubicacion, cercanos = cercanos,
                 original = item
             )
+        }
+    }
+
+    /** Confirma sumar los Ref1/Ref2 de un cercano (encontrado por Filtrar) como contacto extra
+     * del cliente titular -- desde ese momento entran a la misma ronda de SMS de referencia del
+     * flujo automático de Bloques, mencionando siempre el nombre del titular. */
+    fun agregarContactoExtra(clienteId: String, cercano: CercanoDetalle) {
+        viewModelScope.launch {
+            listOfNotNull(cercano.ref1.takeIf { it.isNotBlank() }, cercano.ref2.takeIf { it.isNotBlank() }).forEach { tel ->
+                contactoExtraDao.insertar(ContactoExtraEntity(clienteId = clienteId, telefono = tel, nombreOrigen = cercano.nombre))
+            }
         }
     }
 
