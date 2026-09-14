@@ -94,7 +94,6 @@ fun FiltrarDetailDialog(
                     PortadaThumbnail(rawImageUrl = item.imagen, driveHelper = driveHelper, size = 160.dp)
                 }
                 ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
-                CalleLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
 
                 Divider(modifier = Modifier.padding(top = 4.dp))
                 Text(
@@ -110,7 +109,6 @@ fun FiltrarDetailDialog(
                     ContactFieldRow("Ref 1", cercano.ref1)
                     ContactFieldRow("Ref 2", cercano.ref2)
                     ColoniaLabel(ubicacion = cercano.ubicacion)
-                    CalleLabel(ubicacion = cercano.ubicacion)
                     if (!cercano.ubicacion.isNullOrBlank() && cercano.ubicacion != "N/A") {
                         ContactActionsRow(numTT = null, ubicacion = cercano.ubicacion)
                     }
@@ -138,7 +136,6 @@ fun FiltrarItemCard(item: FiltrarItem, onCardClick: () -> Unit, onEditClick: () 
                 StatusBadge(item.estado)
             }
             ColoniaLabel(ubicacion = item.ubicacion)
-            CalleLabel(ubicacion = item.ubicacion)
             if (item.cercanos.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Text("Cercanos por GPS:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
