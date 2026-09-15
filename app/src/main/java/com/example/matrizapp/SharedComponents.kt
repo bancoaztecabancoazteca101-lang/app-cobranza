@@ -375,11 +375,12 @@ fun MatrizFullFormDialog(
         coroutineScope.launch {
             val datos = extraerDatosClienteDeImagen(context, uri)
             buscandoNombrePorFoto = false
-            if (datos.nombre.isNullOrBlank() && datos.monto.isNullOrBlank()) {
+            if (datos.nombre.isNullOrBlank() && datos.monto.isNullOrBlank() && datos.semana.isNullOrBlank()) {
                 Toast.makeText(context, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
             } else {
                 if (!datos.nombre.isNullOrBlank()) nombre = datos.nombre
                 if (!datos.monto.isNullOrBlank()) requisito = datos.monto
+                if (!datos.semana.isNullOrBlank()) semana = datos.semana
             }
         }
     }
@@ -393,7 +394,7 @@ fun MatrizFullFormDialog(
         AlertDialog(
             onDismissRequest = { mostrarSelectorFotoNombre = false },
             title = { Text("Leer nombre de una foto") },
-            text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para llenar el Nombre y el Req.") },
+            text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para llenar el Nombre, el Req y el Sem.") },
             confirmButton = {
                 TextButton(onClick = {
                     mostrarSelectorFotoNombre = false
@@ -995,16 +996,24 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
     }
 }
 
-/** Resultado del OCR usado en el diálogo de Editar/Nuevo registro: nombre y monto "Requerido"
- * detectados en la misma foto (ambos nullable, puede venir solo uno de los dos). */
-data class DatosClienteOcr(val nombre: String?, val monto: String?)
+/** Resultado del OCR usado en el diálogo de Editar/Nuevo registro: nombre, monto "Requerido"
+ * y semana de atraso (calculada a partir de los "días de atraso") detectados en la misma
+ * foto (los tres nullable de forma independiente, puede venir solo alguno de ellos). */
+data class DatosClienteOcr(val nombre: String?, val monto: String?, val semana: String?)
+
+/** Convierte "días de atraso" (como lo muestra la app de Banco Azteca) a la "Sem" que usa
+ * Matriz, según la tabla que dio Diego: menos de 7 días = semana 1; 7 días = semana 2;
+ * 14 = semana 3; 21 = semana 4; 28 = semana 5; 35 = semana 6; 42 = semana 7 (patrón:
+ * cada 7 días completos suma una semana, arrancando en 1). */
+fun diasAtrasoASemana(dias: Int): Int = (dias / 7) + 1
 
 /** OCR local (ML Kit) para el diálogo de Editar/Nuevo registro (botón de cámara junto al
  * campo Nombre): además del nombre (misma lógica de detección que extraerNombreDeImagen,
  * línea sin números de 2-5 palabras con el texto más grande), busca el monto "Requerido"
- * que muestra la app de Banco Azteca en el resumen del cliente (ej. "Requerido $2,034")
- * para llenar también el campo Req. No reemplaza a extraerNombreDeImagen, que se sigue
- * usando donde solo hace falta el nombre (buscador con foto, Solicitud, exportar Matriz). */
+ * y los "días de atraso" que muestra la app de Banco Azteca en el resumen del cliente
+ * (ej. "Requerido $2,034" / "18 días de atraso") para llenar también los campos Req y Sem.
+ * No reemplaza a extraerNombreDeImagen, que se sigue usando donde solo hace falta el
+ * nombre (buscador con foto, Solicitud, exportar Matriz). */
 suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: Uri): DatosClienteOcr = suspendCancellableCoroutine { cont ->
     try {
         val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
@@ -1044,16 +1053,18 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
                         evaluarCandidato(textoBloque, block.boundingBox, alturaPromedio)
                     }
                 }
-                // Monto "Requerido": se busca sobre el texto completo (no línea por línea) porque
-                // el OCR a veces separa la etiqueta "Requerido" y el número en bloques distintos
-                // que igual quedan consecutivos en visionText.text.
+                // Monto "Requerido" y "días de atraso": se buscan sobre el texto completo (no
+                // línea por línea) porque el OCR a veces separa la etiqueta y el número en
+                // bloques distintos que igual quedan consecutivos en visionText.text.
                 val textoCompleto = java.text.Normalizer.normalize(visionText.text, java.text.Normalizer.Form.NFC)
                 val montoMatch = Regex("(?i)Requerido\\s*\\$?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)").find(textoCompleto)
                 val monto = montoMatch?.groupValues?.get(1)?.let { "$$it" }
-                if (cont.isActive) cont.resume(DatosClienteOcr(mejorLinea?.uppercase(), monto)) {}
+                val diasMatch = Regex("(?i)([0-9]+)\\s*d[ií]as?\\s*de\\s*atraso").find(textoCompleto)
+                val semana = diasMatch?.groupValues?.get(1)?.toIntOrNull()?.let { diasAtrasoASemana(it).toString() }
+                if (cont.isActive) cont.resume(DatosClienteOcr(mejorLinea?.uppercase(), monto, semana)) {}
             }
-            .addOnFailureListener { if (cont.isActive) cont.resume(DatosClienteOcr(null, null)) {} }
+            .addOnFailureListener { if (cont.isActive) cont.resume(DatosClienteOcr(null, null, null)) {} }
     } catch (e: Exception) {
-        if (cont.isActive) cont.resume(DatosClienteOcr(null, null)) {}
+        if (cont.isActive) cont.resume(DatosClienteOcr(null, null, null)) {}
     }
 }
