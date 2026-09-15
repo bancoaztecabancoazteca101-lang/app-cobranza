@@ -49,12 +49,13 @@ data class FiltrarItem(
  * (matriz_table), así que aparece al instante sin esperar a que el script corra y funciona
  * incluso sin conexión.
  *
- * Reglas (confirmadas con el usuario, actualizadas 13/09/2026):
+ * Reglas (confirmadas con el usuario, actualizadas 15/09/2026):
  * - Detección automática por coordenadas: fuera de una zona "unidad" (ver más abajo), si un
  *   registro tiene entre 1 y MAX_VECINOS_AUTOMATICO vecinos a 10 metros o menos (grupo de hasta
- *   5 registros contando al titular), aparece solo, sin necesitar marcarlo a mano. Para no
- *   duplicar el mismo grupo varias veces (mostrarlo una vez por cada miembro), solo se queda
- *   como titular el de id menor de todo el grupo.
+ *   5 registros contando al titular), aparece automático, sin necesitar marcarlo a mano. La
+ *   relación es mutua: CADA miembro del grupo sale con su propia tarjeta (no solo el de id
+ *   menor), listando a los demás como cercanos -- así, si Jesús tiene cerca a María, también
+ *   sale la tarjeta de María con Jesús como cercano (antes solo salía una de las dos).
  * - Si un registro tiene más de MAX_VECINOS_AUTOMATICO vecinos a 10 metros o menos, se trata como
  *   "vecindario" (edificio con muchos domicilios pegados) y NO aparece automático -- solo si se
  *   marca su Status como "Filtrar" a mano, igual que antes.
@@ -126,12 +127,12 @@ class FiltrarViewModel(
         val candidatos = todos.filter { item ->
             val manual = item.estado.trim().equals("Filtrar", ignoreCase = true)
             if (manual) return@filter true
-            // Se piden hasta MAX_VECINOS_AUTOMATICO + 1 para poder distinguir "1 a
-            // MAX_VECINOS_AUTOMATICO vecinos" (grupo aislado, sí califica) de "más que eso"
-            // (vecindario, no califica) sin tener que traer la lista completa de vecinos.
+            // Antes solo calificaba el miembro de id menor del grupo (para no repetir tarjeta
+            // por grupo); ahora, a petición de Diego, la relación es mutua: cualquier miembro
+            // con 1 a MAX_VECINOS_AUTOMATICO vecinos a <=10m califica y sale con su propia
+            // tarjeta, así el cercano aparece "de ida y vuelta" (ej. Jesús <-> María).
             val vecinos = cercanosDe(item, MAX_VECINOS_AUTOMATICO + 1)
-            vecinos.isNotEmpty() && vecinos.size <= MAX_VECINOS_AUTOMATICO &&
-                vecinos.all { item.id < it.first.id } && !estaEnZonaUnidad(coords[item])
+            vecinos.isNotEmpty() && vecinos.size <= MAX_VECINOS_AUTOMATICO && !estaEnZonaUnidad(coords[item])
         }
         if (candidatos.isEmpty()) return emptyList()
 
