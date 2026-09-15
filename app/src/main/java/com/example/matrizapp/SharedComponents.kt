@@ -373,12 +373,13 @@ fun MatrizFullFormDialog(
         if (uri == null) return
         buscandoNombrePorFoto = true
         coroutineScope.launch {
-            val detectado = extraerNombreDeImagen(context, uri)
+            val datos = extraerDatosClienteDeImagen(context, uri)
             buscandoNombrePorFoto = false
-            if (detectado.isNullOrBlank()) {
+            if (datos.nombre.isNullOrBlank() && datos.monto.isNullOrBlank()) {
                 Toast.makeText(context, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
             } else {
-                nombre = detectado
+                if (!datos.nombre.isNullOrBlank()) nombre = datos.nombre
+                if (!datos.monto.isNullOrBlank()) requisito = datos.monto
             }
         }
     }
@@ -392,7 +393,7 @@ fun MatrizFullFormDialog(
         AlertDialog(
             onDismissRequest = { mostrarSelectorFotoNombre = false },
             title = { Text("Leer nombre de una foto") },
-            text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para llenar el Nombre.") },
+            text = { Text("Toma una foto o elige una de la galería. Se leerá el texto para llenar el Nombre y el Req.") },
             confirmButton = {
                 TextButton(onClick = {
                     mostrarSelectorFotoNombre = false
@@ -991,5 +992,68 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
             .addOnFailureListener { if (cont.isActive) cont.resume(null) {} }
     } catch (e: Exception) {
         if (cont.isActive) cont.resume(null) {}
+    }
+}
+
+/** Resultado del OCR usado en el diálogo de Editar/Nuevo registro: nombre y monto "Requerido"
+ * detectados en la misma foto (ambos nullable, puede venir solo uno de los dos). */
+data class DatosClienteOcr(val nombre: String?, val monto: String?)
+
+/** OCR local (ML Kit) para el diálogo de Editar/Nuevo registro (botón de cámara junto al
+ * campo Nombre): además del nombre (misma lógica de detección que extraerNombreDeImagen,
+ * línea sin números de 2-5 palabras con el texto más grande), busca el monto "Requerido"
+ * que muestra la app de Banco Azteca en el resumen del cliente (ej. "Requerido $2,034")
+ * para llenar también el campo Req. No reemplaza a extraerNombreDeImagen, que se sigue
+ * usando donde solo hace falta el nombre (buscador con foto, Solicitud, exportar Matriz). */
+suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: Uri): DatosClienteOcr = suspendCancellableCoroutine { cont ->
+    try {
+        val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+        val alturaImagen = image.height
+        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
+            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
+        )
+        val palabrasUi = listOf(
+            "resumen del cliente", "expediente del cliente", "ver expediente", "ver otros lugares",
+            "prepárate", "preparate", "en ruta", "localiza", "contacta", "cobra",
+            "monto solicitado", "folio de solicitud", "torre de control", "temporizador",
+            "espera en el lugar", "seguimiento a esta solicitud", "continuar con tu ruta",
+            "originación", "originacion", "días de atraso", "dias de atraso", "último pago", "ultimo pago"
+        )
+        recognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                var mejorLinea: String? = null
+                var mejorAltura = 0
+                fun evaluarCandidato(textoCrudo: String, box: android.graphics.Rect?, alturaComparable: Int) {
+                    val texto = java.text.Normalizer.normalize(textoCrudo, java.text.Normalizer.Form.NFC).trim()
+                    val enZonaEncabezado = box != null && alturaImagen > 0 && box.top < alturaImagen * 0.25
+                    val esPalabraUi = palabrasUi.any { texto.contains(it, ignoreCase = true) }
+                    val soloLetras = texto.replace(" ", "").isNotEmpty() &&
+                        texto.replace(" ", "").all { it.isLetter() }
+                    val palabras = texto.split(" ").filter { it.isNotBlank() }
+                    if (soloLetras && !esPalabraUi && !enZonaEncabezado && palabras.size in 2..5 && texto.length in 5..40) {
+                        if (alturaComparable > mejorAltura) { mejorAltura = alturaComparable; mejorLinea = texto }
+                    }
+                }
+                for (block in visionText.textBlocks) {
+                    for (line in block.lines) {
+                        evaluarCandidato(line.text.trim(), line.boundingBox, line.boundingBox?.height() ?: 0)
+                    }
+                    if (block.lines.size > 1) {
+                        val textoBloque = block.lines.joinToString(" ") { it.text.trim() }
+                        val alturaPromedio = block.lines.sumOf { it.boundingBox?.height() ?: 0 } / block.lines.size
+                        evaluarCandidato(textoBloque, block.boundingBox, alturaPromedio)
+                    }
+                }
+                // Monto "Requerido": se busca sobre el texto completo (no línea por línea) porque
+                // el OCR a veces separa la etiqueta "Requerido" y el número en bloques distintos
+                // que igual quedan consecutivos en visionText.text.
+                val textoCompleto = java.text.Normalizer.normalize(visionText.text, java.text.Normalizer.Form.NFC)
+                val montoMatch = Regex("(?i)Requerido\\s*\\$?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)").find(textoCompleto)
+                val monto = montoMatch?.groupValues?.get(1)?.let { "$$it" }
+                if (cont.isActive) cont.resume(DatosClienteOcr(mejorLinea?.uppercase(), monto)) {}
+            }
+            .addOnFailureListener { if (cont.isActive) cont.resume(DatosClienteOcr(null, null)) {} }
+    } catch (e: Exception) {
+        if (cont.isActive) cont.resume(DatosClienteOcr(null, null)) {}
     }
 }
