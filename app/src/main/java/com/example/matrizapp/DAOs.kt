@@ -159,3 +159,13 @@ interface CanalPagoDao {
     @Query("DELETE FROM canal_pago_table")
     suspend fun deleteAll()
 }
+
+@Dao
+interface VelocidadDao {
+    @Query("SELECT * FROM velocidad_table LIMIT 1")
+    fun getFlow(): Flow<VelocidadEntity?>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOne(item: VelocidadEntity)
+    @Query("DELETE FROM velocidad_table")
+    suspend fun deleteAll()
+}

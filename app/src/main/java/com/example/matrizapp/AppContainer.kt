@@ -28,7 +28,8 @@ class AppContainer(val context: Context) {
             filtrarDao = database.filtrarDao(),
             controlDao = database.controlDao(),
             rutaIADao = database.rutaIADao(),
-            canalPagoDao = database.canalPagoDao()
+            canalPagoDao = database.canalPagoDao(),
+            velocidadDao = database.velocidadDao()
         )
     }
     val workManager: WorkManager by lazy { WorkManager.getInstance(context) }

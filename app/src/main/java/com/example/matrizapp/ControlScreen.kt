@@ -2,6 +2,8 @@ package com.example.matrizapp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -11,17 +13,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ControlScreen(viewModel: ControlViewModel) {
+fun ControlScreen(viewModel: ControlViewModel, onNavigateToPenalizacion: () -> Unit = {}) {
     val itemsHoy by viewModel.itemsHoy.collectAsState()
     val itemsSemanaActual by viewModel.itemsSemanaActual.collectAsState()
-    if (itemsHoy.isEmpty() && itemsSemanaActual.isEmpty()) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin datos", color = Color.Gray) }
-        return
-    }
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Submenú de Control: reporte personal de "Tabla Velocidades" (solo la fila de Diego),
+        // vive en su propia pantalla para no mezclar la vista de cartera diaria/semanal de aquí
+        // arriba con ese reporte de cumplimiento.
+        Card(modifier = Modifier.fillMaxWidth(), onClick = onNavigateToPenalizacion) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Penalización", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.ChevronRight, contentDescription = null)
+            }
+        }
+
+        if (itemsHoy.isEmpty() && itemsSemanaActual.isEmpty()) {
+            Text("Sin datos", color = Color.Gray)
+            return@Column
+        }
+
         Text("Requerido por día", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         if (itemsHoy.isEmpty()) {
             Text("Sin datos", color = Color.Gray)

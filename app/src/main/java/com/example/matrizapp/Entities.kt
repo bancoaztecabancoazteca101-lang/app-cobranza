@@ -87,3 +87,25 @@ data class CanalPagoEntity(
     val lastSync: Long = System.currentTimeMillis()
 )
 
+/** Copia local, de solo lectura, de la fila de Diego (GIC = Constants.GIC_PROPIETARIO) en la
+ * hoja "Tabla Velocidades" -- reporte semanal de cumplimiento por gestor. Solo se guarda SU
+ * fila, nunca las de sus compañeros. Todos los valores se guardan tal cual los muestra Sheets
+ * (ya formateados como texto: "$32,740", "90.4%", etc.) para no reimplementar sus fórmulas en
+ * Kotlin -- ver SheetsRepository.sincronizarVelocidad() para el mapeo exacto de columnas. */
+@Entity(tableName = "velocidad_table")
+data class VelocidadEntity(
+    @PrimaryKey val gic: String,
+    val rk: String?,
+    val plan100: String?,
+    val lunes: String?, val martes: String?, val miercoles: String?, val jueves: String?,
+    val viernes: String?, val sabado: String?, val domingo: String?,
+    val total: String?,
+    val planAvance: String?,
+    val reque36: String?, val monto36: String?, val porcentaje36: String?,
+    val arriba: String?, val requeFavor: String?,
+    val cuPase: String?, val capital: String?, val perdida: String?,
+    val planMeta: String?, val monto: String?, val meFaltan: String?,
+    val metaDiaria: String?, val diasOp: String?, val deficit: String?,
+    val lastSync: Long = System.currentTimeMillis()
+)
+

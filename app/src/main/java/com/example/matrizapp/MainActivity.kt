@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
                 val plantillaVm: PlantillaSmsViewModel = viewModel(factory = factory)
                 val rutaIAVm: RutaIAViewModel = viewModel(factory = factory)
                 val diagnosticoVm: DiagnosticoViewModel = viewModel(factory = factory)
+                val penalizacionVm: PenalizacionViewModel = viewModel(factory = factory)
                 var searchInput by remember { mutableStateOf("") }
                 var searchQuery by remember { mutableStateOf("") }
                 LaunchedEffect(searchInput) { delay(180); searchQuery = searchInput }
@@ -206,7 +207,8 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
                             composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, container.notificacionesHelper, searchQuery) }
                             composable(Screen.Filtrar.route) { FiltrarScreen(filtrarVm, searchQuery) }
-                            composable(Screen.Control.route) { ControlScreen(controlVm) }
+                            composable(Screen.Control.route) { ControlScreen(controlVm, onNavigateToPenalizacion = { navController.navigate(Screen.Penalizacion.route) }) }
+                            composable(Screen.Penalizacion.route) { PenalizacionScreen(penalizacionVm) }
                             composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
                             composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
                             composable(Screen.Sms.route) { SmsScreen(smsVm) }
@@ -239,6 +241,9 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object RutaIA : Screen("ruta_ia", "Ruta IA", Icons.Default.Route)
     object Diagnostico : Screen("diagnostico", "Diagnóstico", Icons.Default.BugReport)
     object ExportarMatriz : Screen("exportar_matriz", "Exportar Matriz", Icons.Default.FileDownload)
+    // Submenú de Control (no tiene entrada propia en el drawer -- solo se llega desde el botón
+    // "Penalización" dentro de ControlScreen).
+    object Penalizacion : Screen("penalizacion", "Penalización", Icons.Default.BarChart)
 }
 
 /** Nombre de la pantalla actual para mostrarlo tenue en la barra superior -- así siempre se ve
@@ -246,5 +251,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
 fun screenTitleFor(route: String): String = listOf(
     Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.Filtrar,
     Screen.Control, Screen.Ubi, Screen.Sem6, Screen.Sms, Screen.Llamadas, Screen.BloquesLlamada,
-    Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz
+    Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Penalizacion
 ).find { it.route == route }?.title ?: ""
