@@ -18,8 +18,7 @@ class SheetsRepository(
     private val filtrarDao: FiltrarDao,
     private val controlDao: ControlDao,
     private val rutaIADao: RutaIADao,
-    private val canalPagoDao: CanalPagoDao,
-    private val velocidadDao: VelocidadDao
+    private val canalPagoDao: CanalPagoDao
 ) {
     suspend fun findRowIndexById(sheetName: String, id: String, idColumn: String): Int = withContext(Dispatchers.IO) {
         val range = "$sheetName!$idColumn:$idColumn"
@@ -226,36 +225,6 @@ class SheetsRepository(
         val masViejo = canalPagoDao.oldestSync() ?: return true
         return (System.currentTimeMillis() - masViejo) > maxEdadMs
     }
-
-    /** Lee la hoja "Tabla Velocidades" y guarda localmente SOLO la fila cuyo GIC (columna B)
-     * coincide con Constants.GIC_PROPIETARIO -- nunca las filas de los demás gestores. Los
-     * valores se guardan tal cual los formatea Sheets (con las fórmulas ya resueltas del lado
-     * del spreadsheet), sin reimplementar %3-6 / $ ARRIBA / REQUE A FAVOR / PERDIDA / META
-     * DIAR / DEFICIT O EXCEDEN en Kotlin. Es de solo lectura: nunca escribe de vuelta a Sheets. */
-    suspend fun sincronizarVelocidad(): Result<VelocidadEntity?> = withContext(Dispatchers.IO) {
-        try {
-            val rows = fetchRows(Constants.SHEET_VELOCIDADES, lastCol = "Z")
-            val fila = rows.firstOrNull { cell(it, 1)?.equals(Constants.GIC_PROPIETARIO, ignoreCase = true) == true }
-            velocidadDao.deleteAll()
-            if (fila == null) return@withContext Result.success(null)
-            val item = VelocidadEntity(
-                gic = cell(fila, 1) ?: Constants.GIC_PROPIETARIO,
-                rk = cell(fila, 0), plan100 = cell(fila, 2),
-                lunes = cell(fila, 3), martes = cell(fila, 4), miercoles = cell(fila, 5), jueves = cell(fila, 6),
-                viernes = cell(fila, 7), sabado = cell(fila, 8), domingo = cell(fila, 9),
-                total = cell(fila, 10), planAvance = cell(fila, 11),
-                reque36 = cell(fila, 12), monto36 = cell(fila, 13), porcentaje36 = cell(fila, 14),
-                arriba = cell(fila, 15), requeFavor = cell(fila, 16),
-                cuPase = cell(fila, 17), capital = cell(fila, 18), perdida = cell(fila, 19),
-                planMeta = cell(fila, 20), monto = cell(fila, 21), meFaltan = cell(fila, 22),
-                metaDiaria = cell(fila, 23), diasOp = cell(fila, 24), deficit = cell(fila, 25)
-            )
-            velocidadDao.insertOne(item)
-            Result.success(item)
-        } catch (e: Exception) { Result.failure(e) }
-    }
-
-    fun velocidadLocalFlow() = velocidadDao.getFlow()
 
     private fun asegurarHojaRutaIAExiste() {
         val yaExiste = getRealSheetTitles().values.any { it.equals(Constants.SHEET_RUTA_IA, ignoreCase = true) }

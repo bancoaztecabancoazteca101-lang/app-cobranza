@@ -10,8 +10,6 @@ object Constants {
     const val SHEET_RUTA_IA = "Ruta IA"
     const val SHEET_DISPOSITIVOS = "Dispositivos"
     const val SHEET_CANALES_PAGO = "Catálogo Canales Pago"
-    const val SHEET_VELOCIDADES = "Tabla Velocidades"
-    const val GIC_PROPIETARIO = "DIEGO FLORES"
     const val FOLDER_IMAGES = "Matriz_Images/"
     const val FOLDER_AUDIOS = "Matriz_Audios/"
 

@@ -87,25 +87,23 @@ data class CanalPagoEntity(
     val lastSync: Long = System.currentTimeMillis()
 )
 
-/** Copia local, de solo lectura, de la fila de Diego (GIC = Constants.GIC_PROPIETARIO) en la
- * hoja "Tabla Velocidades" -- reporte semanal de cumplimiento por gestor. Solo se guarda SU
- * fila, nunca las de sus compañeros. Todos los valores se guardan tal cual los muestra Sheets
- * (ya formateados como texto: "$32,740", "90.4%", etc.) para no reimplementar sus fórmulas en
- * Kotlin -- ver SheetsRepository.sincronizarVelocidad() para el mapeo exacto de columnas. */
+/** Datos que Diego captura A MANO cada semana para su reporte "Penalización" (Tabla
+ * Velocidades) -- 100% local, no viene de ningún Google Sheet ni depende de su cuenta de
+ * Google. Fila única (id fijo = 1): no hay una fila por gestor, solo la suya. Guarda los
+ * valores crudos que él teclea; las fórmulas (%3-6, $ Arriba, Reque a favor, Pérdida, Me
+ * faltan $, Meta diaria, Déficit o exceden) se calculan en Kotlin -- ver
+ * VelocidadEntity.calcular() en PenalizacionViewModel.kt para el mapeo exacto, confirmado
+ * por Diego con capturas de pantalla de las fórmulas reales de Sheets (sesión 16/09/2026). */
 @Entity(tableName = "velocidad_table")
 data class VelocidadEntity(
-    @PrimaryKey val gic: String,
-    val rk: String?,
-    val plan100: String?,
-    val lunes: String?, val martes: String?, val miercoles: String?, val jueves: String?,
-    val viernes: String?, val sabado: String?, val domingo: String?,
-    val total: String?,
-    val planAvance: String?,
-    val reque36: String?, val monto36: String?, val porcentaje36: String?,
-    val arriba: String?, val requeFavor: String?,
-    val cuPase: String?, val capital: String?, val perdida: String?,
-    val planMeta: String?, val monto: String?, val meFaltan: String?,
-    val metaDiaria: String?, val diasOp: String?, val deficit: String?,
-    val lastSync: Long = System.currentTimeMillis()
+    @PrimaryKey val id: Int = 1,
+    val rk: String = "",
+    val plan100: Double = 0.0,
+    val lunes: Double = 0.0, val martes: Double = 0.0, val miercoles: Double = 0.0,
+    val jueves: Double = 0.0, val viernes: Double = 0.0, val sabado: Double = 0.0, val domingo: Double = 0.0,
+    val reque36: Double = 0.0, val monto36: Double = 0.0,
+    val cuPase: Int = 0, val capital: Double = 0.0,
+    val diasOp: Int = 6,
+    val lastUpdate: Long = System.currentTimeMillis()
 )
 
