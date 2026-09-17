@@ -27,10 +27,9 @@ class PenalizacionViewModel(private val dao: VelocidadDao) : ViewModel() {
  * pantalla de la hoja "Tabla Velocidades" (sesión 16/09/2026):
  * %3-6 = $3-6/REQUE 3-6; $ARRIBA = $3-6-(REQUE 3-6*0.05); REQUE A FAVOR = ($3-6*20)-REQUE 3-6;
  * PERDIDA = $CAPITAL*0.25%; ME FALTAN $ = PLAN100-TOTAL; META DIAR = PLAN100/6;
- * DEFICIT O EXCEDEN = TOTAL-(META DIAR*DÍAS OP). El total de la semana y el avance vs plan
- * (columna "PLAN" de Sheets) también se calculan aquí por ser sumas/razones directas. */
+ * DEFICIT O EXCEDEN = TOTAL-(META DIAR*DÍAS OP). El avance vs plan (columna "PLAN" de Sheets)
+ * también se calcula aquí por ser una razón directa; Total es un dato capturado, no una suma. */
 data class VelocidadCalculo(
-    val total: Double,
     val planAvance: Double,
     val porcentaje36: Double,
     val arriba: Double,
@@ -42,7 +41,6 @@ data class VelocidadCalculo(
 )
 
 fun VelocidadEntity.calcular(): VelocidadCalculo {
-    val total = lunes + martes + miercoles + jueves + viernes + sabado + domingo
     val planAvance = if (plan100 != 0.0) total / plan100 else 0.0
     val porcentaje36 = if (reque36 != 0.0) monto36 / reque36 else 0.0
     val arriba = monto36 - (reque36 * 0.05)
@@ -51,5 +49,5 @@ fun VelocidadEntity.calcular(): VelocidadCalculo {
     val meFaltan = plan100 - total
     val metaDiaria = plan100 / 6
     val deficit = total - (metaDiaria * diasOp)
-    return VelocidadCalculo(total, planAvance, porcentaje36, arriba, requeFavor, perdida, meFaltan, metaDiaria, deficit)
+    return VelocidadCalculo(planAvance, porcentaje36, arriba, requeFavor, perdida, meFaltan, metaDiaria, deficit)
 }

@@ -40,14 +40,7 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
         SeccionTitulo("Semana")
         ClayCard {
             FilaDato("Plan 100%", formatMoney(fila.plan100))
-            FilaDato("Lunes", formatMoney(fila.lunes))
-            FilaDato("Martes", formatMoney(fila.martes))
-            FilaDato("Miércoles", formatMoney(fila.miercoles))
-            FilaDato("Jueves", formatMoney(fila.jueves))
-            FilaDato("Viernes", formatMoney(fila.viernes))
-            FilaDato("Sábado", formatMoney(fila.sabado))
-            FilaDato("Domingo", formatMoney(fila.domingo))
-            FilaDato("Total", formatMoney(calculo.total), destacado = true)
+            FilaDato("Total", formatMoney(fila.total), destacado = true)
             FilaDato("Avance vs plan", formatPercent(calculo.planAvance))
         }
 
@@ -92,13 +85,7 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
 private fun EditorVelocidadDialog(inicial: VelocidadEntity, onDismiss: () -> Unit, onGuardar: (VelocidadEntity) -> Unit) {
     var rk by remember { mutableStateOf(inicial.rk) }
     var plan100 by remember { mutableStateOf(numTexto(inicial.plan100)) }
-    var lunes by remember { mutableStateOf(numTexto(inicial.lunes)) }
-    var martes by remember { mutableStateOf(numTexto(inicial.martes)) }
-    var miercoles by remember { mutableStateOf(numTexto(inicial.miercoles)) }
-    var jueves by remember { mutableStateOf(numTexto(inicial.jueves)) }
-    var viernes by remember { mutableStateOf(numTexto(inicial.viernes)) }
-    var sabado by remember { mutableStateOf(numTexto(inicial.sabado)) }
-    var domingo by remember { mutableStateOf(numTexto(inicial.domingo)) }
+    var total by remember { mutableStateOf(numTexto(inicial.total)) }
     var reque36 by remember { mutableStateOf(numTexto(inicial.reque36)) }
     var monto36 by remember { mutableStateOf(numTexto(inicial.monto36)) }
     var cuPase by remember { mutableStateOf(inicial.cuPase.toString()) }
@@ -115,13 +102,7 @@ private fun EditorVelocidadDialog(inicial: VelocidadEntity, onDismiss: () -> Uni
             ) {
                 CampoTexto("RK", rk) { rk = it }
                 CampoNumero("Plan 100% (meta semanal)", plan100) { plan100 = it }
-                CampoNumero("Lunes", lunes) { lunes = it }
-                CampoNumero("Martes", martes) { martes = it }
-                CampoNumero("Miércoles", miercoles) { miercoles = it }
-                CampoNumero("Jueves", jueves) { jueves = it }
-                CampoNumero("Viernes", viernes) { viernes = it }
-                CampoNumero("Sábado", sabado) { sabado = it }
-                CampoNumero("Domingo", domingo) { domingo = it }
+                CampoNumero("Total", total) { total = it }
                 CampoNumero("Reque 3-6", reque36) { reque36 = it }
                 CampoNumero("$ 3-6", monto36) { monto36 = it }
                 CampoNumero("CU Pase", cuPase) { cuPase = it }
@@ -134,9 +115,7 @@ private fun EditorVelocidadDialog(inicial: VelocidadEntity, onDismiss: () -> Uni
                 onGuardar(
                     VelocidadEntity(
                         id = 1, rk = rk,
-                        plan100 = numDouble(plan100), lunes = numDouble(lunes), martes = numDouble(martes),
-                        miercoles = numDouble(miercoles), jueves = numDouble(jueves), viernes = numDouble(viernes),
-                        sabado = numDouble(sabado), domingo = numDouble(domingo),
+                        plan100 = numDouble(plan100), total = numDouble(total),
                         reque36 = numDouble(reque36), monto36 = numDouble(monto36),
                         cuPase = cuPase.toIntOrNull() ?: 0, capital = numDouble(capital),
                         diasOp = diasOp.toIntOrNull()?.coerceAtLeast(1) ?: 6
