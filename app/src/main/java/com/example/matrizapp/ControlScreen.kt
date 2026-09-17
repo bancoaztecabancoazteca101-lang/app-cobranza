@@ -37,26 +37,25 @@ fun ControlScreen(viewModel: ControlViewModel, onNavigateToPenalizacion: () -> U
 
         if (itemsHoy.isEmpty() && itemsSemanaActual.isEmpty()) {
             Text("Sin datos", color = Color.Gray)
-            return@Column
-        }
-
-        Text("Requerido por día", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        if (itemsHoy.isEmpty()) {
-            Text("Sin datos", color = Color.Gray)
         } else {
-            itemsHoy.forEach { row -> ControlFilaCard(row) }
-        }
+            Text("Requerido por día", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (itemsHoy.isEmpty()) {
+                Text("Sin datos", color = Color.Gray)
+            } else {
+                itemsHoy.forEach { row -> ControlFilaCard(row) }
+            }
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        // Misma estructura que la tabla de arriba, pero sumando todos los registros de la
-        // semana actual (lunes-domingo) en vez de solo hoy. Ambas se calculan local desde
-        // Matriz (Room) y excluyen status "PASE" -- ya no dependen de ninguna hoja de Sheets.
-        Text("Requerido semana actual", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        if (itemsSemanaActual.isEmpty()) {
-            Text("Sin datos", color = Color.Gray)
-        } else {
-            itemsSemanaActual.forEach { row -> ControlFilaCard(row) }
+            // Misma estructura que la tabla de arriba, pero sumando todos los registros de la
+            // semana actual (lunes-domingo) en vez de solo hoy. Ambas se calculan local desde
+            // Matriz (Room) y excluyen status "PASE" -- ya no dependen de ninguna hoja de Sheets.
+            Text("Requerido semana actual", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (itemsSemanaActual.isEmpty()) {
+                Text("Sin datos", color = Color.Gray)
+            } else {
+                itemsSemanaActual.forEach { row -> ControlFilaCard(row) }
+            }
         }
     }
 }
