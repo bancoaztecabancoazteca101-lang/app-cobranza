@@ -40,15 +40,14 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
             }
         }
 
-        if (item == null && !isSyncing) {
-            Box(Modifier.fillMaxWidth().padding(top = 32.dp), Alignment.Center) {
-                Text("Sin datos todavía -- toca el botón de sincronizar", color = Color.Gray)
-            }
-            return@Column
-        }
-
         val fila = item
-        if (fila != null) {
+        if (fila == null) {
+            if (!isSyncing) {
+                Box(Modifier.fillMaxWidth().padding(top = 32.dp), Alignment.Center) {
+                    Text("Sin datos todavía -- toca el botón de sincronizar", color = Color.Gray)
+                }
+            }
+        } else {
             SeccionTitulo("Resumen")
             ClayCard {
                 FilaDato("RK", fila.rk)
