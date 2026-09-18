@@ -91,7 +91,7 @@ private fun FilaComision(fila: ComisionFila) {
         Text(fila.etiqueta, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         Text(formatMoneyComision(fila.alMomento), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         Text(formatMoneyComision(fila.indirecta), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-        Text(formatMoneyComision(fila.total), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = ClayPrimary)
+        Text(formatMoneyComision(fila.comision), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = ClayPrimary)
     }
 }
 
