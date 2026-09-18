@@ -122,3 +122,21 @@ data class ComisionEntity(
     val lastUpdate: Long = System.currentTimeMillis()
 )
 
+/** Datos que Diego captura A MANO para el reporte "Bolsa Gerencia" (4to submenú de Control,
+ * 18/09/2026) -- 100% local, nada se extrae de Sheets ni de ningún lado. Fila única (id fijo =
+ * 1), mismo patrón que ComisionEntity/VelocidadEntity. Ver BolsaGerenciaEntity.calcular() en
+ * BolsaGerenciaViewModel.kt para las fórmulas (Bolsa de la Gerencia, Bolsa a Repartir, %
+ * Cumplimiento 1 a 9, Comisión) y la condición de liberación (85% mínimo de cumplimiento del
+ * plan, si no la comisión es $0). */
+@Entity(tableName = "bolsa_gerencia_table")
+data class BolsaGerenciaEntity(
+    @PrimaryKey val id: Int = 1,
+    val cobranzaGerencia: Double = 0.0,
+    val cumplimientoPlan: Double = 0.0,
+    val montoBase: Double = 0.0,
+    val numeroGestores: Int = 0,
+    val cobranza1a9Gestor: Double = 0.0,
+    val cobranza1a9Gerencia: Double = 0.0,
+    val lastUpdate: Long = System.currentTimeMillis()
+)
+

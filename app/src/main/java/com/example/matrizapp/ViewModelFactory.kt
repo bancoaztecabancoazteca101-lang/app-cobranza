@@ -36,6 +36,8 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
                 PenalizacionViewModel(container.database.velocidadDao()) as T
             modelClass.isAssignableFrom(ComisionViewModel::class.java) ->
                 ComisionViewModel(container.database.comisionDao()) as T
+            modelClass.isAssignableFrom(BolsaGerenciaViewModel::class.java) ->
+                BolsaGerenciaViewModel(container.database.bolsaGerenciaDao()) as T
 
             else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }

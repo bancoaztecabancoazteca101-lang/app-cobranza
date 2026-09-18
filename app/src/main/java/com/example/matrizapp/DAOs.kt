@@ -175,3 +175,11 @@ interface ComisionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun guardar(item: ComisionEntity)
 }
+
+@Dao
+interface BolsaGerenciaDao {
+    @Query("SELECT * FROM bolsa_gerencia_table WHERE id = 1 LIMIT 1")
+    fun getFlow(): Flow<BolsaGerenciaEntity?>
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun guardar(item: BolsaGerenciaEntity)
+}

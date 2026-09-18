@@ -11,15 +11,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-/** Submenú de Control: 3 opciones (Penalización, Comisión, Avance), cada una en su propia
- * pantalla. Antes "Avance" (Requerido por día/semana) vivía mezclado directo aquí; se movió a
- * AvanceScreen.kt para que las 3 opciones sean consistentes entre sí (ver ControlScreen.kt
+/** Submenú de Control: 4 opciones (Penalización, Comisión, Avance, Bolsa Gerencia), cada una en
+ * su propia pantalla. Antes "Avance" (Requerido por día/semana) vivía mezclado directo aquí; se
+ * movió a AvanceScreen.kt para que las opciones sean consistentes entre sí (ver ControlScreen.kt
  * previo a 18/09/2026 en el historial si se necesita comparar). */
 @Composable
 fun ControlScreen(
     onNavigateToPenalizacion: () -> Unit = {},
     onNavigateToComision: () -> Unit = {},
-    onNavigateToAvance: () -> Unit = {}
+    onNavigateToAvance: () -> Unit = {},
+    onNavigateToBolsaGerencia: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
@@ -28,6 +29,7 @@ fun ControlScreen(
         ControlMenuCard("Penalización", onNavigateToPenalizacion)
         ControlMenuCard("Comisión", onNavigateToComision)
         ControlMenuCard("Avance", onNavigateToAvance)
+        ControlMenuCard("Bolsa Gerencia", onNavigateToBolsaGerencia)
     }
 }
 
