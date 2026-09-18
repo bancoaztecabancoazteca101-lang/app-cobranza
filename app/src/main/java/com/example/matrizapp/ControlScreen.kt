@@ -31,6 +31,7 @@ fun ControlScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ControlMenuCard(titulo: String, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {

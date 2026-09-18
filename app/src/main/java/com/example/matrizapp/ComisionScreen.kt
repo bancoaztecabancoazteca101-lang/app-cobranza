@@ -46,7 +46,7 @@ fun ComisionScreen(viewModel: ComisionViewModel) {
             )
             Spacer(modifier = Modifier.height(10.dp))
             LinearProgressIndicator(
-                progress = { calculo.avance.toFloat().coerceIn(0f, 1f) },
+                progress = calculo.avance.toFloat().coerceIn(0f, 1f),
                 modifier = Modifier.fillMaxWidth().height(10.dp),
                 color = ClayPrimary
             )
