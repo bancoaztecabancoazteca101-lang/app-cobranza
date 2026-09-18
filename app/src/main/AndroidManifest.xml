@@ -22,6 +22,13 @@
          evita que Android 12+ los muestre como permisos "instalados" de más. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <!-- Necesario en Android 11+ (API 30+): sin declarar el paquete de WhatsApp aquí, la
+         restricción de visibilidad de paquetes hace que resolveActivity() en
+         NotificacionesHelper.kt siempre regrese null (aunque WhatsApp esté instalado), y el
+         botón "WhatsApp" de la notificación de Retorno/App nunca se agrega. -->
+    <queries>
+        <package android:name="com.whatsapp" />
+    </queries>
     <application android:name=".MainApplication" android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:label="Matriz App" android:roundIcon="@mipmap/ic_launcher_round" android:supportsRtl="true" android:theme="@style/Theme.Material3.DayNight">
         <meta-data android:name="com.google.android.geo.API_KEY" android:value="${MAPS_API_KEY}" />
         <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>
