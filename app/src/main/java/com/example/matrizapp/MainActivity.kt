@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                 val rutaIAVm: RutaIAViewModel = viewModel(factory = factory)
                 val diagnosticoVm: DiagnosticoViewModel = viewModel(factory = factory)
                 val penalizacionVm: PenalizacionViewModel = viewModel(factory = factory)
+                val comisionVm: ComisionViewModel = viewModel(factory = factory)
                 var searchInput by remember { mutableStateOf("") }
                 var searchQuery by remember { mutableStateOf("") }
                 LaunchedEffect(searchInput) { delay(180); searchQuery = searchInput }
@@ -207,8 +208,16 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
                             composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, container.notificacionesHelper, searchQuery) }
                             composable(Screen.Filtrar.route) { FiltrarScreen(filtrarVm, searchQuery) }
-                            composable(Screen.Control.route) { ControlScreen(controlVm, onNavigateToPenalizacion = { navController.navigate(Screen.Penalizacion.route) }) }
+                            composable(Screen.Control.route) {
+                                ControlScreen(
+                                    onNavigateToPenalizacion = { navController.navigate(Screen.Penalizacion.route) },
+                                    onNavigateToComision = { navController.navigate(Screen.Comision.route) },
+                                    onNavigateToAvance = { navController.navigate(Screen.Avance.route) }
+                                )
+                            }
                             composable(Screen.Penalizacion.route) { PenalizacionScreen(penalizacionVm) }
+                            composable(Screen.Comision.route) { ComisionScreen(comisionVm) }
+                            composable(Screen.Avance.route) { AvanceScreen(controlVm) }
                             composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
                             composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
                             composable(Screen.Sms.route) { SmsScreen(smsVm) }
@@ -241,9 +250,11 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object RutaIA : Screen("ruta_ia", "Ruta IA", Icons.Default.Route)
     object Diagnostico : Screen("diagnostico", "Diagnóstico", Icons.Default.BugReport)
     object ExportarMatriz : Screen("exportar_matriz", "Exportar Matriz", Icons.Default.FileDownload)
-    // Submenú de Control (no tiene entrada propia en el drawer -- solo se llega desde el botón
-    // "Penalización" dentro de ControlScreen).
+    // Submenú de Control (no tienen entrada propia en el drawer -- solo se llega desde las 3
+    // tarjetas dentro de ControlScreen: Penalización, Comisión, Avance).
     object Penalizacion : Screen("penalizacion", "Penalización", Icons.Default.BarChart)
+    object Comision : Screen("comision", "Comisión", Icons.Default.BarChart)
+    object Avance : Screen("avance", "Avance", Icons.Default.BarChart)
 }
 
 /** Nombre de la pantalla actual para mostrarlo tenue en la barra superior -- así siempre se ve
@@ -251,5 +262,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
 fun screenTitleFor(route: String): String = listOf(
     Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.Filtrar,
     Screen.Control, Screen.Ubi, Screen.Sem6, Screen.Sms, Screen.Llamadas, Screen.BloquesLlamada,
-    Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Penalizacion
+    Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Penalizacion,
+    Screen.Comision, Screen.Avance
 ).find { it.route == route }?.title ?: ""

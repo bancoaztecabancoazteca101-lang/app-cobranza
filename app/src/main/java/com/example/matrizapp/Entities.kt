@@ -106,3 +106,19 @@ data class VelocidadEntity(
     val lastUpdate: Long = System.currentTimeMillis()
 )
 
+/** Datos que Diego captura A MANO para el reporte "Comisión" (submenú de Control) -- 100%
+ * local, sin fórmula de negocio: por cada segmento de semana de atraso (1-2, 3, 4-6, 7-9)
+ * teclea lo cobrado "al momento" (directo) y lo cobrado "indirecta", más la meta del periodo.
+ * Fila única (id fijo = 1), mismo patrón que VelocidadEntity/Penalización. Ver
+ * ComisionEntity.calcular() en ComisionViewModel.kt para el Total por fila y el % de avance. */
+@Entity(tableName = "comision_table")
+data class ComisionEntity(
+    @PrimaryKey val id: Int = 1,
+    val momento12: Double = 0.0, val indirecta12: Double = 0.0,
+    val momento3: Double = 0.0, val indirecta3: Double = 0.0,
+    val momento46: Double = 0.0, val indirecta46: Double = 0.0,
+    val momento79: Double = 0.0, val indirecta79: Double = 0.0,
+    val meta: Double = 0.0,
+    val lastUpdate: Long = System.currentTimeMillis()
+)
+
