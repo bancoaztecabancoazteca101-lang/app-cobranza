@@ -7,12 +7,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** Cuando el dispositivo se reinicia, Android borra TODAS las alarmas programadas con
- * AlarmManager. Este receptor las vuelve a programar leyendo directamente de Room (no depende
- * de que la app esté abierta ni de que exista un ViewModel vivo). */
+/** Repone las alarmas de Retorno/App, bloques de llamadas y limpieza de Ruta IA cuando Android
+ * las borra: al reiniciar el dispositivo (BOOT_COMPLETED) o al instalar una actualización de la
+ * app (MY_PACKAGE_REPLACED) -- ambos casos hacen que AlarmManager pierda TODO lo programado.
+ * Lee directamente de Room (no depende de que la app esté abierta ni de que exista un
+ * ViewModel vivo). */
 class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
