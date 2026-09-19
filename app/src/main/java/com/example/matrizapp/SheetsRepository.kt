@@ -299,6 +299,10 @@ class SheetsRepository(
 
     private suspend fun refreshMatriz() {
         val dirtyIds = matrizDao.getDirtyItems().map { it.id }.toSet()
+        // El Sheet no tiene columnas para la oferta de descuento (es un dato 100% local, ver
+        // DescuentoLimpieza.kt) -- sin esto, cada pull normal la borraría de inmediato en cuanto
+        // el registro dejara de estar "dirty", aunque la oferta siguiera vigente ese mismo día.
+        val descuentosLocales = matrizDao.getAllMatriz().first().associate { it.id to (it.descuentoPago to it.descuentoAhorro) }
         val rows = fetchRows(Constants.SHEET_MATRIZ)
         val items = rows.mapNotNull { row ->
             val id = cell(row, Constants.MatrizCols.ID) ?: return@mapNotNull null
@@ -306,12 +310,14 @@ class SheetsRepository(
             val nombre = cell(row, Constants.MatrizCols.NOMBRE) ?: ""
             if (nombre.contains("Pase semana", ignoreCase = true) || nombre.isBlank()) return@mapNotNull null
             val fechaSerial = DateUtils.parseCellDateToEpochMillis(cell(row, Constants.MatrizCols.FECHA))
+            val (descPago, descAhorro) = descuentosLocales[id] ?: (null to null)
             MatrizEntity(
                 id = id, nombre = nombre, semana = cell(row, Constants.MatrizCols.SEMANA) ?: "", requisito = cell(row, Constants.MatrizCols.REQUISITO) ?: "",
                 numTT = cell(row, Constants.MatrizCols.NUMTT) ?: "", ref1 = cell(row, Constants.MatrizCols.REF1) ?: "", ref2 = cell(row, Constants.MatrizCols.REF2) ?: "",
                 observaciones = cell(row, Constants.MatrizCols.OBSERVACIONES), estado = cell(row, Constants.MatrizCols.ESTADO) ?: "", ubicacion = cell(row, Constants.MatrizCols.UBICACION),
                 imagenUrl = cell(row, Constants.MatrizCols.IMAGEN), imagenUrl2 = cell(row, Constants.MatrizCols.IMAGEN2), fecha = fechaSerial,
-                hora = cell(row, Constants.MatrizCols.HORA), ruta = cell(row, Constants.MatrizCols.RUTA), folioP = cell(row, Constants.MatrizCols.FOLIOP)
+                hora = cell(row, Constants.MatrizCols.HORA), ruta = cell(row, Constants.MatrizCols.RUTA), folioP = cell(row, Constants.MatrizCols.FOLIOP),
+                descuentoPago = descPago, descuentoAhorro = descAhorro
             )
         }
         if (items.isNotEmpty()) matrizDao.insertAll(items)

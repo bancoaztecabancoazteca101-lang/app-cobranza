@@ -332,7 +332,8 @@ fun MatrizFullFormDialog(
     viewModel: MatrizViewModel? = null,
     onDismiss: () -> Unit,
     onSave: (id: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String,
-             observaciones: String, estado: String, ubicacion: String, fecha: Long, hora: String, ruta: String, folioP: String) -> Unit
+             observaciones: String, estado: String, ubicacion: String, fecha: Long, hora: String, ruta: String, folioP: String,
+             descuentoPago: String, descuentoAhorro: String) -> Unit
 ) {
     val context = LocalContext.current
     val esNuevo = item == null
@@ -358,6 +359,8 @@ fun MatrizFullFormDialog(
     var hora by remember { mutableStateOf(item?.hora ?: "") }
     var ruta by remember { mutableStateOf(item?.ruta ?: "") }
     var folioP by remember { mutableStateOf(item?.folioP ?: "") }
+    var descuentoPago by remember { mutableStateOf(item?.descuentoPago ?: "") }
+    var descuentoAhorro by remember { mutableStateOf(item?.descuentoAhorro ?: "") }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
     var buscandoUbicacion by remember { mutableStateOf(esNuevo) }
     var activePhotoSlot by remember { mutableStateOf(1) }
@@ -557,6 +560,20 @@ fun MatrizFullFormDialog(
                 }
                 OutlinedTextField(value = folioP, onValueChange = { folioP = it }, label = { Text("CU") }, modifier = Modifier.fillMaxWidth())
 
+                // Oferta de descuento del día: solo se manda al titular por SMS después del mensaje
+                // normal, y se borra sola a medianoche (válida solo por el día en que se captura).
+                Text("Oferta de descuento (solo por hoy, solo SMS al titular)", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = descuentoPago, onValueChange = { descuentoPago = it }, label = { Text("Pago con descuento") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = descuentoAhorro, onValueChange = { descuentoAhorro = it }, label = { Text("Ahorro") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f)
+                    )
+                }
+
                 // Hora editable por separado (igual que en AppSheet): se autocompleta al elegir
                 // fecha y hora arriba, pero se puede ajustar aparte sin tocar la fecha.
                 OutlinedTextField(
@@ -582,7 +599,7 @@ fun MatrizFullFormDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(idEditable, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fechaMillis, hora, ruta, folioP)
+                    onSave(idEditable, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fechaMillis, hora, ruta, folioP, descuentoPago, descuentoAhorro)
                 },
                 enabled = nombre.isNotBlank() && idEditable.isNotBlank()
             ) { Text("Guardar") }

@@ -20,12 +20,14 @@ interface MatrizDao {
     suspend fun marcarComoPase(id: String)
     @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
-        ubicacion = :ubicacion, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP, isDirty = 1
+        ubicacion = :ubicacion, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP,
+        descuentoPago = :descuentoPago, descuentoAhorro = :descuentoAhorro, isDirty = 1
         WHERE id = :id""")
     suspend fun updateRegistroCompleto(
         id: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
-        fecha: Long?, hora: String?, ruta: String?, folioP: String?
+        fecha: Long?, hora: String?, ruta: String?, folioP: String?,
+        descuentoPago: String?, descuentoAhorro: String?
     )
     @Query("UPDATE matriz_table SET id = :idNuevo WHERE id = :idAnterior")
     suspend fun renameId(idAnterior: String, idNuevo: String)
@@ -33,6 +35,8 @@ interface MatrizDao {
     suspend fun updateFolioP(id: String, folioP: String)
     @Query("SELECT * FROM matriz_table WHERE (folioP IS NULL OR folioP = '') AND (imagenUrl IS NOT NULL AND imagenUrl != '' OR imagenUrl2 IS NOT NULL AND imagenUrl2 != '')")
     suspend fun getSinCuConFoto(): List<MatrizEntity>
+    @Query("UPDATE matriz_table SET descuentoPago = NULL, descuentoAhorro = NULL WHERE (descuentoPago IS NOT NULL AND descuentoPago != '') OR (descuentoAhorro IS NOT NULL AND descuentoAhorro != '')")
+    suspend fun limpiarDescuentosVencidos(): Int
     @Query("UPDATE matriz_table SET imagenUrl = :uri, isDirty = 1 WHERE id = :id")
     suspend fun updateImagenLocal(id: String, uri: String)
     @Query("UPDATE matriz_table SET imagenUrl2 = :uri, isDirty = 1 WHERE id = :id")

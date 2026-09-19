@@ -9,6 +9,7 @@ data class MatrizEntity(
     val ref1: String, val ref2: String, var observaciones: String?, var estado: String,
     val ubicacion: String?, var imagenUrl: String?, var imagenUrl2: String?, val fecha: Long?, val hora: String?,
     val ruta: String?, val folioP: String?,
+    val descuentoPago: String? = null, val descuentoAhorro: String? = null,
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 

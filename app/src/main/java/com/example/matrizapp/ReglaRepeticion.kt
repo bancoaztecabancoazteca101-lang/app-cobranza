@@ -83,6 +83,16 @@ object MensajesCobranza {
         return plantillas[idx].texto.replace("%nombre%", nombre, ignoreCase = true).replace("%monto%", montoParte, ignoreCase = true)
     }
 
+    /** Párrafo de oferta de descuento del día, solo para el SMS del titular (nunca referencias).
+     * Redacción fija en el código -- lo único que captura el gestor son los dos montos
+     * (descuentoPago/descuentoAhorro de MatrizEntity) -- para que nunca se mande un texto
+     * mal escrito como si fuera un compromiso formal de pago. Devuelve null si falta
+     * cualquiera de los dos montos (oferta incompleta, no se agrega nada). */
+    fun ofertaDescuento(pago: String?, ahorro: String?): String? {
+        if (pago.isNullOrBlank() || ahorro.isNullOrBlank()) return null
+        return "El día de hoy contamos con un descuento donde pagaría solo \$$pago y el banco le cubre su siguiente pago semanal, usted se estaría ahorrando \$$ahorro."
+    }
+
     suspend fun paraReferencia(dao: PlantillaSmsDao, nombre: String, sem: Int, variante: Int = 0): String {
         val plantillas = dao.obtenerActivasPara("REF", sem)
         if (plantillas.isEmpty()) return "Banco Azteca le informa que $nombre mantiene un adeudo pendiente. Le pedimos comunicarle que se contacte con nosotros."

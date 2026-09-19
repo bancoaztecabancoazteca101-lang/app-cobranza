@@ -106,12 +106,14 @@ class MatrizViewModel(
     fun guardarRegistroCompleto(
         id: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
-        fecha: Long?, hora: String?, ruta: String?, folioP: String?
+        fecha: Long?, hora: String?, ruta: String?, folioP: String?,
+        descuentoPago: String? = null, descuentoAhorro: String? = null
     ) {
         viewModelScope.launch {
             matrizDao.updateRegistroCompleto(
                 id, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
-                observaciones, estado, ubicacion, fecha, hora, ruta, folioP
+                observaciones, estado, ubicacion, fecha, hora, ruta, folioP,
+                descuentoPago?.takeIf { it.isNotBlank() }, descuentoAhorro?.takeIf { it.isNotBlank() }
             )
             triggerSync()
         }
@@ -127,6 +129,7 @@ class MatrizViewModel(
         idAnterior: String, idNuevo: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
         fecha: Long?, hora: String?, ruta: String?, folioP: String?,
+        descuentoPago: String? = null, descuentoAhorro: String? = null,
         onResult: (exito: Boolean, error: String?) -> Unit
     ) {
         viewModelScope.launch {
@@ -142,7 +145,8 @@ class MatrizViewModel(
             }
             matrizDao.updateRegistroCompleto(
                 idFinal, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
-                observaciones, estado, ubicacion, fecha, hora, ruta, folioP
+                observaciones, estado, ubicacion, fecha, hora, ruta, folioP,
+                descuentoPago?.takeIf { it.isNotBlank() }, descuentoAhorro?.takeIf { it.isNotBlank() }
             )
             triggerSync()
             onResult(true, null)
@@ -160,6 +164,7 @@ class MatrizViewModel(
         id: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
         fecha: Long, hora: String?, ruta: String?, folioP: String?,
+        descuentoPago: String? = null, descuentoAhorro: String? = null,
         onCreado: (MatrizEntity) -> Unit = {}
     ) {
         val idFinal = id.trim().ifBlank { java.util.UUID.randomUUID().toString().replace("-", "").take(8) }
@@ -167,7 +172,9 @@ class MatrizViewModel(
             id = idFinal, nombre = nombre.trim().uppercase(), semana = semana, requisito = requisito, numTT = numTT,
             ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado,
             ubicacion = ubicacion, imagenUrl = null, imagenUrl2 = null, fecha = fecha,
-            hora = hora, ruta = ruta, folioP = folioP, isDirty = true
+            hora = hora, ruta = ruta, folioP = folioP,
+            descuentoPago = descuentoPago?.takeIf { it.isNotBlank() }, descuentoAhorro = descuentoAhorro?.takeIf { it.isNotBlank() },
+            isDirty = true
         )
         viewModelScope.launch {
             matrizDao.insertOne(nuevo)

@@ -61,8 +61,8 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
         MatrizDetailDialog(item, viewModel.driveHelper, onDismiss = { itemToView = null }, onEditClick = { itemToEdit = item; itemToView = null })
     }
     itemToEdit?.let { item ->
-        MatrizFullFormDialog(item, viewModel, onDismiss = { itemToEdit = null }, onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
-            viewModel.cambiarIdYGuardar(item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { exito, error ->
+        MatrizFullFormDialog(item, viewModel, onDismiss = { itemToEdit = null }, onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro ->
+            viewModel.cambiarIdYGuardar(item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro) { exito, error ->
                 if (!exito) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
             }
             itemToEdit = null
@@ -73,8 +73,8 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
             item = null,
             viewModel = viewModel,
             onDismiss = { showCreateDialog = false },
-            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
-                viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { creado ->
+            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro ->
+                viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro) { creado ->
                     itemToView = creado
                 }
                 showCreateDialog = false

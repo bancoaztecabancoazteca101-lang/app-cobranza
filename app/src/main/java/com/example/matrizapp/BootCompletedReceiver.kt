@@ -27,6 +27,8 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 LlamadaAutomaticaScheduler(context.applicationContext, db.bloqueHorarioDao()).reprogramarTodos()
                 // Limpieza diaria de Ruta IA: misma razón, se pierde con el reinicio.
                 programarLimpiezaRutaIA(context.applicationContext)
+                // Limpieza diaria de la oferta de descuento: misma razón, se pierde con el reinicio.
+                programarLimpiezaDescuento(context.applicationContext)
             } catch (e: Exception) {
                 // Si algo falla aquí no hay forma de avisarle al usuario (no hay UI); se
                 // reintentará solo la próxima vez que se abra la app y cambien los datos.

@@ -216,6 +216,12 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaLlamada * 1_000L)
         CallHelper.silenciarMicrofono(context, false)
         SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
+        // Oferta de descuento del día: se agrega como línea extra después del SMS normal,
+        // solo al titular -- nunca a Ref1/Ref2 (ver el forEach de telefonosReferencia abajo,
+        // que no la toca). Si no hay descuentoPago/descuentoAhorro capturados hoy, no manda nada.
+        MensajesCobranza.ofertaDescuento(r.descuentoPago, r.descuentoAhorro)?.let { oferta ->
+            SmsHelper.enviarSms(context, subIdSms, r.numTT, oferta)
+        }
     }
     // Referencias propias del cliente (Ref1/Ref2 capturados en Matriz) + referencias extra
     // confirmadas a mano desde Filtrar (números de un "cercano" que probablemente conoce al

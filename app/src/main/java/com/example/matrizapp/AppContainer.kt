@@ -52,5 +52,7 @@ class AppContainer(val context: Context) {
         // y también en BootCompletedReceiver, porque un reinicio del dispositivo borra todas
         // las alarmas de AlarmManager.
         programarLimpiezaRutaIA(context)
+        // Limpieza diaria de la oferta de descuento (medianoche) -- mismo motivo que arriba.
+        programarLimpiezaDescuento(context)
     }
 }

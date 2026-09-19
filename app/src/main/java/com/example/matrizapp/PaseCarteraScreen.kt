@@ -171,7 +171,7 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
     }
 
     if (showCreateDialog) {
-        MatrizFullFormDialog(null, null, { showCreateDialog = false }, { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP ->
+        MatrizFullFormDialog(null, null, { showCreateDialog = false }, { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, _, _ ->
             viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP)
             showCreateDialog = false
         })

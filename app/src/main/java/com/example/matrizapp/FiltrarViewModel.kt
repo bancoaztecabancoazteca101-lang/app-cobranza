@@ -178,6 +178,7 @@ class FiltrarViewModel(
         idAnterior: String, idNuevo: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
         fecha: Long?, hora: String?, ruta: String?, folioP: String?,
+        descuentoPago: String? = null, descuentoAhorro: String? = null,
         onResult: (exito: Boolean, error: String?) -> Unit
     ) {
         viewModelScope.launch {
@@ -193,7 +194,8 @@ class FiltrarViewModel(
             }
             matrizDao.updateRegistroCompleto(
                 idFinal, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
-                observaciones, estado, ubicacion, fecha, hora, ruta, folioP
+                observaciones, estado, ubicacion, fecha, hora, ruta, folioP,
+                descuentoPago?.takeIf { it.isNotBlank() }, descuentoAhorro?.takeIf { it.isNotBlank() }
             )
             triggerSync()
             onResult(true, null)
