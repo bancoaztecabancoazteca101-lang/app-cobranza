@@ -1002,9 +1002,12 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
  * foto (los cuatro nullable de forma independiente, puede venir solo alguno de ellos). */
 data class DatosClienteOcr(val nombre: String?, val monto: String?, val semana: String?, val cu: String?)
 
-/** Mismo patrón que `patronCu` en PaseFotoImport.kt (CU formato 01-01-01627-89102): dos
- * grupos cortos, dos grupos largos, separados por guion, sin dígitos pegados a los bordes. */
-private val patronCuOcr = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)")
+/** Mismo patrón de 4 bloques que `patronCu` en PaseFotoImport.kt (CU formato
+ * 01-01-01627-89102: 2-2-5-5 dígitos), pero tolerante al separador: en fotos tomadas con
+ * cámara (con glare/ruido, no capturas limpias) ML Kit a veces lee el guion como espacio o
+ * como guion largo (–/—) en vez de "-". Los grupos se reconstruyen siempre con "-" normal. */
+private val patronCuOcr = Regex("(?<!\\d)(\\d{1,2})[\\s\\-–—](\\d{1,2})[\\s\\-–—](\\d{3,6})[\\s\\-–—](\\d{3,6})(?!\\d)")
+private fun MatchResult.aCu(): String = "${groupValues[1]}-${groupValues[2]}-${groupValues[3]}-${groupValues[4]}"
 
 /** Convierte "días de atraso" (como lo muestra la app de Banco Azteca) a la "Sem" que usa
  * Matriz, según la tabla que dio Diego: menos de 7 días = semana 1; 7 días = semana 2;
@@ -1066,7 +1069,7 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
                 val monto = montoMatch?.groupValues?.get(1)?.let { "$$it" }
                 val diasMatch = Regex("(?i)([0-9]+)\\s*d[ií]as?\\s*de\\s*atraso").find(textoCompleto)
                 val semana = diasMatch?.groupValues?.get(1)?.toIntOrNull()?.let { diasAtrasoASemana(it).toString() }
-                val cu = patronCuOcr.find(textoCompleto)?.value
+                val cu = patronCuOcr.find(textoCompleto)?.aCu()
                 if (cont.isActive) cont.resume(DatosClienteOcr(mejorLinea?.uppercase(), monto, semana, cu)) {}
             }
             .addOnFailureListener { if (cont.isActive) cont.resume(DatosClienteOcr(null, null, null, null)) {} }
@@ -1085,7 +1088,7 @@ suspend fun extraerCuDeImagen(context: android.content.Context, uri: Uri): Strin
         )
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
-                val cu = patronCuOcr.find(visionText.text)?.value
+                val cu = patronCuOcr.find(visionText.text)?.aCu()
                 if (cont.isActive) cont.resume(cu) {}
             }
             .addOnFailureListener { if (cont.isActive) cont.resume(null) {} }
