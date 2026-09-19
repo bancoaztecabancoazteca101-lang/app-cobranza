@@ -29,6 +29,10 @@ interface MatrizDao {
     )
     @Query("UPDATE matriz_table SET id = :idNuevo WHERE id = :idAnterior")
     suspend fun renameId(idAnterior: String, idNuevo: String)
+    @Query("UPDATE matriz_table SET folioP = :folioP, isDirty = 1 WHERE id = :id")
+    suspend fun updateFolioP(id: String, folioP: String)
+    @Query("SELECT * FROM matriz_table WHERE (folioP IS NULL OR folioP = '') AND (imagenUrl IS NOT NULL AND imagenUrl != '' OR imagenUrl2 IS NOT NULL AND imagenUrl2 != '')")
+    suspend fun getSinCuConFoto(): List<MatrizEntity>
     @Query("UPDATE matriz_table SET imagenUrl = :uri, isDirty = 1 WHERE id = :id")
     suspend fun updateImagenLocal(id: String, uri: String)
     @Query("UPDATE matriz_table SET imagenUrl2 = :uri, isDirty = 1 WHERE id = :id")

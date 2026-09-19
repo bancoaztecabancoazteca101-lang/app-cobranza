@@ -375,12 +375,13 @@ fun MatrizFullFormDialog(
         coroutineScope.launch {
             val datos = extraerDatosClienteDeImagen(context, uri)
             buscandoNombrePorFoto = false
-            if (datos.nombre.isNullOrBlank() && datos.monto.isNullOrBlank() && datos.semana.isNullOrBlank()) {
+            if (datos.nombre.isNullOrBlank() && datos.monto.isNullOrBlank() && datos.semana.isNullOrBlank() && datos.cu.isNullOrBlank()) {
                 Toast.makeText(context, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
             } else {
                 if (!datos.nombre.isNullOrBlank()) nombre = datos.nombre
                 if (!datos.monto.isNullOrBlank()) requisito = datos.monto
                 if (!datos.semana.isNullOrBlank()) semana = datos.semana
+                if (!datos.cu.isNullOrBlank() && folioP.isBlank()) folioP = datos.cu
             }
         }
     }
@@ -996,10 +997,14 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
     }
 }
 
-/** Resultado del OCR usado en el diálogo de Editar/Nuevo registro: nombre, monto "Requerido"
- * y semana de atraso (calculada a partir de los "días de atraso") detectados en la misma
- * foto (los tres nullable de forma independiente, puede venir solo alguno de ellos). */
-data class DatosClienteOcr(val nombre: String?, val monto: String?, val semana: String?)
+/** Resultado del OCR usado en el diálogo de Editar/Nuevo registro: nombre, monto "Requerido",
+ * semana de atraso (calculada a partir de los "días de atraso") y CU detectados en la misma
+ * foto (los cuatro nullable de forma independiente, puede venir solo alguno de ellos). */
+data class DatosClienteOcr(val nombre: String?, val monto: String?, val semana: String?, val cu: String?)
+
+/** Mismo patrón que `patronCu` en PaseFotoImport.kt (CU formato 01-01-01627-89102): dos
+ * grupos cortos, dos grupos largos, separados por guion, sin dígitos pegados a los bordes. */
+private val patronCuOcr = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)")
 
 /** Convierte "días de atraso" (como lo muestra la app de Banco Azteca) a la "Sem" que usa
  * Matriz, según la tabla que dio Diego: menos de 7 días = semana 1; 7 días = semana 2;
@@ -1061,10 +1066,30 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
                 val monto = montoMatch?.groupValues?.get(1)?.let { "$$it" }
                 val diasMatch = Regex("(?i)([0-9]+)\\s*d[ií]as?\\s*de\\s*atraso").find(textoCompleto)
                 val semana = diasMatch?.groupValues?.get(1)?.toIntOrNull()?.let { diasAtrasoASemana(it).toString() }
-                if (cont.isActive) cont.resume(DatosClienteOcr(mejorLinea?.uppercase(), monto, semana)) {}
+                val cu = patronCuOcr.find(textoCompleto)?.value
+                if (cont.isActive) cont.resume(DatosClienteOcr(mejorLinea?.uppercase(), monto, semana, cu)) {}
             }
-            .addOnFailureListener { if (cont.isActive) cont.resume(DatosClienteOcr(null, null, null)) {} }
+            .addOnFailureListener { if (cont.isActive) cont.resume(DatosClienteOcr(null, null, null, null)) {} }
     } catch (e: Exception) {
-        if (cont.isActive) cont.resume(DatosClienteOcr(null, null, null)) {}
+        if (cont.isActive) cont.resume(DatosClienteOcr(null, null, null, null)) {}
+    }
+}
+
+/** OCR local (ML Kit) solo para CU, usado por el backfill masivo de Matriz (fotos ya
+ * subidas a Drive, no se necesita nombre/monto/semana de esos registros existentes). */
+suspend fun extraerCuDeImagen(context: android.content.Context, uri: Uri): String? = suspendCancellableCoroutine { cont ->
+    try {
+        val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
+            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
+        )
+        recognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                val cu = patronCuOcr.find(visionText.text)?.value
+                if (cont.isActive) cont.resume(cu) {}
+            }
+            .addOnFailureListener { if (cont.isActive) cont.resume(null) {} }
+    } catch (e: Exception) {
+        if (cont.isActive) cont.resume(null) {}
     }
 }

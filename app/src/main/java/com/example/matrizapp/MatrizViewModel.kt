@@ -184,6 +184,57 @@ class MatrizViewModel(
         workManager.enqueueUniqueWork("sync_app_data", ExistingWorkPolicy.REPLACE, syncRequest)
     }
 
+    private val _backfillCuEnProgreso = MutableStateFlow(false)
+    val backfillCuEnProgreso: StateFlow<Boolean> = _backfillCuEnProgreso
+    private val _backfillCuProgreso = MutableStateFlow<Pair<Int, Int>?>(null) // (procesados, total)
+    val backfillCuProgreso: StateFlow<Pair<Int, Int>?> = _backfillCuProgreso
+    private val _backfillCuResultado = MutableStateFlow<String?>(null)
+    val backfillCuResultado: StateFlow<String?> = _backfillCuResultado
+    fun limpiarBackfillCuResultado() { _backfillCuResultado.value = null }
+
+    /** Recorre Matriz buscando registros sin CU (folioP vacío) que sí tengan alguna foto ya
+     * subida a Drive, descarga esa foto y le corre el mismo OCR de CU que usa el flujo manual.
+     * Si lo encuentra, actualiza Room (isDirty=1) para que el próximo sync lo suba también al
+     * Sheet. No requiere red para leer Room, pero sí para descargar cada foto de Drive. */
+    fun backfillCuFaltantes(context: Context) {
+        if (_backfillCuEnProgreso.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _backfillCuEnProgreso.value = true
+            var encontrados = 0
+            var revisados = 0
+            try {
+                val pendientes = matrizDao.getSinCuConFoto()
+                _backfillCuProgreso.value = 0 to pendientes.size
+                val tempFile = File(context.cacheDir, "backfill_cu_temp.jpg")
+                for (item in pendientes) {
+                    revisados++
+                    val urlFoto = item.imagenUrl?.takeIf { it.isNotBlank() } ?: item.imagenUrl2?.takeIf { it.isNotBlank() }
+                    if (urlFoto != null) {
+                        try {
+                            if (driveHelper.downloadFile(urlFoto, tempFile)) {
+                                val uri = Uri.fromFile(tempFile)
+                                val cu = extraerCuDeImagen(context, uri)
+                                if (!cu.isNullOrBlank()) {
+                                    matrizDao.updateFolioP(item.id, cu)
+                                    encontrados++
+                                }
+                            }
+                        } catch (_: Exception) { /* sigue con el siguiente registro */ }
+                    }
+                    _backfillCuProgreso.value = revisados to pendientes.size
+                }
+                tempFile.delete()
+                if (encontrados > 0) triggerSync()
+                _backfillCuResultado.value = "CU recuperado en $encontrados de $revisados registro(s) revisado(s)"
+            } catch (e: Exception) {
+                _backfillCuResultado.value = "Error al recuperar CU: ${e.message}"
+            } finally {
+                _backfillCuEnProgreso.value = false
+                _backfillCuProgreso.value = null
+            }
+        }
+    }
+
     private val _deleteInProgress = MutableStateFlow(false)
     val deleteInProgress: StateFlow<Boolean> = _deleteInProgress
 

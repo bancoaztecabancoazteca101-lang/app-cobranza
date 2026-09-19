@@ -167,9 +167,16 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntryForDrawer by navController.currentBackStackEntryAsState()
                 val currentRouteForDrawer = navBackStackEntryForDrawer?.destination?.route ?: Screen.Matriz.route
                 LaunchedEffect(currentRouteForDrawer) { searchInput = ""; searchQuery = "" }
+                val backfillCuEnProgreso by matrizVm.backfillCuEnProgreso.collectAsState()
+                val backfillCuResultado by matrizVm.backfillCuResultado.collectAsState()
+                LaunchedEffect(backfillCuResultado) {
+                    backfillCuResultado?.let { Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show(); matrizVm.limpiarBackfillCuResultado() }
+                }
                 AppNavigationDrawer(currentRoute = currentRouteForDrawer, lastSyncTime = lastSyncLabel, isSyncing = isRefreshing,
                     onNavigate = { route -> navController.navigate(route) { popUpTo(navController.graph.findStartDestination().id) { saveState = true }; launchSingleTop = true; restoreState = true } },
-                    onSyncClick = { refreshData() }, drawerState = drawerState) {
+                    onSyncClick = { refreshData() }, drawerState = drawerState,
+                    backfillCuEnProgreso = backfillCuEnProgreso,
+                    onBackfillCuClick = { matrizVm.backfillCuFaltantes(this@MainActivity) }) {
                     Scaffold(topBar = {
                         TopAppBar(title = {
                             TextField(

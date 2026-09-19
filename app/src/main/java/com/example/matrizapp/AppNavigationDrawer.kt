@@ -29,6 +29,8 @@ fun AppNavigationDrawer(
     onNavigate: (String) -> Unit,
     onSyncClick: () -> Unit,
     drawerState: DrawerState,
+    backfillCuEnProgreso: Boolean = false,
+    onBackfillCuClick: () -> Unit = {},
     content: @Composable () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -82,7 +84,20 @@ fun AppNavigationDrawer(
 
                 Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Text(text = "FLUJO DE TRABAJO", style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.TableChart, contentDescription = null) }, label = { Text("Matriz") }, selected = currentRoute == "matriz", onClick = { onNavigate("matriz"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        NavigationDrawerItem(icon = { Icon(Icons.Default.TableChart, contentDescription = null) }, label = { Text("Matriz") }, selected = currentRoute == "matriz", onClick = { onNavigate("matriz"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                        if (backfillCuEnProgreso) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 28.dp).size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            IconButton(
+                                onClick = { onBackfillCuClick() },
+                                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)
+                            ) { Icon(Icons.Default.DocumentScanner, contentDescription = "Recuperar CU faltantes", tint = ClayPrimary) }
+                        }
+                    }
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Assignment, contentDescription = null) }, label = { Text("Pase") }, selected = currentRoute == "pase", onClick = { onNavigate("pase"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Description, contentDescription = null) }, label = { Text("Solicitud") }, selected = currentRoute == "solicitud", onClick = { onNavigate("solicitud"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Route, contentDescription = null) }, label = { Text("Ruta IA") }, selected = currentRoute == "ruta_ia", onClick = { onNavigate("ruta_ia"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
