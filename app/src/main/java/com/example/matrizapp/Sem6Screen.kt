@@ -101,6 +101,17 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
                         style = MaterialTheme.typography.bodySmall,
                         color = ClayOnSurface
                     )
+                    // Total de cuentas y suma de Capital (solo capital, sin Se Contiene ni Req)
+                    // de TODAS las cuentas de la semana seleccionada -- no del resultado filtrado
+                    // por búsqueda, para que siempre refleje el total real de la semana.
+                    if (allItems.isNotEmpty()) {
+                        Text(
+                            text = "Cuentas: ${allItems.size}  ·  Capital: ${formatCapitalTotal(sumaCapital(allItems))}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = ClayOnSurface
+                        )
+                    }
                 }
                 IconButton(onClick = { viewModel.cargar() }, enabled = !isLoading) {
                     if (isLoading) {
@@ -152,6 +163,18 @@ private fun formatearReq(req: String): String {
         maximumFractionDigits = 0
     }
     return "$" + formateador.format(numero)
+}
+
+/** Suma el campo Capital (columna capturada a mano por Diego, texto libre) de todas las
+ * cuentas de la semana; ignora capitales vacíos o no numéricos en vez de tronar. */
+private fun sumaCapital(items: List<Sem6Item>): Double =
+    items.sumOf { it.capital.replace("[^0-9.]".toRegex(), "").toDoubleOrNull() ?: 0.0 }
+
+private fun formatCapitalTotal(v: Double): String {
+    val formateador = java.text.NumberFormat.getNumberInstance(Locale("es", "MX")).apply {
+        maximumFractionDigits = 0
+    }
+    return "$" + formateador.format(v)
 }
 
 @Composable
