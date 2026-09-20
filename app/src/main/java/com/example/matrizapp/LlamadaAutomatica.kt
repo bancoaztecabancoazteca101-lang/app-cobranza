@@ -27,6 +27,11 @@ object AutomatizacionPrefs {
     private const val KEY_ACTIVA = "activa"
     private const val KEY_CATCHUP_ACTIVA = "catchup_activa"
 
+    /** Tag común en los Workers de llamada automática (bloque normal y catchup) para poder
+     * cancelarlos de inmediato con WorkManager.cancelAllWorkByTag() cuando se apaga el
+     * interruptor general -- antes no había forma de tocar un Worker que ya estaba corriendo. */
+    const val TAG_AUTOMATIZACION = "automatizacion_llamadas"
+
     fun activa(context: Context): Boolean =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_ACTIVA, false)
 
@@ -167,6 +172,7 @@ class LlamadaBloqueAlarmReceiver : BroadcastReceiver() {
         if (bloqueId < 0) return
         val request = OneTimeWorkRequestBuilder<LlamadaAutomaticaWorker>()
             .setInputData(workDataOf(LlamadaAutomaticaWorker.KEY_BLOQUE_ID to bloqueId))
+            .addTag(AutomatizacionPrefs.TAG_AUTOMATIZACION)
             .build()
         WorkManager.getInstance(context).enqueue(request)
     }
@@ -189,7 +195,10 @@ class ReprogramarLlamadaBloquesWorker(context: Context, params: WorkerParameters
 
 class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<CatchupLlamadaWorker>().build())
+        val request = OneTimeWorkRequestBuilder<CatchupLlamadaWorker>()
+            .addTag(AutomatizacionPrefs.TAG_AUTOMATIZACION)
+            .build()
+        WorkManager.getInstance(context).enqueue(request)
     }
 }
 
@@ -212,9 +221,19 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         // recordatorio unidireccional, no una conversación, así que no debe captar audio
         // ambiente mientras espera a que conteste o cuelgue. Se restaura al terminar para no
         // dejar el micrófono mudo en llamadas manuales posteriores.
+        // try/finally con NonCancellable: si el interruptor se apaga (o el Worker se cancela
+        // por tag) MIENTRAS esperamos a que la llamada termine, esperarFinOForzarColgar se
+        // corta por la cancelación -- pero eso dejaría la llamada activa y el micrófono mudo.
+        // El finally cuelga y des-silencia igual, aunque la corrutina ya esté cancelándose.
         CallHelper.silenciarMicrofono(context, true)
-        CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaLlamada * 1_000L)
-        CallHelper.silenciarMicrofono(context, false)
+        try {
+            CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaLlamada * 1_000L)
+        } finally {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                if (CallHelper.llamadaActiva(context)) CallHelper.colgarLlamadaConFallback(context)
+                CallHelper.silenciarMicrofono(context, false)
+            }
+        }
         SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
         // Oferta de descuento del día: se agrega como línea extra después del SMS normal,
         // solo al titular -- nunca a Ref1/Ref2 (ver el forEach de telefonosReferencia abajo,
@@ -274,6 +293,11 @@ class LlamadaAutomaticaWorker(
         var esPrimerContacto = true
 
         for (r in registros) {
+            // Chequeo por-cliente (no solo al inicio de doWork()): si el interruptor se apaga
+            // a la mitad del bloque, antes seguía procesando a TODOS los clientes restantes
+            // porque solo se miraba activa() una vez al arrancar. Ahora corta aquí mismo, entre
+            // un cliente y el siguiente, sin esperar a que termine todo el bloque.
+            if (!AutomatizacionPrefs.activa(applicationContext)) break
             if (r.estado.equals("Pagado", ignoreCase = true)) continue
             val sem = r.semana.trim().toIntOrNull() ?: continue
             if (sem !in 1..5) continue
@@ -327,6 +351,10 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
         var esPrimerContacto = true
 
         for (r in registros) {
+            // Mismo chequeo por-cliente que el worker de bloque normal (ver comentario ahí):
+            // corta el catchup en curso en cuanto se apaga cualquiera de los 2 interruptores.
+            if (!AutomatizacionPrefs.activa(applicationContext)) break
+            if (!AutomatizacionPrefs.catchupActiva(applicationContext)) break
             if (r.estado.equals("Pagado", ignoreCase = true)) continue
             val sem = r.semana.trim().toIntOrNull() ?: continue
             if (sem !in 1..5) continue
