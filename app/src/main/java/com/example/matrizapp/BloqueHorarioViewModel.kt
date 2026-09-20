@@ -3,6 +3,7 @@ package com.example.matrizapp
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -85,6 +86,10 @@ class BloqueHorarioViewModel(
         AutomatizacionPrefs.setActiva(context, activa)
         _automatizacionActiva.value = activa
         scheduler.reprogramarTodos()
+        // reprogramarTodos() solo cancela las ALARMAS futuras -- si ya hay un bloque corriendo
+        // en este momento (Worker ya encolado/ejecutando), esto lo cancela de inmediato en vez
+        // de dejarlo terminar de recorrer a todos los clientes restantes del bloque.
+        if (!activa) WorkManager.getInstance(context).cancelAllWorkByTag(AutomatizacionPrefs.TAG_AUTOMATIZACION)
     }
 
     /** Interruptor independiente para el reintento de catchup (8:15/9:15) — permite dejar
