@@ -29,6 +29,24 @@ interface MatrizDao {
         fecha: Long?, hora: String?, ruta: String?, folioP: String?,
         descuentoPago: String?, descuentoAhorro: String?
     )
+    @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
+        numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
+        ubicacion = :ubicacion, imagenUrl = :imagenUrl, imagenUrl2 = :imagenUrl2, fecha = :fecha,
+        hora = :hora, ruta = :ruta, folioP = :folioP
+        WHERE id = :id""")
+    // UPDATE parcial usado por el pull de Sheets (SheetsRepository.refreshMatriz) para registros
+    // que ya existen en Room -- a propósito NO incluye descuentoPago/descuentoAhorro/isDirty en
+    // el SET. El Sheet no tiene esas 2 columnas (son 100% locales), así que antes había que leer
+    // el valor local al arrancar el pull y "reinyectarlo" al reconstruir el MatrizEntity completo
+    // para no perderlo -- pero si un guardado local (Editar registro) caía justo en la ventana
+    // entre esa lectura y el insertAll() final, el pull ganaba la carrera y lo pisaba con el
+    // valor viejo. Con UPDATE parcial la columna simplemente no aparece en el SQL, así que no
+    // hay ninguna ventana en la que un guardado concurrente pueda perderse.
+    suspend fun actualizarDesdeSheet(
+        id: String, nombre: String, semana: String, requisito: String, numTT: String,
+        ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
+        imagenUrl: String?, imagenUrl2: String?, fecha: Long?, hora: String?, ruta: String?, folioP: String?
+    )
     @Query("UPDATE matriz_table SET id = :idNuevo WHERE id = :idAnterior")
     suspend fun renameId(idAnterior: String, idNuevo: String)
     @Query("UPDATE matriz_table SET folioP = :folioP, isDirty = 1 WHERE id = :id")
