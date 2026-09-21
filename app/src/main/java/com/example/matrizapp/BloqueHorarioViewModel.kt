@@ -122,4 +122,23 @@ class BloqueHorarioViewModel(
         dao.setActivo(bloque.id, !bloque.activo)
         scheduler.reprogramarTodos()
     }
+
+    /** Resultado del botón de prueba "Probar cliente ahora" (null = no hay prueba corriendo ni
+     * resultado que mostrar). La pantalla lo muestra en un diálogo y llama a limpiarResultadoPrueba()
+     * al cerrarlo. */
+    private val _resultadoPrueba = MutableStateFlow<String?>(null)
+    val resultadoPrueba: StateFlow<String?> = _resultadoPrueba
+
+    fun probarClienteAhora(clienteId: String) = viewModelScope.launch {
+        _resultadoPrueba.value = "Probando..."
+        _resultadoPrueba.value = try {
+            ejecutarPruebaCliente(context, clienteId.trim())
+        } catch (e: Exception) {
+            "Error al probar: ${e.message}"
+        }
+    }
+
+    fun limpiarResultadoPrueba() {
+        _resultadoPrueba.value = null
+    }
 }
