@@ -82,6 +82,7 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
     var bloqueEnEdicion by remember { mutableStateOf<BloqueHorarioEntity?>(null) }
     var bloqueAEliminar by remember { mutableStateOf<BloqueHorarioEntity?>(null) }
     var permisoAlarmasOk by remember { mutableStateOf(tienePermisoAlarmasExactas(context)) }
+    val resultadoPrueba by viewModel.resultadoPrueba.collectAsState()
 
     // Revisa el permiso cada vez que la pantalla vuelve a primer plano (por si el usuario
     // fue a Ajustes a autorizarlo y regresó).
@@ -158,6 +159,9 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                     onToggleCatchup = { semana -> viewModel.toggleCatchupSemana(semana) }
                 )
             }
+            item {
+                PruebaClienteCard(onProbar = { id -> viewModel.probarClienteAhora(id) })
+            }
             if (bloques.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -219,6 +223,51 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                 TextButton(onClick = { bloqueAEliminar = null }) { Text("Cancelar") }
             }
         )
+    }
+
+    resultadoPrueba?.let { texto ->
+        AlertDialog(
+            onDismissRequest = { viewModel.limpiarResultadoPrueba() },
+            title = { Text("Resultado de la prueba") },
+            text = { Text(texto) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.limpiarResultadoPrueba() }) { Text("Cerrar") }
+            }
+        )
+    }
+}
+
+/** Ejecuta llamada+SMS+oferta para UN cliente por ID, ya mismo -- sin esperar a un bloque real
+ * ni depender de si le toca por ReglaRepeticion.debeContactarseEnBloque. Sirve para separar
+ * "¿el código de mandar funciona?" de "¿le toca a este cliente en el bloque de ahorita?" -- el
+ * mismo ID se ve en la pantalla de Editar registro, campo "ID" (se genera automático). */
+@Composable
+private fun PruebaClienteCard(onProbar: (String) -> Unit) {
+    var idCliente by remember { mutableStateOf("") }
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Probar cliente ahora", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Dispara llamada + SMS + oferta de descuento para un ID de Matriz de inmediato, sin esperar a que corra un bloque real. Útil para probar si el envío funciona sin depender del horario.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+            )
+            OutlinedTextField(
+                value = idCliente,
+                onValueChange = { idCliente = it },
+                label = { Text("ID del cliente (ej. 0b5f9e23)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = { onProbar(idCliente) },
+                enabled = idCliente.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) { Text("Probar ahora") }
+        }
     }
 }
 
