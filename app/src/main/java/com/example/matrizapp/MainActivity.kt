@@ -115,9 +115,18 @@ class MainActivity : ComponentActivity() {
                     val observer = androidx.lifecycle.LifecycleEventObserver { _, event -> if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && signedIn) refreshData() }
                     lifecycleOwner.lifecycle.addObserver(observer); onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
-                LaunchedEffect(signedIn) {
+                // Antes este bucle vivía en un LaunchedEffect(signedIn) normal, que sigue
+                // corriendo mientras el proceso de la Activity esté vivo -- incluye con la
+                // pantalla apagada o la app en segundo plano, ya que Compose no pausa una
+                // composición solo porque la Activity pasó a background. Resultado: sincronizaba
+                // con Sheets (red + CPU) cada 3 minutos sin parar, gastando batería y datos aun
+                // sin estar usando la app. repeatOnLifecycle(STARTED) lo pausa automáticamente
+                // al salir de la app y lo retoma solo al volver a primer plano.
+                LaunchedEffect(signedIn, lifecycleOwner) {
                     if (!signedIn) return@LaunchedEffect
-                    while (true) { delay(3 * 60 * 1000L); refreshData() }
+                    lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                        while (true) { delay(3 * 60 * 1000L); refreshData() }
+                    }
                 }
                 syncError?.let { errorText ->
                     AlertDialog(onDismissRequest = { syncError = null }, title = { Text("Error al sincronizar") },
