@@ -210,11 +210,16 @@ class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
 // duración máxima) — independiente de la pantalla manual de
 // Llamadas, para que ajustar una no afecte a la otra.
 // ============================================================
-private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, config: ConfiguracionAutomatizacionEntity, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao, contactoExtraDao: ContactoExtraDao) {
+private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, config: ConfiguracionAutomatizacionEntity, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao, contactoExtraDao: ContactoExtraDao): String {
+    // Devuelve un resumen de lo que se hizo -- lo usa probarClienteAhora() (botón de prueba en
+    // Bloques de horario) para mostrarle a Diego exactamente qué se mandó y qué no, sin tener
+    // que esperar a que corra un bloque real ni adivinar por qué algo no llegó.
+    val resumen = StringBuilder()
     val variante = logDao.contarTotalContactos(r.id)
     val subIdLlamada = config.simSeleccionada
     val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
     if (r.numTT.isNotBlank()) {
+        resumen.appendLine("• Llamada + SMS normal a TT (${r.numTT})")
         CallHelper.realizarLlamada(context, subIdLlamada, r.numTT, ocultarNumero = config.ocultarNumero)
         delay(2_000)
         // Silencia el micrófono del lado del titular durante la llamada automática -- es un
@@ -238,9 +243,15 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         // Oferta de descuento del día: se agrega como línea extra después del SMS normal,
         // solo al titular -- nunca a Ref1/Ref2 (ver el forEach de telefonosReferencia abajo,
         // que no la toca). Si no hay descuentoPago/descuentoAhorro capturados hoy, no manda nada.
-        MensajesCobranza.ofertaDescuento(r.descuentoPago, r.descuentoAhorro)?.let { oferta ->
+        val oferta = MensajesCobranza.ofertaDescuento(r.descuentoPago, r.descuentoAhorro)
+        if (oferta != null) {
             SmsHelper.enviarSms(context, subIdSms, r.numTT, oferta)
+            resumen.appendLine("• Oferta de descuento SÍ enviada (pago=${r.descuentoPago}, ahorro=${r.descuentoAhorro})")
+        } else {
+            resumen.appendLine("• Oferta de descuento NO enviada -- descuentoPago='${r.descuentoPago}' / descuentoAhorro='${r.descuentoAhorro}' (falta uno o los dos)")
         }
+    } else {
+        resumen.appendLine("• Sin NumTT -- no se llamó ni se mandó nada al titular")
     }
     // Referencias propias del cliente (Ref1/Ref2 capturados en Matriz) + referencias extra
     // confirmadas a mano desde Filtrar (números de un "cercano" que probablemente conoce al
@@ -251,6 +262,33 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     telefonosReferencia.forEach { tel ->
         SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
     }
+    if (telefonosReferencia.isNotEmpty()) resumen.appendLine("• SMS de referencia a ${telefonosReferencia.size} número(s)")
+    return resumen.toString().trim()
+}
+
+/** Botón de prueba (Bloques de horario): ejecuta llamada+SMS+oferta para UN cliente elegido por
+ * ID, YA MISMO -- sin esperar a que un bloque real corra ni depender de si el cliente le toca
+ * o no en el bloque actual (ReglaRepeticion.debeContactarseEnBloque). Sirve para separar 2
+ * preguntas que se confunden fácil: "¿el código de mandar la oferta funciona?" vs "¿le toca a
+ * este cliente ser contactado en el bloque de ahorita?". No registra ContactoLogEntity (no debe
+ * contar como un contacto real hacia la meta de la semana ni afectar el cálculo del catchup). */
+suspend fun ejecutarPruebaCliente(context: Context, clienteId: String): String {
+    val container = (context.applicationContext as MainApplication).container
+    val matrizDao = container.database.matrizDao()
+    val plantillaDao = container.database.plantillaSmsDao()
+    val configDao = container.database.configuracionAutomatizacionDao()
+    val contactoExtraDao = container.database.contactoExtraDao()
+    // logDao real solo para leer la variante de rotación de plantilla -- se le pasa un log
+    // "de mentiras" (no se inserta nada) para no ensuciar el conteo de contactos reales.
+    val logDao = container.database.contactoLogDao()
+
+    val r = matrizDao.getById(clienteId) ?: return "No existe ningún cliente con ID '$clienteId'"
+    val sem = r.semana.trim().toIntOrNull()
+    if (sem == null || sem !in 1..5) return "Sem inválida ('${r.semana}') -- debe ser 1 a 5 para que el flujo automático lo procese"
+    val config = configDao.obtenerOSembrar()
+
+    return "Cliente: ${r.nombre} (Sem $sem, Estado='${r.estado}')\n" +
+        procesarClienteLlamadaAutomatica(context, r, sem, config, logDao, plantillaDao, contactoExtraDao)
 }
 
 private fun inicioDeDiaMillis(fecha: LocalDate): Long =
