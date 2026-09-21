@@ -111,22 +111,34 @@ class MainActivity : ComponentActivity() {
                 }
                 LaunchedEffect(signedIn) { refreshData() }
                 val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-                DisposableEffect(lifecycleOwner, signedIn) {
-                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event -> if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && signedIn) refreshData() }
-                    lifecycleOwner.lifecycle.addObserver(observer); onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-                }
-                // Antes este bucle vivía en un LaunchedEffect(signedIn) normal, que sigue
-                // corriendo mientras el proceso de la Activity esté vivo -- incluye con la
-                // pantalla apagada o la app en segundo plano, ya que Compose no pausa una
+                // Antes el auto-sync cada 3 minutos vivía en un LaunchedEffect(signedIn) suelto,
+                // que sigue corriendo mientras el proceso de la Activity esté vivo -- incluye con
+                // la pantalla apagada o la app en segundo plano, porque Compose no pausa una
                 // composición solo porque la Activity pasó a background. Resultado: sincronizaba
                 // con Sheets (red + CPU) cada 3 minutos sin parar, gastando batería y datos aun
-                // sin estar usando la app. repeatOnLifecycle(STARTED) lo pausa automáticamente
-                // al salir de la app y lo retoma solo al volver a primer plano.
-                LaunchedEffect(signedIn, lifecycleOwner) {
-                    if (!signedIn) return@LaunchedEffect
-                    lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                        while (true) { delay(3 * 60 * 1000L); refreshData() }
+                // sin estar usando la app. Ahora el mismo DisposableEffect que ya escuchaba
+                // ON_RESUME también arranca/cancela ese bucle en ON_START/ON_STOP, así que se
+                // pausa solo al salir de la app y se retoma al volver a primer plano.
+                DisposableEffect(lifecycleOwner, signedIn) {
+                    var pollingJob: kotlinx.coroutines.Job? = null
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        when (event) {
+                            androidx.lifecycle.Lifecycle.Event.ON_RESUME -> if (signedIn) refreshData()
+                            androidx.lifecycle.Lifecycle.Event.ON_START -> {
+                                if (signedIn && pollingJob == null) {
+                                    pollingJob = coroutineScope.launch {
+                                        while (true) { delay(3 * 60 * 1000L); refreshData() }
+                                    }
+                                }
+                            }
+                            androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                                pollingJob?.cancel(); pollingJob = null
+                            }
+                            else -> {}
+                        }
                     }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { pollingJob?.cancel(); lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
                 syncError?.let { errorText ->
                     AlertDialog(onDismissRequest = { syncError = null }, title = { Text("Error al sincronizar") },
