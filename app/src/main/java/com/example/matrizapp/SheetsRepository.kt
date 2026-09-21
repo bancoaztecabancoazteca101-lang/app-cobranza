@@ -299,28 +299,45 @@ class SheetsRepository(
 
     private suspend fun refreshMatriz() {
         val dirtyIds = matrizDao.getDirtyItems().map { it.id }.toSet()
-        // El Sheet no tiene columnas para la oferta de descuento (es un dato 100% local, ver
-        // DescuentoLimpieza.kt) -- sin esto, cada pull normal la borraría de inmediato en cuanto
-        // el registro dejara de estar "dirty", aunque la oferta siguiera vigente ese mismo día.
-        val descuentosLocales = matrizDao.getAllMatriz().first().associate { it.id to (it.descuentoPago to it.descuentoAhorro) }
+        val idsExistentes = matrizDao.getAllMatriz().first().map { it.id }.toSet()
         val rows = fetchRows(Constants.SHEET_MATRIZ)
-        val items = rows.mapNotNull { row ->
-            val id = cell(row, Constants.MatrizCols.ID) ?: return@mapNotNull null
-            if (id in dirtyIds) return@mapNotNull null
+        val nuevos = mutableListOf<MatrizEntity>()
+        for (row in rows) {
+            val id = cell(row, Constants.MatrizCols.ID) ?: continue
+            if (id in dirtyIds) continue
             val nombre = cell(row, Constants.MatrizCols.NOMBRE) ?: ""
-            if (nombre.contains("Pase semana", ignoreCase = true) || nombre.isBlank()) return@mapNotNull null
+            if (nombre.contains("Pase semana", ignoreCase = true) || nombre.isBlank()) continue
             val fechaSerial = DateUtils.parseCellDateToEpochMillis(cell(row, Constants.MatrizCols.FECHA))
-            val (descPago, descAhorro) = descuentosLocales[id] ?: (null to null)
-            MatrizEntity(
-                id = id, nombre = nombre, semana = cell(row, Constants.MatrizCols.SEMANA) ?: "", requisito = cell(row, Constants.MatrizCols.REQUISITO) ?: "",
-                numTT = cell(row, Constants.MatrizCols.NUMTT) ?: "", ref1 = cell(row, Constants.MatrizCols.REF1) ?: "", ref2 = cell(row, Constants.MatrizCols.REF2) ?: "",
-                observaciones = cell(row, Constants.MatrizCols.OBSERVACIONES), estado = cell(row, Constants.MatrizCols.ESTADO) ?: "", ubicacion = cell(row, Constants.MatrizCols.UBICACION),
-                imagenUrl = cell(row, Constants.MatrizCols.IMAGEN), imagenUrl2 = cell(row, Constants.MatrizCols.IMAGEN2), fecha = fechaSerial,
-                hora = cell(row, Constants.MatrizCols.HORA), ruta = cell(row, Constants.MatrizCols.RUTA), folioP = cell(row, Constants.MatrizCols.FOLIOP),
-                descuentoPago = descPago, descuentoAhorro = descAhorro
-            )
+            val semana = cell(row, Constants.MatrizCols.SEMANA) ?: ""
+            val requisito = cell(row, Constants.MatrizCols.REQUISITO) ?: ""
+            val numTT = cell(row, Constants.MatrizCols.NUMTT) ?: ""
+            val ref1 = cell(row, Constants.MatrizCols.REF1) ?: ""
+            val ref2 = cell(row, Constants.MatrizCols.REF2) ?: ""
+            val observaciones = cell(row, Constants.MatrizCols.OBSERVACIONES)
+            val estado = cell(row, Constants.MatrizCols.ESTADO) ?: ""
+            val ubicacion = cell(row, Constants.MatrizCols.UBICACION)
+            val imagenUrl = cell(row, Constants.MatrizCols.IMAGEN)
+            val imagenUrl2 = cell(row, Constants.MatrizCols.IMAGEN2)
+            val hora = cell(row, Constants.MatrizCols.HORA)
+            val ruta = cell(row, Constants.MatrizCols.RUTA)
+            val folioP = cell(row, Constants.MatrizCols.FOLIOP)
+            if (id in idsExistentes) {
+                // UPDATE parcial -- ver el comentario en MatrizDao.actualizarDesdeSheet(): nunca
+                // toca descuentoPago/descuentoAhorro, así que no hay carrera posible con un
+                // guardado local de la oferta de descuento que ocurra mientras este pull corre.
+                matrizDao.actualizarDesdeSheet(id, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, imagenUrl, imagenUrl2, fechaSerial, hora, ruta, folioP)
+            } else {
+                // Registro nuevo que recién llega del Sheet (aún no existía en Room) -- no puede
+                // tener oferta local capturada todavía, descuentoPago/descuentoAhorro quedan en
+                // null (default del constructor).
+                nuevos.add(MatrizEntity(
+                    id = id, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT,
+                    ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion,
+                    imagenUrl = imagenUrl, imagenUrl2 = imagenUrl2, fecha = fechaSerial, hora = hora, ruta = ruta, folioP = folioP
+                ))
+            }
         }
-        if (items.isNotEmpty()) matrizDao.insertAll(items)
+        if (nuevos.isNotEmpty()) matrizDao.insertAll(nuevos)
     }
 
     private suspend fun copiarPaseDesdeMatriz() {
