@@ -215,6 +215,22 @@ class RutaIAViewModel(
         }
     }
 
+    /** Reordenamiento manual por arrastre (drag & drop) en la pantalla: recibe la lista completa
+     * de ids ya en el orden final que dejó el arrastre y lo persiste de un jalón, igual que
+     * moverManualmente pero para un reacomodo arbitrario en vez de mover 1 posición a la vez. */
+    fun reordenarManual(idsEnOrden: List<String>) {
+        viewModelScope.launch {
+            idsEnOrden.forEachIndexed { i, id -> rutaIADao.updateOrden(id, i) }
+            if (_configuracion.value.modoRuta != ModoRutaIA.MANUAL) {
+                val manual = _configuracion.value.copy(modoRuta = ModoRutaIA.MANUAL)
+                _configuracion.value = manual
+                filtroDao.guardar(RutaIAFiltroEntity(id = 1, criteriosOrden = serializarConfiguracionRutaIA(manual)))
+                _criterios.value = criteriosDesdeConfiguracion(manual)
+            }
+            programarSincronizacionRutaIA()
+        }
+    }
+
     suspend fun buscarMatrizPorId(id: String): MatrizEntity? = matrizDao.getById(id)
 
     fun limpiarRutaAhora() {

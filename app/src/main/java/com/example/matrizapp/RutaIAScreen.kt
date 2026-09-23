@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -17,13 +18,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,12 +104,50 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                     }
                 }
             } else {
+                // Lista local editable en vivo mientras se arrastra una tarjeta; se resincroniza con
+                // la ruta real del ViewModel en cuanto no hay nada siendo arrastrado (import nuevo,
+                // cambio de filtros, etc. no pisan un arrastre en curso).
+                var listaLocal by remember { mutableStateOf(ruta) }
+                var idArrastrado by remember { mutableStateOf<String?>(null) }
+                var desplazamientoArrastre by remember { mutableStateOf(0f) }
+                var alturaPromedioItemPx by remember { mutableStateOf(260f) }
+                LaunchedEffect(ruta) { if (idArrastrado == null) listaLocal = ruta }
+
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    itemsIndexed(ruta, key = { _, item -> item.id }) { index, item ->
-                        RutaIANuevaCard(item, index + 1, index > 0, index < ruta.lastIndex, { viewModel.alternarVisitado(item) }, { viewModel.moverManualmente(item.id, -1) }, { viewModel.moverManualmente(item.id, 1) }) {
-                            if (item.cuMatrizMatch == null) Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
-                            else Toast.makeText(context, "Coincide en Matriz: ${item.nombre}", Toast.LENGTH_SHORT).show()
-                        }
+                    itemsIndexed(listaLocal, key = { _, item -> item.id }) { index, item ->
+                        RutaIANuevaCard(
+                            item = item,
+                            posicion = index + 1,
+                            puedeSubir = index > 0,
+                            puedeBajar = index < listaLocal.lastIndex,
+                            onVisitado = { viewModel.alternarVisitado(item) },
+                            onSubir = { viewModel.moverManualmente(item.id, -1) },
+                            onBajar = { viewModel.moverManualmente(item.id, 1) },
+                            onMatriz = {
+                                if (item.cuMatrizMatch == null) Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
+                                else Toast.makeText(context, "Coincide en Matriz: ${item.nombre}", Toast.LENGTH_SHORT).show()
+                            },
+                            arrastrando = idArrastrado == item.id,
+                            desplazamientoY = if (idArrastrado == item.id) desplazamientoArrastre else 0f,
+                            onArrastreInicio = { idArrastrado = item.id; desplazamientoArrastre = 0f },
+                            onArrastre = { deltaY, alturaPx ->
+                                if (alturaPx > 40f) alturaPromedioItemPx = alturaPx
+                                desplazamientoArrastre += deltaY
+                                val actual = listaLocal.indexOfFirst { it.id == item.id }
+                                if (actual != -1) {
+                                    val destino = (actual + (desplazamientoArrastre / alturaPromedioItemPx).roundToInt()).coerceIn(0, listaLocal.lastIndex)
+                                    if (destino != actual) {
+                                        listaLocal = listaLocal.toMutableList().apply { add(destino, removeAt(actual)) }
+                                        desplazamientoArrastre -= (destino - actual) * alturaPromedioItemPx
+                                    }
+                                }
+                            },
+                            onArrastreFin = {
+                                if (idArrastrado != null) viewModel.reordenarManual(listaLocal.map { it.id })
+                                idArrastrado = null
+                                desplazamientoArrastre = 0f
+                            }
+                        )
                     }
                 }
             }
@@ -246,14 +291,28 @@ private fun DireccionSelector(titulo: String, direccion: DireccionOrdenRutaIA, o
 }
 
 @Composable
-private fun RutaIANuevaCard(item: RutaIAEntity, posicion: Int, puedeSubir: Boolean, puedeBajar: Boolean, onVisitado: () -> Unit, onSubir: () -> Unit, onBajar: () -> Unit, onMatriz: () -> Unit) {
+private fun RutaIANuevaCard(
+    item: RutaIAEntity, posicion: Int, puedeSubir: Boolean, puedeBajar: Boolean,
+    onVisitado: () -> Unit, onSubir: () -> Unit, onBajar: () -> Unit, onMatriz: () -> Unit,
+    arrastrando: Boolean, desplazamientoY: Float,
+    onArrastreInicio: () -> Unit, onArrastre: (deltaY: Float, alturaPx: Float) -> Unit, onArrastreFin: () -> Unit
+) {
     val visitado = item.estado.equals("Visitado", ignoreCase = true)
     val colorFondo = when {
         visitado -> Color(0xFFE8F5E9)
         item.esNuevo -> Color(0xFFE3F2FD)
         else -> MaterialTheme.colorScheme.surface
     }
-    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = colorFondo)) {
+    var alturaTarjetaPx by remember { mutableStateOf(0f) }
+    Card(
+        modifier = Modifier
+            .zIndex(if (arrastrando) 1f else 0f)
+            .graphicsLayer { translationY = desplazamientoY }
+            .onGloballyPositioned { alturaTarjetaPx = it.size.height.toFloat() }
+            .shadow(if (arrastrando) 10.dp else 0.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = colorFondo)
+    ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(onClick = onSubir, enabled = puedeSubir, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.KeyboardArrowUp, null) }
@@ -281,6 +340,25 @@ private fun RutaIANuevaCard(item: RutaIAEntity, posicion: Int, puedeSubir: Boole
                     OutlinedButton(onClick = onMatriz, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)) { Text("Matriz") }
                 }
             }
+            Icon(
+                Icons.Default.DragHandle,
+                contentDescription = "Mantén presionado y arrastra para reordenar",
+                tint = Color.Gray,
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(28.dp)
+                    .pointerInput(item.id) {
+                        detectDragGestures(
+                            onDragStart = { onArrastreInicio() },
+                            onDragEnd = { onArrastreFin() },
+                            onDragCancel = { onArrastreFin() },
+                            onDrag = { change, arrastre ->
+                                change.consume()
+                                onArrastre(arrastre.y, alturaTarjetaPx)
+                            }
+                        )
+                    }
+            )
         }
     }
 }
