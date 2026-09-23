@@ -37,6 +37,11 @@ import kotlin.math.roundToInt
 fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     val context = LocalContext.current
     val ruta by viewModel.rutaOrdenada.collectAsState()
+    val matrizList by matrizViewModel.matrizList.collectAsState()
+    // Foto del cliente (misma "portada" que muestra Matriz) para las paradas que coinciden con un registro de Matriz
+    val fotosMatriz = remember(matrizList) {
+        matrizList.associate { it.id to (it.imagenUrl?.takeIf { u -> u.isNotBlank() } ?: it.imagenUrl2) }
+    }
     val configuracionGuardada by viewModel.configuracion.collectAsState()
     val procesando by viewModel.procesando.collectAsState()
     val progreso by viewModel.progreso.collectAsState()
@@ -118,6 +123,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                         RutaIANuevaCard(
                             item = item,
                             posicion = index + 1,
+                            imagenUrl = item.cuMatrizMatch?.let { fotosMatriz[it] },
+                            driveHelper = matrizViewModel.driveHelper,
                             puedeSubir = index > 0,
                             puedeBajar = index < listaLocal.lastIndex,
                             onVisitado = { viewModel.alternarVisitado(item) },
@@ -292,7 +299,7 @@ private fun DireccionSelector(titulo: String, direccion: DireccionOrdenRutaIA, o
 
 @Composable
 private fun RutaIANuevaCard(
-    item: RutaIAEntity, posicion: Int, puedeSubir: Boolean, puedeBajar: Boolean,
+    item: RutaIAEntity, posicion: Int, imagenUrl: String?, driveHelper: DriveHelper, puedeSubir: Boolean, puedeBajar: Boolean,
     onVisitado: () -> Unit, onSubir: () -> Unit, onBajar: () -> Unit, onMatriz: () -> Unit,
     arrastrando: Boolean, desplazamientoY: Float,
     onArrastreInicio: () -> Unit, onArrastre: (deltaY: Float, alturaPx: Float) -> Unit, onArrastreFin: () -> Unit
@@ -319,7 +326,10 @@ private fun RutaIANuevaCard(
                 Box(Modifier.size(32.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), Alignment.Center) { Text("$posicion", fontWeight = FontWeight.Bold) }
                 IconButton(onClick = onBajar, enabled = puedeBajar, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.KeyboardArrowDown, null) }
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(8.dp))
+            // Miniatura de la foto del cliente; al tocarla se ve en grande (igual que en Matriz)
+            PortadaThumbnail(rawImageUrl = imagenUrl, driveHelper = driveHelper, size = 56.dp)
+            Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(item.nombre, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
