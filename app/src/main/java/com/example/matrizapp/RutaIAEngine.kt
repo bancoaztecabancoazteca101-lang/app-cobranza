@@ -23,7 +23,8 @@ data class FiltrosRutaIA(
     val modoRuta: ModoRutaIA = ModoRutaIA.AUTOMATICA,
     val usarGpsInicio: Boolean = true,
     val usarCercaniaEncadenada: Boolean = true,
-    val direccionCercania: DireccionOrdenRutaIA = DireccionOrdenRutaIA.ASC
+    val direccionCercania: DireccionOrdenRutaIA = DireccionOrdenRutaIA.ASC,
+    val priorizarNuevos: Boolean = true
 )
 
 private const val PREFIJO_CONFIG = "CONFIG2"
@@ -40,7 +41,8 @@ fun serializarConfiguracionRutaIA(config: FiltrosRutaIA): String = listOf(
     config.modoRuta.name,
     config.usarGpsInicio,
     config.usarCercaniaEncadenada,
-    config.direccionCercania.name
+    config.direccionCercania.name,
+    config.priorizarNuevos
 ).joinToString("|")
 
 fun parsearConfiguracionRutaIA(texto: String?): FiltrosRutaIA {
@@ -75,7 +77,8 @@ fun parsearConfiguracionRutaIA(texto: String?): FiltrosRutaIA {
         modoRuta = p.getOrNull(8)?.let { ModoRutaIA.values().find { m -> m.name == it } } ?: ModoRutaIA.AUTOMATICA,
         usarGpsInicio = bool(9, true),
         usarCercaniaEncadenada = bool(10, true),
-        direccionCercania = dir(11, DireccionOrdenRutaIA.ASC)
+        direccionCercania = dir(11, DireccionOrdenRutaIA.ASC),
+        priorizarNuevos = bool(12, true)
     )
 }
 
@@ -110,30 +113,31 @@ private fun compararPrioridades(a: RutaIAEntity, b: RutaIAEntity, filtros: Filtr
     return 0
 }
 
-fun construirRutaIAConfigurada(items: List<RutaIAEntity>, inicio: Pair<Double, Double>?, filtros: FiltrosRutaIA): List<RutaIAEntity> {
-    val filtrados = aplicarFiltrosRutaIA(items, filtros)
-    if (filtros.modoRuta == ModoRutaIA.MANUAL) return filtrados.sortedBy { it.orden }
-
-    val pendientes = filtrados.filter { it.lat != null && it.lng != null }.toMutableList()
-    val sinUbicar = filtrados.filter { it.lat == null || it.lng == null }
-    if (pendientes.isEmpty()) return sinUbicar.sortedBy { it.orden }
+/** Ordena un subgrupo (ya filtrado y con coordenadas) desde un punto de partida dado, con la
+ * misma lógica de siempre (cadena por cercanía o solo comparador de prioridades). Devuelve la
+ * lista ordenada y el último punto visitado, para poder encadenar un segundo subgrupo a partir
+ * de ahí (usado por priorizarNuevos: primero los clientes nuevos, luego el resto). */
+private fun ordenarSubgrupoRutaIA(pendientes: List<RutaIAEntity>, puntoInicio: Pair<Double, Double>?, filtros: FiltrosRutaIA): Pair<List<RutaIAEntity>, Pair<Double, Double>?> {
+    if (pendientes.isEmpty()) return emptyList<RutaIAEntity>() to puntoInicio
 
     if (!filtros.usarCercaniaEncadenada) {
-        val base = if (filtros.usarGpsInicio && inicio != null) {
+        val base = if (puntoInicio != null) {
             pendientes.sortedWith(Comparator { a, b ->
-                val da = distanciaRutaIA(inicio, a.lat!! to a.lng!!)
-                val db = distanciaRutaIA(inicio, b.lat!! to b.lng!!)
+                val da = distanciaRutaIA(puntoInicio, a.lat!! to a.lng!!)
+                val db = distanciaRutaIA(puntoInicio, b.lat!! to b.lng!!)
                 if (da != db) da.compareTo(db) else compararPrioridades(a, b, filtros)
             })
         } else {
             pendientes.sortedWith(Comparator { a, b -> compararPrioridades(a, b, filtros) })
         }
-        return base + sinUbicar
+        val ultimo = base.lastOrNull()?.let { it.lat!! to it.lng!! } ?: puntoInicio
+        return base to ultimo
     }
 
+    val restantes = pendientes.toMutableList()
     val resultado = mutableListOf<RutaIAEntity>()
-    var puntoActual = if (filtros.usarGpsInicio) inicio else null
-    while (pendientes.isNotEmpty()) {
+    var puntoActual = puntoInicio
+    while (restantes.isNotEmpty()) {
         val siguiente = if (puntoActual != null) {
             val distanciaComparator = Comparator<RutaIAEntity> { a, b ->
                 val da = distanciaRutaIA(puntoActual!!, a.lat!! to a.lng!!)
@@ -141,15 +145,37 @@ fun construirRutaIAConfigurada(items: List<RutaIAEntity>, inicio: Pair<Double, D
                 val cmp = if (filtros.direccionCercania == DireccionOrdenRutaIA.ASC) da.compareTo(db) else db.compareTo(da)
                 if (cmp != 0) cmp else compararPrioridades(a, b, filtros)
             }
-            pendientes.minWithOrNull(distanciaComparator)!!
+            restantes.minWithOrNull(distanciaComparator)!!
         } else {
-            pendientes.sortedWith(Comparator { a, b -> compararPrioridades(a, b, filtros) }).first()
+            restantes.sortedWith(Comparator { a, b -> compararPrioridades(a, b, filtros) }).first()
         }
         resultado += siguiente
-        pendientes.remove(siguiente)
+        restantes.remove(siguiente)
         puntoActual = siguiente.lat!! to siguiente.lng!!
     }
-    return resultado + sinUbicar
+    return resultado to puntoActual
+}
+
+fun construirRutaIAConfigurada(items: List<RutaIAEntity>, inicio: Pair<Double, Double>?, filtros: FiltrosRutaIA): List<RutaIAEntity> {
+    val filtrados = aplicarFiltrosRutaIA(items, filtros)
+    if (filtros.modoRuta == ModoRutaIA.MANUAL) return filtrados.sortedBy { it.orden }
+
+    val pendientes = filtrados.filter { it.lat != null && it.lng != null }
+    val sinUbicar = filtrados.filter { it.lat == null || it.lng == null }.sortedByDescending { it.esNuevo }
+    if (pendientes.isEmpty()) return sinUbicar
+
+    val puntoInicial = if (filtros.usarGpsInicio) inicio else null
+
+    if (filtros.priorizarNuevos) {
+        val nuevos = pendientes.filter { it.esNuevo }
+        val resto = pendientes.filter { !it.esNuevo }
+        val (rutaNuevos, puntoTrasNuevos) = ordenarSubgrupoRutaIA(nuevos, puntoInicial, filtros)
+        val (rutaResto, _) = ordenarSubgrupoRutaIA(resto, puntoTrasNuevos, filtros)
+        return rutaNuevos + rutaResto + sinUbicar
+    }
+
+    val (ruta, _) = ordenarSubgrupoRutaIA(pendientes, puntoInicial, filtros)
+    return ruta + sinUbicar
 }
 
 fun construirRutaIAInteligente(items: List<RutaIAEntity>, inicio: Pair<Double, Double>?, estrategia: EstrategiaRutaIA, filtros: FiltrosRutaIA = FiltrosRutaIA(), direccion: DireccionOrdenRutaIA = DireccionOrdenRutaIA.ASC): List<RutaIAEntity> {

@@ -149,9 +149,49 @@ class RutaIAViewModel(
 
     fun procesarFotos(uris: List<Uri>, onResult: (Boolean, String?) -> Unit) = onResult(false, "Ruta IA ahora usa un archivo JSON generado externamente. Usa 'Importar JSON'.")
 
+    /** Un cliente "nuevo" (no encontrado en Matriz al importar el JSON de Gemini) NO se da de
+     * alta en Matriz al importar la ruta -- solo hasta que Diego lo visita realmente y marca
+     * "Visitado" aquí. Así Matriz nunca se llena de clientes que al final no se visitaron. */
     fun alternarVisitado(item: RutaIAEntity) {
         val nuevoEstado = if (item.estado.equals("Visitado", ignoreCase = true)) "Pendiente" else "Visitado"
-        viewModelScope.launch { rutaIADao.updateEstadoLocal(item.id, nuevoEstado); programarSincronizacionRutaIA() }
+        viewModelScope.launch {
+            rutaIADao.updateEstadoLocal(item.id, nuevoEstado)
+            if (nuevoEstado == "Visitado" && item.esNuevo && item.cuMatrizMatch == null) {
+                val idMatriz = darDeAltaEnMatriz(item)
+                rutaIADao.marcarAltaEnMatriz(item.id, idMatriz)
+            }
+            programarSincronizacionRutaIA()
+        }
+    }
+
+    private suspend fun darDeAltaEnMatriz(item: RutaIAEntity): String {
+        val idFinal = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+        val semana = item.diasAtraso?.let { diasAtrasoASemana(it).toString() } ?: ""
+        val requisito = (item.pagoRequerido ?: item.saldoAtraso)?.let { "%,.0f".format(it) } ?: ""
+        val ubicacion = if (item.lat != null && item.lng != null) "${item.lat},${item.lng}" else null
+        val ahora = System.currentTimeMillis()
+        val hora = java.text.SimpleDateFormat("HH:mm", java.util.Locale("es", "MX")).format(java.util.Date(ahora))
+        val nuevo = MatrizEntity(
+            id = idFinal,
+            nombre = item.nombre.trim().uppercase(java.util.Locale.ROOT),
+            semana = semana,
+            requisito = requisito,
+            numTT = "",
+            ref1 = "",
+            ref2 = "",
+            observaciones = "Alta automática desde Ruta IA al marcar visitado",
+            estado = "",
+            ubicacion = ubicacion,
+            imagenUrl = null,
+            imagenUrl2 = null,
+            fecha = ahora,
+            hora = hora,
+            ruta = null,
+            folioP = item.cu,
+            isDirty = true
+        )
+        matrizDao.insertOne(nuevo)
+        return idFinal
     }
 
     fun moverManualmente(id: String, delta: Int) {

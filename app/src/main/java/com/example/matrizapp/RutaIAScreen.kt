@@ -177,6 +177,12 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                         }
                     }
                     item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(configuracionDraft.priorizarNuevos, { configuracionDraft = configuracionDraft.copy(priorizarNuevos = it) })
+                            Text("Visitar primero a los clientes nuevos (no están en Matriz)")
+                        }
+                    }
+                    item {
                         Spacer(Modifier.height(4.dp))
                         Text("RUTA", fontWeight = FontWeight.Bold)
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -218,7 +224,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
         )
     }
 
-    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. La ruta manual respeta el orden que establezcas.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
+    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. La ruta manual respeta el orden que establezcas.\n\nLos clientes nuevos (tarjeta azul, no encontrados en Matriz) se visitan primero si activas esa opción. No se dan de alta en Matriz al importar: solo cuando marcas \"Visitado\" se crea su registro en Matriz.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
 
     if (mostrarMapa) Dialog(onDismissRequest = { mostrarMapa = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         RutaIAMapaFullScreen(items = ruta, onCerrar = { mostrarMapa = false }, onMarcadorClick = { })
@@ -242,7 +248,12 @@ private fun DireccionSelector(titulo: String, direccion: DireccionOrdenRutaIA, o
 @Composable
 private fun RutaIANuevaCard(item: RutaIAEntity, posicion: Int, puedeSubir: Boolean, puedeBajar: Boolean, onVisitado: () -> Unit, onSubir: () -> Unit, onBajar: () -> Unit, onMatriz: () -> Unit) {
     val visitado = item.estado.equals("Visitado", ignoreCase = true)
-    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = if (visitado) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface)) {
+    val colorFondo = when {
+        visitado -> Color(0xFFE8F5E9)
+        item.esNuevo -> Color(0xFFE3F2FD)
+        else -> MaterialTheme.colorScheme.surface
+    }
+    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = colorFondo)) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(onClick = onSubir, enabled = puedeSubir, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.KeyboardArrowUp, null) }
@@ -253,7 +264,11 @@ private fun RutaIANuevaCard(item: RutaIAEntity, posicion: Int, puedeSubir: Boole
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(item.nombre, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    if (item.esNuevo) AssistChip(onClick = {}, label = { Text("Nuevo") })
+                    if (item.esNuevo) AssistChip(
+                        onClick = {},
+                        label = { Text("Nuevo") },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFF1565C0), labelColor = Color.White)
+                    )
                 }
                 Text(item.direccion, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 Row(Modifier.padding(top = 5.dp)) {
