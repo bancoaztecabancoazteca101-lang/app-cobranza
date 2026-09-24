@@ -50,6 +50,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
         }
     }
     val matrizList by matrizViewModel.matrizList.collectAsState()
+    // IDs de Matriz existentes: una parada cuenta como "en Matriz" solo si su registro ligado sigue existiendo.
+    val idsMatriz = remember(matrizList) { matrizList.map { it.id }.toHashSet() }
     // Foto del cliente (misma "portada" que muestra Matriz) para las paradas que coinciden con un registro de Matriz
     val ubicacionesMatriz = remember(matrizList) {
         matrizList.associate { it.id to parseLatLngOrden(it.ubicacion?.replace('−', '-')?.replace('–', '-')) }
@@ -72,6 +74,9 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
     }
     // Parada cuyo registro se ve en ventana emergente (desde el mapa o desde el botón "Matriz" de la tarjeta)
     var paradaRegistro by remember { mutableStateOf<RutaIAEntity?>(null) }
+    // Parada cuyo formulario se abre directo: Editar registro si ya está en Matriz, o Nuevo registro
+    // (precargado con los datos de la ruta) si no está.
+    var paradaFormulario by remember { mutableStateOf<RutaIAEntity?>(null) }
     var configuracionDraft by remember { mutableStateOf(configuracionGuardada) }
 
     LaunchedEffect(mostrarFiltros) {
@@ -166,6 +171,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
                             item = item,
                             posicion = if (buscando) ruta.indexOfFirst { it.id == item.id } + 1 else index + 1,
                             imagenUrl = item.cuMatrizMatch?.let { fotosMatriz[it] },
+                            enMatriz = item.cuMatrizMatch != null && item.cuMatrizMatch in idsMatriz,
                             distanciaMatrizM = distanciaConMatrizMetros(item, item.cuMatrizMatch?.let { ubicacionesMatriz[it] }),
                             driveHelper = matrizViewModel.driveHelper,
                             puedeSubir = !buscando && index > 0,
@@ -174,10 +180,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
                             onSubir = { viewModel.moverManualmente(item.id, -1) },
                             onBajar = { viewModel.moverManualmente(item.id, 1) },
                             onTarjeta = { abrirRutaParada(item) },
-                            onMatriz = {
-                                if (matrizList.none { it.id == item.cuMatrizMatch }) Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
-                                else paradaRegistro = item
-                            },
+                            onMatriz = { paradaFormulario = item },
                             arrastrando = idArrastrado == item.id,
                             desplazamientoY = if (idArrastrado == item.id) desplazamientoArrastre else 0f,
                             onArrastreInicio = { if (!buscando) { idArrastrado = item.id; desplazamientoArrastre = 0f } },
@@ -322,7 +325,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
         )
     }
 
-    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. La ruta manual respeta el orden que establezcas.\n\nLos clientes nuevos (tarjeta azul, no encontrados en Matriz) se visitan primero si activas esa opción. No se dan de alta en Matriz al importar: solo cuando marcas \"Visitado\" se crea su registro en Matriz.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
+    if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. La ruta manual respeta el orden que establezcas.\n\nTarjeta azul: el cliente ya está en Matriz. Tarjeta naranja: aún no está en Matriz; regístralo con el botón Matriz para no duplicarlo. Los clientes nuevos (naranja) se visitan primero si activas esa opción. No se dan de alta en Matriz al importar: solo cuando marcas \"Visitado\" se crea su registro en Matriz.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
 
     if (mostrarMapa) Dialog(onDismissRequest = { mostrarMapa = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         RutaIAMapaFullScreen(items = ruta, onCerrar = { mostrarMapa = false }, onMarcadorClick = { paradaRegistro = it })
@@ -334,22 +337,51 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
         val registro = matrizList.firstOrNull { it.id == parada.cuMatrizMatch }
         val abrirRuta = { abrirRutaParada(parada) }
         if (registro != null) {
-            MatrizDetailDialog(registro, matrizViewModel.driveHelper, onDismiss = { paradaRegistro = null }, onEditClick = null, onRutaClick = abrirRuta)
+            MatrizDetailDialog(registro, matrizViewModel.driveHelper, onDismiss = { paradaRegistro = null }, onEditClick = { paradaFormulario = parada; paradaRegistro = null }, onRutaClick = abrirRuta)
         } else {
-            RutaIAParadaDialog(parada, onDismiss = { paradaRegistro = null }, onRuta = abrirRuta)
+            RutaIAParadaDialog(parada, onDismiss = { paradaRegistro = null }, onRuta = abrirRuta, onRegistrar = { paradaFormulario = parada; paradaRegistro = null })
+        }
+    }
+
+    // Formulario directo desde la parada: Editar registro (ya está en Matriz) o Nuevo registro
+    // precargado con los datos de la ruta (aún no está). Al crear, la parada se liga al registro nuevo
+    // y pasa de naranja a azul.
+    paradaFormulario?.let { parada ->
+        val registro = matrizList.firstOrNull { it.id == parada.cuMatrizMatch }
+        if (registro != null) {
+            MatrizFullFormDialog(registro, matrizViewModel, onDismiss = { paradaFormulario = null }, onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral ->
+                matrizViewModel.cambiarIdYGuardar(registro.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral) { exito, error ->
+                    if (!exito) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
+                    else if (idEditado.trim().isNotBlank() && idEditado.trim() != registro.id) viewModel.vincularConMatriz(parada.id, idEditado.trim())
+                }
+                paradaFormulario = null
+            })
+        } else {
+            MatrizFullFormDialog(
+                item = null,
+                viewModel = matrizViewModel,
+                prefill = viewModel.prefillMatrizDesdeParada(parada),
+                onDismiss = { paradaFormulario = null },
+                onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral ->
+                    matrizViewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral) { creado ->
+                        viewModel.vincularConMatriz(parada.id, creado.id)
+                    }
+                    paradaFormulario = null
+                }
+            )
         }
     }
 }
 
 /** Registro de una parada que no está en Matriz (cliente nuevo): muestra los datos que trae la ruta. */
 @Composable
-private fun RutaIAParadaDialog(item: RutaIAEntity, onDismiss: () -> Unit, onRuta: () -> Unit) {
+private fun RutaIAParadaDialog(item: RutaIAEntity, onDismiss: () -> Unit, onRuta: () -> Unit, onRegistrar: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(item.nombre) },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (item.esNuevo) Text("Cliente nuevo (aún no está en Matriz)", style = MaterialTheme.typography.labelMedium, color = Color(0xFF1565C0), fontWeight = FontWeight.Bold)
+                Text("Aún no está en Matriz", style = MaterialTheme.typography.labelMedium, color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
                 Text(item.direccion)
                 item.coloniaCp?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color.Gray) }
                 if (!item.cu.isNullOrBlank()) Text("CU: ${item.cu}")
@@ -360,10 +392,17 @@ private fun RutaIAParadaDialog(item: RutaIAEntity, onDismiss: () -> Unit, onRuta
             }
         },
         confirmButton = {
-            Button(onClick = onRuta) {
-                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Ruta en Maps")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onRuta) {
+                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Ruta en Maps")
+                }
+                Button(onClick = onRegistrar) {
+                    Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Registrar")
+                }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
@@ -401,7 +440,7 @@ private fun distanciaConMatrizMetros(item: RutaIAEntity, ubicacionMatriz: Pair<D
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RutaIANuevaCard(
-    item: RutaIAEntity, posicion: Int, imagenUrl: String?, distanciaMatrizM: Double?, driveHelper: DriveHelper, puedeSubir: Boolean, puedeBajar: Boolean,
+    item: RutaIAEntity, posicion: Int, imagenUrl: String?, enMatriz: Boolean, distanciaMatrizM: Double?, driveHelper: DriveHelper, puedeSubir: Boolean, puedeBajar: Boolean,
     onVisitado: () -> Unit, onSubir: () -> Unit, onBajar: () -> Unit, onMatriz: () -> Unit,
     onTarjeta: () -> Unit,
     arrastrando: Boolean, desplazamientoY: Float,
@@ -409,12 +448,10 @@ private fun RutaIANuevaCard(
 ) {
     val visitado = item.estado.equals("Visitado", ignoreCase = true)
     val direccionDistinta = distanciaMatrizM != null && distanciaMatrizM > UMBRAL_DIRECCION_DISTINTA_M
-    val colorFondo = when {
-        visitado -> Color(0xFFE8F5E9)
-        direccionDistinta -> Color(0xFFFFE0B2)
-        item.esNuevo -> Color(0xFFE3F2FD)
-        else -> MaterialTheme.colorScheme.surface
-    }
+    // Azul = ya está en Matriz (ya agregado o coincidía); naranja = aún NO está en Matriz (hay que
+    // registrarlo con el botón "Matriz" para no duplicar). "Visitado" ya no cambia el fondo: se
+    // marca con borde verde para no perder la información de azul/naranja.
+    val colorFondo = if (enMatriz) Color(0xFFE3F2FD) else Color(0xFFFFE0B2)
     var alturaTarjetaPx by remember { mutableStateOf(0f) }
     Card(
         // Tocar la tarjeta abre la ruta en Google Maps hacia la parada
@@ -425,7 +462,8 @@ private fun RutaIANuevaCard(
             .onGloballyPositioned { alturaTarjetaPx = it.size.height.toFloat() }
             .shadow(if (arrastrando) 10.dp else 0.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colorFondo)
+        colors = CardDefaults.cardColors(containerColor = colorFondo),
+        border = if (visitado) androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF2E7D32)) else null
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -440,10 +478,10 @@ private fun RutaIANuevaCard(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(item.nombre, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    if (item.esNuevo) AssistChip(
+                    AssistChip(
                         onClick = {},
-                        label = { Text("Nuevo") },
-                        colors = AssistChipDefaults.assistChipColors(containerColor = Color(0xFF1565C0), labelColor = Color.White)
+                        label = { Text(if (enMatriz) "En Matriz" else "Sin agregar") },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = if (enMatriz) Color(0xFF1565C0) else Color(0xFFE65100), labelColor = Color.White)
                     )
                 }
                 Text(item.direccion, style = MaterialTheme.typography.bodySmall, color = Color.Gray)

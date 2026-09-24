@@ -243,6 +243,29 @@ class RutaIAViewModel(
 
     suspend fun buscarMatrizPorId(id: String): MatrizEntity? = matrizDao.getById(id)
 
+    /** Liga una parada de la ruta con un registro de Matriz (recién creado a mano desde el formulario,
+     * o cuyo ID se cambió al editar): la parada deja de ser "nueva" y se pinta como ya agregada. */
+    fun vincularConMatriz(paradaId: String, matrizId: String) {
+        viewModelScope.launch {
+            rutaIADao.marcarAltaEnMatriz(paradaId, matrizId)
+            programarSincronizacionRutaIA()
+        }
+    }
+
+    /** Datos de la parada como registro de Matriz para precargar el formulario "Nuevo registro".
+     * No se guarda nada: solo sirve de valores iniciales, el registro se crea al guardar el formulario. */
+    fun prefillMatrizDesdeParada(item: RutaIAEntity): MatrizEntity {
+        val semana = item.diasAtraso?.let { diasAtrasoASemana(it).toString() } ?: ""
+        val requisito = (item.pagoRequerido ?: item.saldoAtraso)?.let { "%,.0f".format(it) } ?: ""
+        val ubicacion = if (item.lat != null && item.lng != null) "${item.lat},${item.lng}" else null
+        return MatrizEntity(
+            id = "", nombre = item.nombre.trim().uppercase(java.util.Locale.ROOT), semana = semana, requisito = requisito,
+            numTT = "", ref1 = "", ref2 = "", observaciones = null, estado = "", ubicacion = ubicacion,
+            imagenUrl = null, imagenUrl2 = null, fecha = System.currentTimeMillis(), hora = null, ruta = null,
+            folioP = item.cu, isDirty = false
+        )
+    }
+
     fun limpiarRutaAhora() {
         viewModelScope.launch { rutaIADao.deleteAll(); try { repository.reemplazarRutaIAEnSheet(emptyList()) } catch (_: Exception) { } }
     }

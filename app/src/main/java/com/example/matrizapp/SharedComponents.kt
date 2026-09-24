@@ -337,32 +337,36 @@ fun MatrizFullFormDialog(
              ref3: String, ref4: String, diaPago: String, domicilioLaboral: String) -> Unit,
     // Ref 3/Ref 4/Día de pago/Domicilio Laboral solo existen en matriz_table (no en Pase): el
     // alta de Pase pasa false para no mostrar campos que luego no se guardarían en ningún lado.
-    mostrarCamposExtra: Boolean = true
+    mostrarCamposExtra: Boolean = true,
+    // Solo para registro nuevo (item == null): valores iniciales de los campos (lo usa Ruta IA para
+    // registrar como cliente nuevo una parada que no está en Matriz).
+    prefill: MatrizEntity? = null
 ) {
     val context = LocalContext.current
     val esNuevo = item == null
+    val base = item ?: prefill
 
     // ID: si es un registro existente, arranca con su ID actual; si es nuevo, sugiere uno
     // autogenerado (hex corto), pero en ambos casos el usuario lo puede editar por si choca
     // con un ID que ya haya generado AppSheet.
     var idEditable by remember { mutableStateOf(item?.id ?: java.util.UUID.randomUUID().toString().replace("-", "").take(8)) }
 
-    var nombre by remember { mutableStateOf(item?.nombre ?: "") }
-    var semana by remember { mutableStateOf(item?.semana ?: "") }
-    var requisito by remember { mutableStateOf(item?.requisito ?: "") }
-    var numTT by remember { mutableStateOf(item?.numTT ?: "") }
-    var ref1 by remember { mutableStateOf(item?.ref1 ?: "") }
-    var ref2 by remember { mutableStateOf(item?.ref2 ?: "") }
-    var observaciones by remember { mutableStateOf(item?.observaciones ?: "") }
-    var estado by remember { mutableStateOf(item?.estado ?: "") }
-    var ubicacion by remember { mutableStateOf(item?.ubicacion ?: "") }
+    var nombre by remember { mutableStateOf(base?.nombre ?: "") }
+    var semana by remember { mutableStateOf(base?.semana ?: "") }
+    var requisito by remember { mutableStateOf(base?.requisito ?: "") }
+    var numTT by remember { mutableStateOf(base?.numTT ?: "") }
+    var ref1 by remember { mutableStateOf(base?.ref1 ?: "") }
+    var ref2 by remember { mutableStateOf(base?.ref2 ?: "") }
+    var observaciones by remember { mutableStateOf(base?.observaciones ?: "") }
+    var estado by remember { mutableStateOf(base?.estado ?: "") }
+    var ubicacion by remember { mutableStateOf(base?.ubicacion ?: "") }
     // Fecha y Hora (el selector combinado de arriba) siempre inicia en el momento actual.
     // El campo "Hora" de abajo es independiente: si es un registro existente conserva su
     // hora guardada, y si es nuevo empieza en blanco para que se elija a mano.
     var fechaMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var hora by remember { mutableStateOf(item?.hora ?: "") }
     var ruta by remember { mutableStateOf(item?.ruta ?: "") }
-    var folioP by remember { mutableStateOf(item?.folioP ?: "") }
+    var folioP by remember { mutableStateOf(base?.folioP ?: "") }
     var descuentoPago by remember { mutableStateOf(item?.descuentoPago ?: "") }
     var descuentoAhorro by remember { mutableStateOf(item?.descuentoAhorro ?: "") }
     var ref3 by remember { mutableStateOf(item?.ref3 ?: "") }
@@ -371,7 +375,7 @@ fun MatrizFullFormDialog(
     var domicilioLaboral by remember { mutableStateOf(item?.domicilioLaboral ?: "") }
     var buscandoUbicacionLaboral by remember { mutableStateOf(false) }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
-    var buscandoUbicacion by remember { mutableStateOf(esNuevo) }
+    var buscandoUbicacion by remember { mutableStateOf(esNuevo && prefill?.ubicacion.isNullOrBlank()) }
     var activePhotoSlot by remember { mutableStateOf(1) }
 
     // Leer el nombre desde una foto (OCR), igual que "Buscar con foto" en la lista, pero aquí
