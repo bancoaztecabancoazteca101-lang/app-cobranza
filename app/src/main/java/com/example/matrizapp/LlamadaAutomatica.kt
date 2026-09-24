@@ -253,12 +253,18 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     } else {
         resumen.appendLine("• Sin NumTT -- no se llamó ni se mandó nada al titular")
     }
-    // Referencias propias del cliente (Ref1/Ref2 capturados en Matriz) + referencias extra
+    // Referencias propias del cliente (Ref1/Ref2/Ref3/Ref4 capturados en Matriz) + referencias extra
     // confirmadas a mano desde Filtrar (números de un "cercano" que probablemente conoce al
     // titular) -- todas reciben el mismo mensaje de referencia, mencionando siempre el nombre
     // del titular (r.nombre), nunca el del cercano de donde salió el número.
-    val telefonosReferencia = listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }) +
-        contactoExtraDao.obtenerPara(r.id).map { it.telefono }
+    // Ref3/Ref4 (campos solo-app en Room, 23/09/2026) reciben el mismo trato que Ref1/Ref2.
+    // .distinct() evita mandar dos veces el mismo SMS si un número se repite entre referencias/extras.
+    val telefonosReferencia = (listOfNotNull(
+        r.ref1.takeIf { it.isNotBlank() },
+        r.ref2.takeIf { it.isNotBlank() },
+        r.ref3?.takeIf { it.isNotBlank() },
+        r.ref4?.takeIf { it.isNotBlank() }
+    ) + contactoExtraDao.obtenerPara(r.id).map { it.telefono }).distinct()
     telefonosReferencia.forEach { tel ->
         SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
     }
