@@ -54,6 +54,12 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     var mostrarFiltros by remember { mutableStateOf(false) }
     var mostrarMapa by remember { mutableStateOf(false) }
     var mostrarAyuda by remember { mutableStateOf(false) }
+    // Ruta en Maps hacia una parada: usa sus coordenadas y, si no tiene, la ubicación del registro en Matriz.
+    val abrirRutaParada: (RutaIAEntity) -> Unit = { parada ->
+        val destino = if (parada.lat != null && parada.lng != null) parada
+        else parada.cuMatrizMatch?.let { ubicacionesMatriz[it] }?.let { parada.copy(lat = it.first, lng = it.second) } ?: parada
+        abrirEnGoogleMaps(context, destino)
+    }
     // Parada cuyo registro se ve en ventana emergente (desde el mapa o desde el botón "Matriz" de la tarjeta)
     var paradaRegistro by remember { mutableStateOf<RutaIAEntity?>(null) }
     var configuracionDraft by remember { mutableStateOf(configuracionGuardada) }
@@ -138,6 +144,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                             onVisitado = { viewModel.alternarVisitado(item) },
                             onSubir = { viewModel.moverManualmente(item.id, -1) },
                             onBajar = { viewModel.moverManualmente(item.id, 1) },
+                            onTarjeta = { abrirRutaParada(item) },
                             onMatriz = {
                                 if (matrizList.none { it.id == item.cuMatrizMatch }) Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
                                 else paradaRegistro = item
@@ -294,11 +301,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     // La ruta en Maps sale de aquí (botón "Ruta en Maps"), ya no directo al tocar el punto del mapa.
     paradaRegistro?.let { parada ->
         val registro = matrizList.firstOrNull { it.id == parada.cuMatrizMatch }
-        val abrirRuta = {
-            val destino = if (parada.lat != null && parada.lng != null) parada
-            else parada.cuMatrizMatch?.let { ubicacionesMatriz[it] }?.let { parada.copy(lat = it.first, lng = it.second) } ?: parada
-            abrirEnGoogleMaps(context, destino)
-        }
+        val abrirRuta = { abrirRutaParada(parada) }
         if (registro != null) {
             MatrizDetailDialog(registro, matrizViewModel.driveHelper, onDismiss = { paradaRegistro = null }, onEditClick = null, onRutaClick = abrirRuta)
         } else {
@@ -364,10 +367,12 @@ private fun distanciaConMatrizMetros(item: RutaIAEntity, ubicacionMatriz: Pair<D
     return distanciaKm(lat to lng, matriz) * 1000.0
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RutaIANuevaCard(
     item: RutaIAEntity, posicion: Int, imagenUrl: String?, distanciaMatrizM: Double?, driveHelper: DriveHelper, puedeSubir: Boolean, puedeBajar: Boolean,
     onVisitado: () -> Unit, onSubir: () -> Unit, onBajar: () -> Unit, onMatriz: () -> Unit,
+    onTarjeta: () -> Unit,
     arrastrando: Boolean, desplazamientoY: Float,
     onArrastreInicio: () -> Unit, onArrastre: (deltaY: Float, alturaPx: Float) -> Unit, onArrastreFin: () -> Unit
 ) {
@@ -381,6 +386,8 @@ private fun RutaIANuevaCard(
     }
     var alturaTarjetaPx by remember { mutableStateOf(0f) }
     Card(
+        // Tocar la tarjeta abre la ruta en Google Maps hacia la parada
+        onClick = onTarjeta,
         modifier = Modifier
             .zIndex(if (arrastrando) 1f else 0f)
             .graphicsLayer { translationY = desplazamientoY }
