@@ -253,7 +253,10 @@ private fun classifyChannel(name: String, brand: String, operator: String): Clas
         "neto" in t -> ClasificacionCanal("Tiendas Neto", CategoriaCanalPago.PRINCIPAL)
         "azulemex" in t -> ClasificacionCanal("Azulemex", CategoriaCanalPago.PRINCIPAL)
         "tiendas six" in t || "tienda six" in t -> ClasificacionCanal("Tiendas Six", CategoriaCanalPago.PRINCIPAL)
-        "oxxo" in t -> ClasificacionCanal("OXXO", CategoriaCanalPago.AFILIADO)
+        // OXXO ya no está asociado como punto de pago del crédito (cancelado, 24/09/2026): se
+        // descarta aquí para que nunca salga en el ticket, aunque siga en el catálogo/hoja.
+        // Para reactivarlo: cambiar esta línea por ClasificacionCanal("OXXO", CategoriaCanalPago.AFILIADO).
+        "oxxo" in t -> null
         "7-eleven" in t || "seven eleven" in t -> ClasificacionCanal("7-Eleven", CategoriaCanalPago.AFILIADO)
         "soriana" in t -> ClasificacionCanal("Soriana", CategoriaCanalPago.AFILIADO)
         "chedraui" in t -> ClasificacionCanal("Chedraui", CategoriaCanalPago.AFILIADO)
