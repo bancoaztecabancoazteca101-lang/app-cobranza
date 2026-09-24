@@ -250,16 +250,70 @@ class SheetsRepository(
         asegurarHojaRutaIAExiste()
         val realName = resolveSheetName(Constants.SHEET_RUTA_IA)
         try {
-            sheetsService.spreadsheets().values().clear(Constants.SPREADSHEET_ID, "'$realName'!A2:N", com.google.api.services.sheets.v4.model.ClearValuesRequest()).execute()
+            sheetsService.spreadsheets().values().clear(Constants.SPREADSHEET_ID, "'$realName'!A2:O", com.google.api.services.sheets.v4.model.ClearValuesRequest()).execute()
+        } catch (e: Exception) { }
+        // Columna O = SaldoAtraso (agregada para poder sincronizar la ruta entre dispositivos sin
+        // perder ese dato). Se escribe el encabezado siempre porque la hoja ya existente solo llegaba a N.
+        try {
+            sheetsService.spreadsheets().values().update(Constants.SPREADSHEET_ID, "'$realName'!O1", ValueRange().setValues(listOf(listOf("SaldoAtraso")))).setValueInputOption("USER_ENTERED").execute()
         } catch (e: Exception) { }
         if (items.isEmpty()) return@withContext
         val filas = items.map { item ->
-            listOf(item.id, item.nombre, item.cu ?: "", item.direccion, item.coloniaCp ?: "", item.diasAtraso?.toString() ?: "", item.pagoRequerido?.toString() ?: "", item.lat?.toString() ?: "", item.lng?.toString() ?: "", item.orden.toString(), if (item.esNuevo) "TRUE" else "FALSE", item.cuMatrizMatch ?: "", DateUtils.toSheetsSerial(item.fechaDia), item.estado)
+            listOf(item.id, item.nombre, item.cu ?: "", item.direccion, item.coloniaCp ?: "", item.diasAtraso?.toString() ?: "", item.pagoRequerido?.toString() ?: "", item.lat?.toString() ?: "", item.lng?.toString() ?: "", item.orden.toString(), if (item.esNuevo) "TRUE" else "FALSE", item.cuMatrizMatch ?: "", DateUtils.toSheetsSerial(item.fechaDia), item.estado, item.saldoAtraso?.toString() ?: "")
         }
         val body = ValueRange().setValues(filas)
         sheetsService.spreadsheets().values().append(Constants.SPREADSHEET_ID, "'$realName'!A1", body)
             .setValueInputOption("USER_ENTERED").setInsertDataOption("INSERT_ROWS").execute()
         Unit
+    }
+
+
+    /** Descarga la ruta vigente de la hoja "Ruta IA" a Room, para que un segundo dispositivo vea la
+     * ruta que generó otro (antes solo se subía, nunca se leía de vuelta). Reglas:
+     * - Si este teléfono tiene cambios sin subir (isDirty), primero los sube y NO descarga: lo local gana.
+     * - Si no hay cambios locales, la hoja es la verdad: se insertan/actualizan las filas y se borran
+     *   las locales que ya no estén (otra persona limpió la ruta o el borrado de las 4 AM).
+     * - Si la hoja no existe todavía, no hace nada. Devuelve cuántas paradas quedaron en local. */
+    suspend fun refreshRutaIA(): Int = withContext(Dispatchers.IO) {
+        val yaExiste = getRealSheetTitles().values.any { it.equals(Constants.SHEET_RUTA_IA, ignoreCase = true) }
+        if (!yaExiste) return@withContext rutaIADao.getAll().first().size
+        if (rutaIADao.getDirtyItems().isNotEmpty()) {
+            val locales = rutaIADao.getAll().first()
+            reemplazarRutaIAEnSheet(locales)
+            locales.forEach { rutaIADao.markAsClean(it.id) }
+            return@withContext locales.size
+        }
+        val realName = resolveSheetName(Constants.SHEET_RUTA_IA)
+        val respuesta = sheetsService.spreadsheets().values().get(Constants.SPREADSHEET_ID, "'$realName'!A2:O")
+            .setValueRenderOption("UNFORMATTED_VALUE").execute()
+        val filas = respuesta.getValues() ?: emptyList()
+        fun texto(row: List<Any>, i: Int): String? = row.getOrNull(i)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        fun numero(row: List<Any>, i: Int): Double? = row.getOrNull(i)?.toString()?.trim()?.replace(",", ".")?.toDoubleOrNull()
+        val locales = rutaIADao.getAll().first().associateBy { it.id }
+        val items = filas.mapNotNull { row ->
+            val id = texto(row, 0) ?: return@mapNotNull null
+            val nombre = texto(row, 1) ?: return@mapNotNull null
+            val serial = numero(row, 12)
+            // Se redondea al minuto: el serial de Sheets es un double y el millis resultante puede
+            // quedar unos ms antes de la medianoche real.
+            val fechaDia = serial?.let { ((DateUtils.sheetsSerialToEpochMillis(it) + 30_000L) / 60_000L) * 60_000L } ?: System.currentTimeMillis()
+            RutaIAEntity(
+                id = id, nombre = nombre, cu = texto(row, 2), direccion = texto(row, 3) ?: "",
+                coloniaCp = texto(row, 4), diasAtraso = numero(row, 5)?.toInt(), pagoRequerido = numero(row, 6),
+                saldoAtraso = numero(row, 14), lat = numero(row, 7), lng = numero(row, 8),
+                orden = numero(row, 9)?.toInt() ?: 0,
+                esNuevo = !(texto(row, 10)?.equals("FALSE", ignoreCase = true) ?: false),
+                cuMatrizMatch = texto(row, 11), fechaDia = fechaDia, estado = texto(row, 13) ?: "Pendiente",
+                fotoOrigenUrl = locales[id]?.fotoOrigenUrl, isDirty = false
+            )
+        }
+        if (items.isEmpty()) {
+            rutaIADao.deleteAll()
+        } else {
+            rutaIADao.insertAll(items)
+            rutaIADao.deleteNotIn(items.map { it.id })
+        }
+        items.size
     }
 
     suspend fun refreshAll() = withContext(Dispatchers.IO) {
@@ -270,6 +324,7 @@ class SheetsRepository(
         try { refreshFiltroFecha() } catch (e: Exception) { errors.add("Filtro Fecha: ${e.message}") }
         try { refreshFiltrar() } catch (e: Exception) { errors.add("Filtrar: ${e.message}") }
         try { refreshControl() } catch (e: Exception) { errors.add("Control: ${e.message}") }
+        try { refreshRutaIA() } catch (e: Exception) { errors.add("Ruta IA: ${e.message}") }
         if (errors.isNotEmpty()) throw Exception(errors.joinToString(" | "))
     }
 

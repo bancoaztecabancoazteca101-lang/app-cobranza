@@ -165,6 +165,8 @@ interface RutaIADao {
     suspend fun marcarAltaEnMatriz(id: String, matrizId: String)
     @Query("SELECT * FROM ruta_ia_table WHERE isDirty = 1")
     suspend fun getDirtyItems(): List<RutaIAEntity>
+    @Query("DELETE FROM ruta_ia_table WHERE id NOT IN (:ids)")
+    suspend fun deleteNotIn(ids: List<String>)
     @Query("UPDATE ruta_ia_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
     suspend fun markAsClean(id: String, syncTime: Long = System.currentTimeMillis())
 }

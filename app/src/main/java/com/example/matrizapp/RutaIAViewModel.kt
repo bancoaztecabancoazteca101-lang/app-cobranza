@@ -147,6 +147,16 @@ class RutaIAViewModel(
         }
     }
 
+    /** Trae la ruta vigente de la hoja "Ruta IA" (la que generó otro dispositivo). Ver
+     * SheetsRepository.refreshRutaIA para las reglas de qué gana si hay cambios locales. */
+    fun sincronizarDesdeHoja(onResult: ((Result<Int>) -> Unit)? = null) {
+        if (_procesando.value) return
+        viewModelScope.launch {
+            val resultado = runCatching { repository.refreshRutaIA() }
+            onResult?.invoke(resultado)
+        }
+    }
+
     fun procesarFotos(uris: List<Uri>, onResult: (Boolean, String?) -> Unit) = onResult(false, "Ruta IA ahora usa un archivo JSON generado externamente. Usa 'Importar JSON'.")
 
     /** Un cliente "nuevo" (no encontrado en Matriz al importar el JSON de Gemini) NO se da de

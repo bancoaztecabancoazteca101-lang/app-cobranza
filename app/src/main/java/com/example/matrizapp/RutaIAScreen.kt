@@ -68,6 +68,9 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
         if (mostrarFiltros) configuracionDraft = configuracionGuardada
     }
 
+    // Al abrir Ruta IA se trae la ruta vigente de la hoja, por si otro dispositivo la generó o la editó.
+    LaunchedEffect(Unit) { viewModel.sincronizarDesdeHoja() }
+
     val importarLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
         viewModel.importarJson(uri, configuracionGuardada) { exito, mensaje, advertencias ->
@@ -95,6 +98,18 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                             text = { Text("Filtros y configuración") },
                             leadingIcon = { Icon(Icons.Default.Tune, null) },
                             onClick = { mostrarMenu = false; mostrarFiltros = true }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Actualizar desde la hoja") },
+                            leadingIcon = { Icon(Icons.Default.Sync, null) },
+                            enabled = !procesando,
+                            onClick = {
+                                mostrarMenu = false
+                                viewModel.sincronizarDesdeHoja { res ->
+                                    val msg = res.fold({ n -> if (n == 0) "La ruta en la hoja está vacía" else "Ruta actualizada: $n paradas" }, { e -> "No se pudo actualizar: ${e.message}" })
+                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                }
+                            }
                         )
                         DropdownMenuItem(
                             text = { Text("Importar JSON de Gemini") },
