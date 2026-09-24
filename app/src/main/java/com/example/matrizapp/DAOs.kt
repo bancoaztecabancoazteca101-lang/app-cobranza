@@ -21,13 +21,15 @@ interface MatrizDao {
     @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
         ubicacion = :ubicacion, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP,
-        descuentoPago = :descuentoPago, descuentoAhorro = :descuentoAhorro, isDirty = 1
+        descuentoPago = :descuentoPago, descuentoAhorro = :descuentoAhorro,
+        ref3 = :ref3, ref4 = :ref4, diaPago = :diaPago, domicilioLaboral = :domicilioLaboral, isDirty = 1
         WHERE id = :id""")
     suspend fun updateRegistroCompleto(
         id: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
         fecha: Long?, hora: String?, ruta: String?, folioP: String?,
-        descuentoPago: String?, descuentoAhorro: String?
+        descuentoPago: String?, descuentoAhorro: String?,
+        ref3: String?, ref4: String?, diaPago: String?, domicilioLaboral: String?
     )
     @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
@@ -35,7 +37,7 @@ interface MatrizDao {
         hora = :hora, ruta = :ruta, folioP = :folioP
         WHERE id = :id""")
     // UPDATE parcial usado por el pull de Sheets (SheetsRepository.refreshMatriz) para registros
-    // que ya existen en Room -- a propósito NO incluye descuentoPago/descuentoAhorro/isDirty en
+    // que ya existen en Room -- a propósito NO incluye descuentoPago/descuentoAhorro/ref3/ref4/diaPago/domicilioLaboral/isDirty en
     // el SET. El Sheet no tiene esas 2 columnas (son 100% locales), así que antes había que leer
     // el valor local al arrancar el pull y "reinyectarlo" al reconstruir el MatrizEntity completo
     // para no perderlo -- pero si un guardado local (Editar registro) caía justo en la ventana

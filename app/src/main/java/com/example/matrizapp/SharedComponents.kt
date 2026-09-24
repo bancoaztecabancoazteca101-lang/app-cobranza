@@ -333,7 +333,11 @@ fun MatrizFullFormDialog(
     onDismiss: () -> Unit,
     onSave: (id: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String,
              observaciones: String, estado: String, ubicacion: String, fecha: Long, hora: String, ruta: String, folioP: String,
-             descuentoPago: String, descuentoAhorro: String) -> Unit
+             descuentoPago: String, descuentoAhorro: String,
+             ref3: String, ref4: String, diaPago: String, domicilioLaboral: String) -> Unit,
+    // Ref 3/Ref 4/Día de pago/Domicilio Laboral solo existen en matriz_table (no en Pase): el
+    // alta de Pase pasa false para no mostrar campos que luego no se guardarían en ningún lado.
+    mostrarCamposExtra: Boolean = true
 ) {
     val context = LocalContext.current
     val esNuevo = item == null
@@ -361,6 +365,11 @@ fun MatrizFullFormDialog(
     var folioP by remember { mutableStateOf(item?.folioP ?: "") }
     var descuentoPago by remember { mutableStateOf(item?.descuentoPago ?: "") }
     var descuentoAhorro by remember { mutableStateOf(item?.descuentoAhorro ?: "") }
+    var ref3 by remember { mutableStateOf(item?.ref3 ?: "") }
+    var ref4 by remember { mutableStateOf(item?.ref4 ?: "") }
+    var diaPago by remember { mutableStateOf(item?.diaPago ?: "") }
+    var domicilioLaboral by remember { mutableStateOf(item?.domicilioLaboral ?: "") }
+    var buscandoUbicacionLaboral by remember { mutableStateOf(false) }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
     var buscandoUbicacion by remember { mutableStateOf(esNuevo) }
     var activePhotoSlot by remember { mutableStateOf(1) }
@@ -454,6 +463,14 @@ fun MatrizFullFormDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (mostrarCamposExtra) {
+                    OutlinedTextField(
+                        value = diaPago, onValueChange = { diaPago = filtrarMoneda(it) }, label = { Text("Día de pago") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        visualTransformation = MonedaVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 OutlinedTextField(
                     value = numTT, onValueChange = { numTT = it }, label = { Text("Num TT") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
@@ -469,6 +486,18 @@ fun MatrizFullFormDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (mostrarCamposExtra) {
+                    OutlinedTextField(
+                        value = ref3, onValueChange = { ref3 = it }, label = { Text("Ref 3") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = ref4, onValueChange = { ref4 = it }, label = { Text("Ref 4") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 OutlinedTextField(value = observaciones, onValueChange = { observaciones = it }, label = { Text("Observaciones") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
 
                 ExposedDropdownMenuBox(expanded = estadoMenuExpanded, onExpandedChange = { estadoMenuExpanded = it }) {
@@ -487,11 +516,11 @@ fun MatrizFullFormDialog(
                 }
 
                 OutlinedTextField(
-                    value = ubicacion, onValueChange = { ubicacion = it }, label = { Text("Ubicación") },
+                    value = ubicacion, onValueChange = { ubicacion = filtrarCoordenadas(it) }, label = { Text("Domicilio Oficial") },
                     trailingIcon = {
                         IconButton(onClick = {
                             buscandoUbicacion = true
-                        }) { Icon(Icons.Default.MyLocation, contentDescription = "Ubicación actual") }
+                        }) { Icon(Icons.Default.MyLocation, contentDescription = "Usar ubicación actual como domicilio oficial") }
                     },
                     supportingText = { if (buscandoUbicacion) Text("Obteniendo ubicación…") },
                     modifier = Modifier.fillMaxWidth()
@@ -502,8 +531,26 @@ fun MatrizFullFormDialog(
                         buscandoUbicacion = false
                     }
                 }
+                if (mostrarCamposExtra) {
+                    OutlinedTextField(
+                        value = domicilioLaboral, onValueChange = { domicilioLaboral = filtrarCoordenadas(it) }, label = { Text("Domicilio Laboral") },
+                        trailingIcon = {
+                            IconButton(onClick = { buscandoUbicacionLaboral = true }) {
+                                Icon(Icons.Default.MyLocation, contentDescription = "Usar ubicación actual como domicilio laboral")
+                            }
+                        },
+                        supportingText = { if (buscandoUbicacionLaboral) Text("Obteniendo ubicación…") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LaunchedEffect(buscandoUbicacionLaboral) {
+                        if (buscandoUbicacionLaboral) {
+                            domicilioLaboral = obtenerUbicacionActual(context) ?: domicilioLaboral
+                            buscandoUbicacionLaboral = false
+                        }
+                    }
+                }
 
-                // Imagen e Imagen 2 van justo después de Ubicación, igual que en AppSheet.
+                // Imagen e Imagen 2 van después de los domicilios, igual que en AppSheet.
                 // Solo disponibles al editar un registro existente (se necesita su ID).
                 Text("Imagen", style = MaterialTheme.typography.labelMedium)
                 ImagenCaptureBox(
@@ -599,13 +646,64 @@ fun MatrizFullFormDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(idEditable, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fechaMillis, hora, ruta, folioP, descuentoPago, descuentoAhorro)
+                    onSave(idEditable, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fechaMillis, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral)
                 },
                 enabled = nombre.isNotBlank() && idEditable.isNotBlank()
             ) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
     )
+}
+
+/** Coordenadas "lat, long": solo dígitos, punto, coma, guion y espacio (se puede pegar directo
+ * desde Google Maps, ej. 19.367936, -99.140631). */
+private fun filtrarCoordenadas(v: String): String =
+    v.filter { it.isDigit() || it == '.' || it == ',' || it == '-' || it == ' ' }
+
+/** Moneda: guarda solo dígitos y un punto decimal (máx. 2 decimales); el "$" y las comas de
+ * miles son solo visuales (ver MonedaVisualTransformation), no se guardan. */
+private fun filtrarMoneda(v: String): String {
+    val limpio = v.filter { it.isDigit() || it == '.' }
+    val i = limpio.indexOf('.')
+    if (i < 0) return limpio
+    val entera = limpio.substring(0, i)
+    val decimales = limpio.substring(i + 1).replace(".", "").take(2)
+    return entera + "." + decimales
+}
+
+/** Muestra el valor como $1,234.50 sin alterar el texto guardado (ej. "1234.5"). */
+private class MonedaVisualTransformation : androidx.compose.ui.text.input.VisualTransformation {
+    override fun filter(text: androidx.compose.ui.text.AnnotatedString): androidx.compose.ui.text.input.TransformedText {
+        val raw = text.text
+        if (raw.isEmpty()) {
+            return androidx.compose.ui.text.input.TransformedText(text, androidx.compose.ui.text.input.OffsetMapping.Identity)
+        }
+        val punto = raw.indexOf('.')
+        val entera = if (punto >= 0) raw.substring(0, punto) else raw
+        val decimales = if (punto >= 0) raw.substring(punto) else ""
+        val sb = StringBuilder("\$")
+        val mapa = IntArray(raw.length + 1)
+        var salida = 1
+        for (i in entera.indices) {
+            if (i > 0 && (entera.length - i) % 3 == 0) { sb.append(','); salida++ }
+            mapa[i] = salida
+            sb.append(entera[i]); salida++
+        }
+        for (j in decimales.indices) {
+            mapa[entera.length + j] = salida
+            sb.append(decimales[j]); salida++
+        }
+        mapa[raw.length] = salida
+        val offsets = object : androidx.compose.ui.text.input.OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int = mapa[offset.coerceIn(0, raw.length)]
+            override fun transformedToOriginal(offset: Int): Int {
+                var res = 0
+                for (i in 0..raw.length) { if (mapa[i] <= offset) res = i else break }
+                return res
+            }
+        }
+        return androidx.compose.ui.text.input.TransformedText(androidx.compose.ui.text.AnnotatedString(sb.toString()), offsets)
+    }
 }
 
 @Composable

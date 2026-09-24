@@ -67,8 +67,8 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
             item = item.original,
             viewModel = null,
             onDismiss = { itemToFullEdit = null },
-            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro ->
-                viewModel.guardarRegistroCompleto(item.original.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro) { exito, error ->
+            onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral ->
+                viewModel.guardarRegistroCompleto(item.original.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral) { exito, error ->
                     if (!exito) android.widget.Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
                 }
                 itemToFullEdit = null

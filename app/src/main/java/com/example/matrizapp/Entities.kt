@@ -10,6 +10,8 @@ data class MatrizEntity(
     val ubicacion: String?, var imagenUrl: String?, var imagenUrl2: String?, val fecha: Long?, val hora: String?,
     val ruta: String?, val folioP: String?,
     val descuentoPago: String? = null, val descuentoAhorro: String? = null,
+    // Campos 100% locales (no existen en el Sheet): ver MatrizDao.actualizarDesdeSheet().
+    val ref3: String? = null, val ref4: String? = null, val diaPago: String? = null, val domicilioLaboral: String? = null,
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 
