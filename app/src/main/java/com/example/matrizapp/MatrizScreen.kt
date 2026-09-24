@@ -130,7 +130,11 @@ fun formatearMontoMatriz(req: String): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MatrizDetailDialog(item: MatrizEntity, driveHelper: DriveHelper, onDismiss: () -> Unit, onEditClick: () -> Unit) {
+fun MatrizDetailDialog(
+    item: MatrizEntity, driveHelper: DriveHelper, onDismiss: () -> Unit, onEditClick: (() -> Unit)?,
+    // Si viene, se muestra el botón "Ruta en Maps" (lo usa Ruta IA para navegar a la parada).
+    onRutaClick: (() -> Unit)? = null
+) {
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = LocalContext.current
     var showPaymentChannels by remember(item.id) { mutableStateOf(false) }
@@ -172,10 +176,21 @@ fun MatrizDetailDialog(item: MatrizEntity, driveHelper: DriveHelper, onDismiss: 
             }
         },
         confirmButton = {
-            Button(onClick = onEditClick) {
-                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Editar")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onRutaClick != null) {
+                    Button(onClick = onRutaClick) {
+                        Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Ruta en Maps")
+                    }
+                }
+                if (onEditClick != null) {
+                    Button(onClick = onEditClick) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Editar")
+                    }
+                }
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }

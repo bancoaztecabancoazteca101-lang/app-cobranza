@@ -64,9 +64,13 @@ private fun crearIconoNumerado(context: Context, numero: Int, visitado: Boolean)
     return BitmapDescriptorFactory.fromBitmap(bitmap)
 }
 
-private fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
-    val lat = item.lat ?: return
-    val lng = item.lng ?: return
+fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
+    val lat = item.lat
+    val lng = item.lng
+    if (lat == null || lng == null) {
+        Toast.makeText(context, "Esta parada no tiene coordenadas", Toast.LENGTH_SHORT).show()
+        return
+    }
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$lat,$lng&mode=d")).apply {
         setPackage("com.google.android.apps.maps")
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -82,7 +86,8 @@ private fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
     }
 }
 
-/** Mapa a pantalla completa. Tocar una parada abre directamente Google Maps para navegar hacia ella. */
+/** Mapa a pantalla completa. Tocar una parada llama a `onMarcadorClick` (la pantalla abre el registro del
+ * cliente en una ventana emergente; desde ahí se lanza la ruta en Google Maps). */
 @Composable
 fun RutaIAMapaFullScreen(items: List<RutaIAEntity>, onCerrar: () -> Unit, onMarcadorClick: (RutaIAEntity) -> Unit) {
     val context = LocalContext.current
@@ -121,11 +126,10 @@ fun RutaIAMapaFullScreen(items: List<RutaIAEntity>, onCerrar: () -> Unit, onMarc
                 Marker(
                     state = MarkerState(position = LatLng(item.lat!!, item.lng!!)),
                     title = "$posicion. ${item.nombre}",
-                    snippet = "Toca para abrir en Google Maps",
+                    snippet = "Toca para ver el registro",
                     icon = remember(posicion, visitado) { crearIconoNumerado(context, posicion, visitado) },
                     onClick = {
                         onMarcadorClick(item)
-                        abrirEnGoogleMaps(context, item)
                         true
                     }
                 )

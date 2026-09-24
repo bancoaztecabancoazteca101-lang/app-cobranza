@@ -11,6 +11,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -52,6 +54,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     var mostrarFiltros by remember { mutableStateOf(false) }
     var mostrarMapa by remember { mutableStateOf(false) }
     var mostrarAyuda by remember { mutableStateOf(false) }
+    // Parada cuyo registro se ve en ventana emergente (desde el mapa o desde el botón "Matriz" de la tarjeta)
+    var paradaRegistro by remember { mutableStateOf<RutaIAEntity?>(null) }
     var configuracionDraft by remember { mutableStateOf(configuracionGuardada) }
 
     LaunchedEffect(mostrarFiltros) {
@@ -135,8 +139,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                             onSubir = { viewModel.moverManualmente(item.id, -1) },
                             onBajar = { viewModel.moverManualmente(item.id, 1) },
                             onMatriz = {
-                                if (item.cuMatrizMatch == null) Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
-                                else Toast.makeText(context, "Coincide en Matriz: ${item.nombre}", Toast.LENGTH_SHORT).show()
+                                if (matrizList.none { it.id == item.cuMatrizMatch }) Toast.makeText(context, "Cliente nuevo o sin coincidencia en Matriz", Toast.LENGTH_SHORT).show()
+                                else paradaRegistro = item
                             },
                             arrastrando = idArrastrado == item.id,
                             desplazamientoY = if (idArrastrado == item.id) desplazamientoArrastre else 0f,
@@ -283,8 +287,53 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     if (mostrarAyuda) AlertDialog(onDismissRequest = { mostrarAyuda = false }, title = { Text("Cómo funciona") }, text = { Text("Los filtros se pueden combinar. Días de atraso y saldo en atraso primero determinan qué clientes entran. La ruta automática puede iniciar por el punto más cercano a tu GPS y después continuar desde cada punto anterior. La ruta manual respeta el orden que establezcas.\n\nLos clientes nuevos (tarjeta azul, no encontrados en Matriz) se visitan primero si activas esa opción. No se dan de alta en Matriz al importar: solo cuando marcas \"Visitado\" se crea su registro en Matriz.\n\nGemini extrae los datos; la app valida, filtra y decide la ruta.") }, confirmButton = { TextButton(onClick = { mostrarAyuda = false }) { Text("Entendido") } })
 
     if (mostrarMapa) Dialog(onDismissRequest = { mostrarMapa = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        RutaIAMapaFullScreen(items = ruta, onCerrar = { mostrarMapa = false }, onMarcadorClick = { })
+        RutaIAMapaFullScreen(items = ruta, onCerrar = { mostrarMapa = false }, onMarcadorClick = { paradaRegistro = it })
     }
+
+    // Ventana emergente con el registro del cliente. Se compone después del mapa para quedar encima de él.
+    // La ruta en Maps sale de aquí (botón "Ruta en Maps"), ya no directo al tocar el punto del mapa.
+    paradaRegistro?.let { parada ->
+        val registro = matrizList.firstOrNull { it.id == parada.cuMatrizMatch }
+        val abrirRuta = {
+            val destino = if (parada.lat != null && parada.lng != null) parada
+            else parada.cuMatrizMatch?.let { ubicacionesMatriz[it] }?.let { parada.copy(lat = it.first, lng = it.second) } ?: parada
+            abrirEnGoogleMaps(context, destino)
+        }
+        if (registro != null) {
+            MatrizDetailDialog(registro, matrizViewModel.driveHelper, onDismiss = { paradaRegistro = null }, onEditClick = null, onRutaClick = abrirRuta)
+        } else {
+            RutaIAParadaDialog(parada, onDismiss = { paradaRegistro = null }, onRuta = abrirRuta)
+        }
+    }
+}
+
+/** Registro de una parada que no está en Matriz (cliente nuevo): muestra los datos que trae la ruta. */
+@Composable
+private fun RutaIAParadaDialog(item: RutaIAEntity, onDismiss: () -> Unit, onRuta: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.nombre) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (item.esNuevo) Text("Cliente nuevo (aún no está en Matriz)", style = MaterialTheme.typography.labelMedium, color = Color(0xFF1565C0), fontWeight = FontWeight.Bold)
+                Text(item.direccion)
+                item.coloniaCp?.takeIf { it.isNotBlank() }?.let { Text(it, color = Color.Gray) }
+                if (!item.cu.isNullOrBlank()) Text("CU: ${item.cu}")
+                item.diasAtraso?.let { Text("Días de atraso: $it") }
+                item.saldoAtraso?.let { Text("Saldo en atraso: $${"%,.0f".format(it)}") }
+                item.pagoRequerido?.let { Text("Pago requerido: $${"%,.0f".format(it)}") }
+                Text("Estado: ${item.estado}")
+            }
+        },
+        confirmButton = {
+            Button(onClick = onRuta) {
+                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Ruta en Maps")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } }
+    )
 }
 
 @Composable
