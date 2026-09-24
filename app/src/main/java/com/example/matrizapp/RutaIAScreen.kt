@@ -36,9 +36,19 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
+fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, searchQuery: String = "") {
     val context = LocalContext.current
     val ruta by viewModel.rutaOrdenada.collectAsState()
+    // Búsqueda de la barra superior: filtra las tarjetas por nombre, CU, dirección o colonia/CP.
+    // Mientras hay búsqueda activa se desactiva el reordenamiento (subir/bajar/arrastrar), porque
+    // reordenar una lista filtrada corrompería el orden de las paradas que quedan ocultas.
+    val buscando = searchQuery.isNotBlank()
+    val rutaVisible = remember(ruta, searchQuery) {
+        if (!buscando) ruta else {
+            val q = searchQuery.trim()
+            ruta.filter { coincideBusqueda(it.nombre, q) || coincideBusqueda(it.cu, q) || coincideBusqueda(it.direccion, q) || coincideBusqueda(it.coloniaCp, q) }
+        }
+    }
     val matrizList by matrizViewModel.matrizList.collectAsState()
     // Foto del cliente (misma "portada" que muestra Matriz) para las paradas que coinciden con un registro de Matriz
     val ubicacionesMatriz = remember(matrizList) {
@@ -136,26 +146,30 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                         Text("Sube las fotos a Gemini, guarda el JSON y después impórtalo aquí.", textAlign = TextAlign.Center, color = Color.Gray)
                     }
                 }
+            } else if (buscando && rutaVisible.isEmpty()) {
+                Box(Modifier.fillMaxSize().weight(1f), Alignment.Center) {
+                    Text("Sin resultados para \"${searchQuery.trim()}\"", color = Color.Gray, textAlign = TextAlign.Center, modifier = Modifier.padding(32.dp))
+                }
             } else {
                 // Lista local editable en vivo mientras se arrastra una tarjeta; se resincroniza con
                 // la ruta real del ViewModel en cuanto no hay nada siendo arrastrado (import nuevo,
                 // cambio de filtros, etc. no pisan un arrastre en curso).
-                var listaLocal by remember { mutableStateOf(ruta) }
+                var listaLocal by remember { mutableStateOf(rutaVisible) }
                 var idArrastrado by remember { mutableStateOf<String?>(null) }
                 var desplazamientoArrastre by remember { mutableStateOf(0f) }
                 var alturaPromedioItemPx by remember { mutableStateOf(260f) }
-                LaunchedEffect(ruta) { if (idArrastrado == null) listaLocal = ruta }
+                LaunchedEffect(rutaVisible) { if (idArrastrado == null) listaLocal = rutaVisible }
 
                 LazyColumn(Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     itemsIndexed(listaLocal, key = { _, item -> item.id }) { index, item ->
                         RutaIANuevaCard(
                             item = item,
-                            posicion = index + 1,
+                            posicion = if (buscando) ruta.indexOfFirst { it.id == item.id } + 1 else index + 1,
                             imagenUrl = item.cuMatrizMatch?.let { fotosMatriz[it] },
                             distanciaMatrizM = distanciaConMatrizMetros(item, item.cuMatrizMatch?.let { ubicacionesMatriz[it] }),
                             driveHelper = matrizViewModel.driveHelper,
-                            puedeSubir = index > 0,
-                            puedeBajar = index < listaLocal.lastIndex,
+                            puedeSubir = !buscando && index > 0,
+                            puedeBajar = !buscando && index < listaLocal.lastIndex,
                             onVisitado = { viewModel.alternarVisitado(item) },
                             onSubir = { viewModel.moverManualmente(item.id, -1) },
                             onBajar = { viewModel.moverManualmente(item.id, 1) },
@@ -166,8 +180,9 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                             },
                             arrastrando = idArrastrado == item.id,
                             desplazamientoY = if (idArrastrado == item.id) desplazamientoArrastre else 0f,
-                            onArrastreInicio = { idArrastrado = item.id; desplazamientoArrastre = 0f },
+                            onArrastreInicio = { if (!buscando) { idArrastrado = item.id; desplazamientoArrastre = 0f } },
                             onArrastre = { deltaY, alturaPx ->
+                                if (!buscando) {
                                 if (alturaPx > 40f) alturaPromedioItemPx = alturaPx
                                 desplazamientoArrastre += deltaY
                                 val actual = listaLocal.indexOfFirst { it.id == item.id }
@@ -177,6 +192,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                                         listaLocal = listaLocal.toMutableList().apply { add(destino, removeAt(actual)) }
                                         desplazamientoArrastre -= (destino - actual) * alturaPromedioItemPx
                                     }
+                                }
                                 }
                             },
                             onArrastreFin = {
