@@ -39,6 +39,9 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
     val ruta by viewModel.rutaOrdenada.collectAsState()
     val matrizList by matrizViewModel.matrizList.collectAsState()
     // Foto del cliente (misma "portada" que muestra Matriz) para las paradas que coinciden con un registro de Matriz
+    val ubicacionesMatriz = remember(matrizList) {
+        matrizList.associate { it.id to parseLatLngOrden(it.ubicacion?.replace('−', '-')?.replace('–', '-')) }
+    }
     val fotosMatriz = remember(matrizList) {
         matrizList.associate { it.id to (it.imagenUrl?.takeIf { u -> u.isNotBlank() } ?: it.imagenUrl2) }
     }
@@ -124,6 +127,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel) {
                             item = item,
                             posicion = index + 1,
                             imagenUrl = item.cuMatrizMatch?.let { fotosMatriz[it] },
+                            distanciaMatrizM = distanciaConMatrizMetros(item, item.cuMatrizMatch?.let { ubicacionesMatriz[it] }),
                             driveHelper = matrizViewModel.driveHelper,
                             puedeSubir = index > 0,
                             puedeBajar = index < listaLocal.lastIndex,
@@ -297,16 +301,32 @@ private fun DireccionSelector(titulo: String, direccion: DireccionOrdenRutaIA, o
     }
 }
 
+/** Distancia mínima (en metros) entre la dirección de la parada (geocodificada) y la ubicación GPS del
+ * registro de Matriz para considerar que NO es la misma dirección. El geocoder de direcciones es
+ * aproximado, por eso el umbral no es pequeño; ajustar aquí si sale muy sensible o muy laxo. */
+private const val UMBRAL_DIRECCION_DISTINTA_M = 250.0
+
+/** Metros entre la parada de Ruta IA y la ubicación del registro de Matriz con el que coincide;
+ * null si no se puede comparar (parada nueva, o alguno de los dos sin coordenadas). */
+private fun distanciaConMatrizMetros(item: RutaIAEntity, ubicacionMatriz: Pair<Double, Double>?): Double? {
+    val lat = item.lat ?: return null
+    val lng = item.lng ?: return null
+    val matriz = ubicacionMatriz ?: return null
+    return distanciaKm(lat to lng, matriz) * 1000.0
+}
+
 @Composable
 private fun RutaIANuevaCard(
-    item: RutaIAEntity, posicion: Int, imagenUrl: String?, driveHelper: DriveHelper, puedeSubir: Boolean, puedeBajar: Boolean,
+    item: RutaIAEntity, posicion: Int, imagenUrl: String?, distanciaMatrizM: Double?, driveHelper: DriveHelper, puedeSubir: Boolean, puedeBajar: Boolean,
     onVisitado: () -> Unit, onSubir: () -> Unit, onBajar: () -> Unit, onMatriz: () -> Unit,
     arrastrando: Boolean, desplazamientoY: Float,
     onArrastreInicio: () -> Unit, onArrastre: (deltaY: Float, alturaPx: Float) -> Unit, onArrastreFin: () -> Unit
 ) {
     val visitado = item.estado.equals("Visitado", ignoreCase = true)
+    val direccionDistinta = distanciaMatrizM != null && distanciaMatrizM > UMBRAL_DIRECCION_DISTINTA_M
     val colorFondo = when {
         visitado -> Color(0xFFE8F5E9)
+        direccionDistinta -> Color(0xFFFFE0B2)
         item.esNuevo -> Color(0xFFE3F2FD)
         else -> MaterialTheme.colorScheme.surface
     }
@@ -340,6 +360,14 @@ private fun RutaIANuevaCard(
                     )
                 }
                 Text(item.direccion, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                if (direccionDistinta && distanciaMatrizM != null) {
+                    Text(
+                        "⚠ Dirección distinta a Matriz (~${distanciaMatrizM.roundToInt()} m)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFE65100),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Row(Modifier.padding(top = 5.dp)) {
                     item.diasAtraso?.let { Text("Atraso: $it d.  ", style = MaterialTheme.typography.labelSmall) }
                     item.saldoAtraso?.let { Text("Saldo: $${"%,.0f".format(it)}  ", style = MaterialTheme.typography.labelSmall) }
