@@ -71,26 +71,32 @@ fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
         Toast.makeText(context, "Esta parada no tiene coordenadas", Toast.LENGTH_SHORT).show()
         return
     }
-    // Esquema "geo:" (Assistant/Gemini nav intents): mode=l = motocicleta (b=bici, d=auto,
-    // l=moto, r=transporte público, w=caminando) e intent=directions muestra la ruta en la
-    // pantalla de previsualización sin arrancar la navegación turn-by-turn.
-    val uriModoMoto = Uri.parse("geo:$lat,$lng?q=$lat,$lng&mode=l&intent=directions")
-    // Respaldo si el dispositivo no soporta el esquema anterior: la URL estándar de "directions"
-    // (sin moto, cae en automóvil) que ya usábamos, también en pantalla de previsualización.
-    val uriRespaldo = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving")
-    val intent = Intent(Intent.ACTION_VIEW, uriModoMoto).apply {
+fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
+    val lat = item.lat
+    val lng = item.lng
+    if (lat == null || lng == null) {
+        Toast.makeText(context, "Esta parada no tiene coordenadas", Toast.LENGTH_SHORT).show()
+        return
+    }
+    // Se probó el esquema "geo:" con mode=l (moto) pero Google Maps no lo respeta de forma
+    // confiable: a veces ni cambia a moto ni abre la ruta directo (cae en la tarjeta del lugar).
+    // Se vuelve a la URL de "directions" (sin forzar moto, Maps abre en automóvil por default)
+    // que sí da consistentemente la pantalla de previsualización de ruta con botón "Iniciar".
+    val uri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving")
+    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
         setPackage("com.google.android.apps.maps")
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     try {
         context.startActivity(intent)
     } catch (_: Exception) {
-        val fallback = Intent(Intent.ACTION_VIEW, uriRespaldo).apply {
+        val fallback = Intent(Intent.ACTION_VIEW, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try { context.startActivity(fallback) }
         catch (_: Exception) { Toast.makeText(context, "No se encontró una aplicación de mapas", Toast.LENGTH_SHORT).show() }
     }
+
 }
 
 /** Mapa a pantalla completa. Tocar una parada llama a `onMarcadorClick` (la pantalla abre el registro del
