@@ -71,13 +71,6 @@ fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
         Toast.makeText(context, "Esta parada no tiene coordenadas", Toast.LENGTH_SHORT).show()
         return
     }
-fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
-    val lat = item.lat
-    val lng = item.lng
-    if (lat == null || lng == null) {
-        Toast.makeText(context, "Esta parada no tiene coordenadas", Toast.LENGTH_SHORT).show()
-        return
-    }
     // Se probó el esquema "geo:" con mode=l (moto) pero Google Maps no lo respeta de forma
     // confiable: a veces ni cambia a moto ni abre la ruta directo (cae en la tarjeta del lugar).
     // Se vuelve a la URL de "directions" (sin forzar moto, Maps abre en automóvil por default)
