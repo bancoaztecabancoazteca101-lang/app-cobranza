@@ -160,6 +160,8 @@ fun MatrizDetailDialog(
                 ContactFieldRow("Num TT", item.numTT)
                 ContactFieldRow("Ref 1", item.ref1)
                 ContactFieldRow("Ref 2", item.ref2)
+                ContactFieldRow("Ref 3", item.ref3)
+                ContactFieldRow("Ref 4", item.ref4)
                 item.fecha?.let { Text("Fecha: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(it))}") }
                 if (!item.hora.isNullOrBlank()) Text("Hora: ${item.hora}")
                 if (!item.folioP.isNullOrBlank()) Text("CU: ${item.folioP}")
