@@ -129,6 +129,8 @@ fun FiltrarDetailDialog(
                     ContactFieldRow("Num TT", cercano.numTT)
                     ContactFieldRow("Ref 1", cercano.ref1)
                     ContactFieldRow("Ref 2", cercano.ref2)
+                    ContactFieldRow("Ref 3", cercano.ref3)
+                    ContactFieldRow("Ref 4", cercano.ref4)
                     ColoniaLabel(ubicacion = cercano.ubicacion)
                     if (!cercano.ubicacion.isNullOrBlank() && cercano.ubicacion != "N/A") {
                         ContactActionsRow(numTT = null, ubicacion = cercano.ubicacion)
