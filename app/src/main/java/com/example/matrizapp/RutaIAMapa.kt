@@ -71,18 +71,21 @@ fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
         Toast.makeText(context, "Esta parada no tiene coordenadas", Toast.LENGTH_SHORT).show()
         return
     }
-    // Se usa la URL de "directions" (no "google.navigation:") para que Maps abra la pantalla de
-    // previsualización de ruta (destino + ETA + botón "Iniciar"), en vez de lanzar directo la
-    // navegación turn-by-turn — así el gestor decide cuándo arrancar.
-    val uri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving")
-    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+    // Esquema "geo:" (Assistant/Gemini nav intents): mode=l = motocicleta (b=bici, d=auto,
+    // l=moto, r=transporte público, w=caminando) e intent=directions muestra la ruta en la
+    // pantalla de previsualización sin arrancar la navegación turn-by-turn.
+    val uriModoMoto = Uri.parse("geo:$lat,$lng?q=$lat,$lng&mode=l&intent=directions")
+    // Respaldo si el dispositivo no soporta el esquema anterior: la URL estándar de "directions"
+    // (sin moto, cae en automóvil) que ya usábamos, también en pantalla de previsualización.
+    val uriRespaldo = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving")
+    val intent = Intent(Intent.ACTION_VIEW, uriModoMoto).apply {
         setPackage("com.google.android.apps.maps")
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     try {
         context.startActivity(intent)
     } catch (_: Exception) {
-        val fallback = Intent(Intent.ACTION_VIEW, uri).apply {
+        val fallback = Intent(Intent.ACTION_VIEW, uriRespaldo).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try { context.startActivity(fallback) }
