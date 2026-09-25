@@ -102,8 +102,13 @@ class RutaIAViewModel(
                 val nuevos = importado.clientes.mapIndexed { idx, cliente ->
                     _progreso.value = "Ubicando ${idx + 1}/${importado.clientes.size}: ${cliente.nombre}"
                     val direccionCompleta = listOf(cliente.direccion, cliente.colonia, cliente.cp).filterNot { it.isNullOrBlank() }.joinToString(", ")
-                    val coords = geocodificarDireccion(context, direccionCompleta)
                     val matchMatriz = buscarEnMatriz(cliente.cu, cliente.nombre)
+                    // Si el cliente ya existe en Matriz con una ubicación GPS real (capturada en sitio,
+                    // igual que en Solicitud), se usa esa coordenada en vez de geocodificar el texto de la
+                    // dirección: el Geocoder nativo de Android interpola sobre la calle y puede desviar
+                    // 100-200m, mientras que la de Matriz es la posición real confirmada en una visita previa.
+                    val coordsMatriz = matchMatriz?.ubicacion?.let { parseLatLngOrden(it) }
+                    val coords = coordsMatriz ?: geocodificarDireccion(context, direccionCompleta)
                     RutaIAEntity(
                         id = java.util.UUID.randomUUID().toString().replace("-", "").take(12),
                         nombre = cliente.nombre,
