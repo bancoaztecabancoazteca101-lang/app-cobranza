@@ -71,14 +71,18 @@ fun abrirEnGoogleMaps(context: Context, item: RutaIAEntity) {
         Toast.makeText(context, "Esta parada no tiene coordenadas", Toast.LENGTH_SHORT).show()
         return
     }
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$lat,$lng&mode=d")).apply {
+    // Se usa la URL de "directions" (no "google.navigation:") para que Maps abra la pantalla de
+    // previsualización de ruta (destino + ETA + botón "Iniciar"), en vez de lanzar directo la
+    // navegación turn-by-turn — así el gestor decide cuándo arrancar.
+    val uri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving")
+    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
         setPackage("com.google.android.apps.maps")
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     try {
         context.startActivity(intent)
     } catch (_: Exception) {
-        val fallback = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(item.nombre)})")).apply {
+        val fallback = Intent(Intent.ACTION_VIEW, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try { context.startActivity(fallback) }
