@@ -24,6 +24,8 @@ data class CercanoDetalle(
     val numTT: String,
     val ref1: String,
     val ref2: String,
+    val ref3: String? = null,
+    val ref4: String? = null,
     val ubicacion: String?,
     val distanciaM: Int,
     val yaAgregado: Boolean = false
@@ -140,6 +142,7 @@ class FiltrarViewModel(
             val cercanos = cercanosDe(item, 7).map { (otro, metros) ->
                 CercanoDetalle(
                     nombre = otro.nombre, numTT = otro.numTT, ref1 = otro.ref1, ref2 = otro.ref2,
+                    ref3 = otro.ref3, ref4 = otro.ref4,
                     ubicacion = otro.ubicacion, distanciaM = metros.toInt(),
                     yaAgregado = (item.id to otro.nombre) in agregados
                 )
