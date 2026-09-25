@@ -377,6 +377,11 @@ fun MatrizFullFormDialog(
     var estadoMenuExpanded by remember { mutableStateOf(false) }
     var buscandoUbicacion by remember { mutableStateOf(esNuevo && prefill?.ubicacion.isNullOrBlank()) }
     var activePhotoSlot by remember { mutableStateOf(1) }
+    // Buscar domicilio escribiendo la dirección (sin necesidad de estar en el sitio): se
+    // geocodifica el texto igual que en Ruta IA y se llena el campo con "lat,lng".
+    var mostrarBuscarDireccionOficial by remember { mutableStateOf(false) }
+    var mostrarBuscarDireccionLaboral by remember { mutableStateOf(false) }
+    var buscandoDireccionTexto by remember { mutableStateOf(false) }
 
     // Leer el nombre desde una foto (OCR), igual que "Buscar con foto" en la lista, pero aquí
     // el resultado llena el campo Nombre en vez de disparar una búsqueda.
@@ -522,9 +527,14 @@ fun MatrizFullFormDialog(
                 OutlinedTextField(
                     value = ubicacion, onValueChange = { ubicacion = filtrarCoordenadas(it) }, label = { Text("Domicilio Oficial") },
                     trailingIcon = {
-                        IconButton(onClick = {
-                            buscandoUbicacion = true
-                        }) { Icon(Icons.Default.MyLocation, contentDescription = "Usar ubicación actual como domicilio oficial") }
+                        Row {
+                            IconButton(onClick = { mostrarBuscarDireccionOficial = true }) {
+                                Icon(Icons.Default.Search, contentDescription = "Buscar dirección escrita para domicilio oficial")
+                            }
+                            IconButton(onClick = {
+                                buscandoUbicacion = true
+                            }) { Icon(Icons.Default.MyLocation, contentDescription = "Usar ubicación actual como domicilio oficial") }
+                        }
                     },
                     supportingText = { if (buscandoUbicacion) Text("Obteniendo ubicación…") },
                     modifier = Modifier.fillMaxWidth()
@@ -535,12 +545,36 @@ fun MatrizFullFormDialog(
                         buscandoUbicacion = false
                     }
                 }
+                if (mostrarBuscarDireccionOficial) {
+                    BuscarDireccionDialog(
+                        buscando = buscandoDireccionTexto,
+                        onDismiss = { mostrarBuscarDireccionOficial = false },
+                        onBuscar = { texto ->
+                            coroutineScope.launch {
+                                buscandoDireccionTexto = true
+                                val coords = geocodificarDireccion(context, texto)
+                                buscandoDireccionTexto = false
+                                if (coords != null) {
+                                    ubicacion = "${coords.first},${coords.second}"
+                                    mostrarBuscarDireccionOficial = false
+                                } else {
+                                    Toast.makeText(context, "No se encontró esa dirección", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    )
+                }
                 if (mostrarCamposExtra) {
                     OutlinedTextField(
                         value = domicilioLaboral, onValueChange = { domicilioLaboral = filtrarCoordenadas(it) }, label = { Text("Domicilio Laboral") },
                         trailingIcon = {
-                            IconButton(onClick = { buscandoUbicacionLaboral = true }) {
-                                Icon(Icons.Default.MyLocation, contentDescription = "Usar ubicación actual como domicilio laboral")
+                            Row {
+                                IconButton(onClick = { mostrarBuscarDireccionLaboral = true }) {
+                                    Icon(Icons.Default.Search, contentDescription = "Buscar dirección escrita para domicilio laboral")
+                                }
+                                IconButton(onClick = { buscandoUbicacionLaboral = true }) {
+                                    Icon(Icons.Default.MyLocation, contentDescription = "Usar ubicación actual como domicilio laboral")
+                                }
                             }
                         },
                         supportingText = { if (buscandoUbicacionLaboral) Text("Obteniendo ubicación…") },
@@ -551,6 +585,25 @@ fun MatrizFullFormDialog(
                             domicilioLaboral = obtenerUbicacionActual(context) ?: domicilioLaboral
                             buscandoUbicacionLaboral = false
                         }
+                    }
+                    if (mostrarBuscarDireccionLaboral) {
+                        BuscarDireccionDialog(
+                            buscando = buscandoDireccionTexto,
+                            onDismiss = { mostrarBuscarDireccionLaboral = false },
+                            onBuscar = { texto ->
+                                coroutineScope.launch {
+                                    buscandoDireccionTexto = true
+                                    val coords = geocodificarDireccion(context, texto)
+                                    buscandoDireccionTexto = false
+                                    if (coords != null) {
+                                        domicilioLaboral = "${coords.first},${coords.second}"
+                                        mostrarBuscarDireccionLaboral = false
+                                    } else {
+                                        Toast.makeText(context, "No se encontró esa dirección", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        )
                     }
                 }
 
@@ -656,6 +709,32 @@ fun MatrizFullFormDialog(
             ) { Text("Guardar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+/** Diálogo simple para escribir una dirección de texto y geocodificarla (misma lógica que Ruta
+ * IA), para poder poner el domicilio sin tener que estar físicamente en el sitio. */
+@Composable
+private fun BuscarDireccionDialog(buscando: Boolean, onDismiss: () -> Unit, onBuscar: (String) -> Unit) {
+    var texto by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Buscar dirección") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = texto, onValueChange = { texto = it },
+                    label = { Text("Dirección (calle, colonia, CP)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !buscando
+                )
+                if (buscando) Text("Buscando…", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onBuscar(texto) }, enabled = texto.isNotBlank() && !buscando) { Text("Buscar") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !buscando) { Text("Cancelar") } }
     )
 }
 
