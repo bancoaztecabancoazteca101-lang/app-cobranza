@@ -172,18 +172,25 @@ class RutaIAViewModel(
         viewModelScope.launch {
             rutaIADao.updateEstadoLocal(item.id, nuevoEstado)
             if (nuevoEstado == "Visitado" && item.esNuevo && item.cuMatrizMatch == null) {
-                val idMatriz = darDeAltaEnMatriz(item)
+                // Al marcar "Visitado" el gestor normalmente está parado en la puerta del cliente, así
+                // que se captura el GPS real del teléfono en este momento para el alta en Matriz, en vez
+                // de arrastrar la coordenada geocodificada por texto (imprecisa, ver fix del 24/09/2026).
+                // Si no hay fix de GPS disponible (permiso denegado, sin señal), cae de vuelta a la
+                // coordenada geocodificada como antes.
+                val ubicacionGps = parseLatLngOrden(obtenerUbicacionActual(context))
+                val idMatriz = darDeAltaEnMatriz(item, ubicacionGps)
                 rutaIADao.marcarAltaEnMatriz(item.id, idMatriz)
             }
             programarSincronizacionRutaIA()
         }
     }
 
-    private suspend fun darDeAltaEnMatriz(item: RutaIAEntity): String {
+    private suspend fun darDeAltaEnMatriz(item: RutaIAEntity, ubicacionGps: Pair<Double, Double>? = null): String {
         val idFinal = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
         val semana = item.diasAtraso?.let { diasAtrasoASemana(it).toString() } ?: ""
         val requisito = (item.pagoRequerido ?: item.saldoAtraso)?.let { "%,.0f".format(it) } ?: ""
-        val ubicacion = if (item.lat != null && item.lng != null) "${item.lat},${item.lng}" else null
+        val ubicacion = ubicacionGps?.let { "${it.first},${it.second}" }
+            ?: if (item.lat != null && item.lng != null) "${item.lat},${item.lng}" else null
         val ahora = System.currentTimeMillis()
         val hora = java.text.SimpleDateFormat("HH:mm", java.util.Locale("es", "MX")).format(java.util.Date(ahora))
         val nuevo = MatrizEntity(
