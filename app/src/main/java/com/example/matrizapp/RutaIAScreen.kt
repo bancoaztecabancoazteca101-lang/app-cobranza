@@ -180,7 +180,7 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
                             onSubir = { viewModel.moverManualmente(item.id, -1) },
                             onBajar = { viewModel.moverManualmente(item.id, 1) },
                             onTarjeta = { abrirRutaParada(item) },
-                            onMatriz = { paradaFormulario = item },
+                            onMatriz = { paradaRegistro = item },
                             arrastrando = idArrastrado == item.id,
                             desplazamientoY = if (idArrastrado == item.id) desplazamientoArrastre else 0f,
                             onArrastreInicio = { if (!buscando) { idArrastrado = item.id; desplazamientoArrastre = 0f } },
