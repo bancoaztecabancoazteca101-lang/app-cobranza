@@ -8,8 +8,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,6 +40,7 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     val semanasDisponibles by viewModel.semanasDisponibles.collectAsState()
     var selectorSemanaExpanded by remember { mutableStateOf(false) }
     var itemToView by remember { mutableStateOf<Sem6Item?>(null) }
+    var mostrarNuevoRegistro by remember { mutableStateOf(false) }
 
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
@@ -45,6 +51,7 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(ClayBackground)) {
         // Barra de estado: última actualización + botón de refrescar
         Surface(color = ClayPrimaryContainer, tonalElevation = 0.dp) {
@@ -150,8 +157,20 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
         }
     }
 
+    FloatingActionButton(onClick = { mostrarNuevoRegistro = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
+        Icon(Icons.Default.Add, contentDescription = "Nuevo registro")
+    }
+    }
+
     itemToView?.let { item ->
         Sem6DetailDialog(item = item, driveHelper = viewModel.driveHelper, viewModel = viewModel, onDismiss = { itemToView = null })
+    }
+    if (mostrarNuevoRegistro) {
+        Sem6NuevoRegistroDialog(
+            viewModel = viewModel,
+            onDismiss = { mostrarNuevoRegistro = false },
+            onCreado = { itemToView = it }
+        )
     }
 }
 
@@ -243,12 +262,22 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
     var observaciones by remember(item.id) { mutableStateOf(item.observaciones) }
     var capital by remember(item.id) { mutableStateOf(item.capital) }
     var susceptibleMenuExpanded by remember { mutableStateOf(false) }
+    var mostrarConfirmarEliminar by remember { mutableStateOf(false) }
     val isSaving by viewModel.isSavingNotas.collectAsState()
     val errorNotas by viewModel.errorNotas.collectAsState()
+    val isGuardandoRegistro by viewModel.isGuardandoRegistro.collectAsState()
+    val errorRegistro by viewModel.errorRegistro.collectAsState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(item.nombre) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(item.nombre, modifier = Modifier.weight(1f))
+                IconButton(onClick = { mostrarConfirmarEliminar = true }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Eliminar registro de Semana 6", tint = Color(0xFFC62828))
+                }
+            }
+        },
         text = {
             Column(
                 modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
@@ -345,5 +374,158 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
             }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !isSaving) { Text("Cerrar") } }
+    )
+
+    if (mostrarConfirmarEliminar) {
+        AlertDialog(
+            onDismissRequest = { if (!isGuardandoRegistro) mostrarConfirmarEliminar = false },
+            title = { Text("Eliminar registro") },
+            text = {
+                Column {
+                    Text("¿Seguro que quieres eliminar a \"${item.nombre}\" de esta semana? Esto borra la fila en Google Sheets y no se puede deshacer.")
+                    errorRegistro?.let { msg -> Text(msg, color = Color(0xFFC62828), style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.eliminarRegistro(item.id) { ok ->
+                            if (ok) { mostrarConfirmarEliminar = false; onDismiss() }
+                        }
+                    },
+                    enabled = !isGuardandoRegistro,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+                ) {
+                    if (isGuardandoRegistro) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                    } else {
+                        Text("Eliminar")
+                    }
+                }
+            },
+            dismissButton = { TextButton(onClick = { mostrarConfirmarEliminar = false }, enabled = !isGuardandoRegistro) { Text("Cancelar") } }
+        )
+    }
+}
+
+/** Diálogo para agregar un registro nuevo a la hoja de la semana que se está viendo (antes
+ * esta hoja era de solo lectura, poblada solo por el script de Apps Script). */
+@Composable
+fun Sem6NuevoRegistroDialog(viewModel: Sem6ViewModel, onDismiss: () -> Unit, onCreado: (Sem6Item) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var nombre by remember { mutableStateOf("") }
+    var sem by remember { mutableStateOf("6") }
+    var req by remember { mutableStateOf("") }
+    var cu by remember { mutableStateOf("") }
+    var colonia by remember { mutableStateOf("") }
+    var numTT by remember { mutableStateOf("") }
+    var ubicacion by remember { mutableStateOf("") }
+    var buscandoUbicacion by remember { mutableStateOf(false) }
+    var mostrarBuscarDireccion by remember { mutableStateOf(false) }
+    var buscandoDireccionTexto by remember { mutableStateOf(false) }
+    val isGuardando by viewModel.isGuardandoRegistro.collectAsState()
+    val errorRegistro by viewModel.errorRegistro.collectAsState()
+
+    LaunchedEffect(buscandoUbicacion) {
+        if (buscandoUbicacion) {
+            ubicacion = obtenerUbicacionActual(context) ?: ubicacion
+            buscandoUbicacion = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nuevo registro") },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                OutlinedTextField(value = nombre, onValueChange = { nombre = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = sem, onValueChange = { sem = it.filter { c -> c.isDigit() } }, label = { Text("Sem") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = req, onValueChange = { req = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Req") }, leadingIcon = { Text("$") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = cu, onValueChange = { cu = it }, label = { Text("CU") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = colonia, onValueChange = { colonia = it }, label = { Text("Colonia") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = numTT, onValueChange = { numTT = it }, label = { Text("Num TT") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = ubicacion, onValueChange = { ubicacion = it }, label = { Text("Ubicación (lat,lng)") },
+                    trailingIcon = {
+                        Row {
+                            IconButton(onClick = { mostrarBuscarDireccion = true }) {
+                                Icon(Icons.Default.Search, contentDescription = "Buscar dirección escrita")
+                            }
+                            IconButton(onClick = { buscandoUbicacion = true }) {
+                                Icon(Icons.Default.MyLocation, contentDescription = "Usar ubicación actual")
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                errorRegistro?.let { msg -> Text(msg, color = Color(0xFFC62828), style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    viewModel.agregarRegistro(nombre, sem, req, cu, colonia, ubicacion, numTT) { ok ->
+                        if (ok) onDismiss()
+                    }
+                },
+                enabled = nombre.isNotBlank() && !isGuardando
+            ) {
+                if (isGuardando) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                } else {
+                    Text("Guardar")
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isGuardando) { Text("Cancelar") } }
+    )
+
+    if (mostrarBuscarDireccion) {
+        BuscarDireccionDialogSem6(
+            buscando = buscandoDireccionTexto,
+            onDismiss = { mostrarBuscarDireccion = false },
+            onBuscar = { texto ->
+                scope.launch {
+                    buscandoDireccionTexto = true
+                    val coords = geocodificarDireccion(context, texto)
+                    buscandoDireccionTexto = false
+                    if (coords != null) {
+                        ubicacion = "${coords.first},${coords.second}"
+                        mostrarBuscarDireccion = false
+                    } else {
+                        android.widget.Toast.makeText(context, "No se encontró esa dirección", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
+}
+
+/** Copia local de BuscarDireccionDialog (la de SharedComponents.kt es privada a ese archivo). */
+@Composable
+private fun BuscarDireccionDialogSem6(buscando: Boolean, onDismiss: () -> Unit, onBuscar: (String) -> Unit) {
+    var texto by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Buscar dirección") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = texto, onValueChange = { texto = it },
+                    label = { Text("Dirección (calle, colonia, CP)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !buscando
+                )
+                if (buscando) Text("Buscando…", style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onBuscar(texto) }, enabled = texto.isNotBlank() && !buscando) { Text("Buscar") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !buscando) { Text("Cancelar") } }
     )
 }
