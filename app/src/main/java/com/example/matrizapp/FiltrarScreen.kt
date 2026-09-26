@@ -23,6 +23,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("filtrar_contactos", android.content.Context.MODE_PRIVATE) }
+    var agregarAutomaticamente by remember {
+        mutableStateOf(prefs.getBoolean("agregar_automaticamente", false))
+    }
     val allItems by viewModel.items.collectAsState()
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
@@ -31,16 +35,57 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
                 item.cercanos.any { coincideBusqueda(it.nombre, q) || coincideBusqueda(it.numTT, q) }
         }
     }
+    LaunchedEffect(agregarAutomaticamente, allItems) {
+        if (agregarAutomaticamente && allItems.isNotEmpty()) {
+            viewModel.agregarContactosAutomaticamente(allItems)
+        }
+    }
+
     var itemToView by remember { mutableStateOf<FiltrarItem?>(null) }
     var itemToEdit by remember { mutableStateOf<FiltrarItem?>(null) }
     var itemToFullEdit by remember { mutableStateOf<FiltrarItem?>(null) }
 
-    if (items.isEmpty()) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
-    } else {
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Agregar contactos automáticamente",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (agregarAutomaticamente) "Activado: los cercanos se agregan solos"
+                        else "Desactivado: usa el botón para agregar manualmente",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                }
+                Switch(
+                    checked = agregarAutomaticamente,
+                    onCheckedChange = { nuevoValor ->
+                        agregarAutomaticamente = nuevoValor
+                        prefs.edit().putBoolean("agregar_automaticamente", nuevoValor).apply()
+                        if (nuevoValor) {
+                            viewModel.agregarContactosAutomaticamente(allItems)
+                        }
+                    }
+                )
+            }
+        }
+
+        if (items.isEmpty()) {
+            Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(items, key = { it.id }) { item ->
                 FiltrarItemCard(item, onCardClick = { itemToView = item }, onEditClick = { itemToEdit = item })
+            }
             }
         }
     }
