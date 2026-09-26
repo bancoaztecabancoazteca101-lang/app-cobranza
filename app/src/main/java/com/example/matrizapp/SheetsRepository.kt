@@ -184,6 +184,31 @@ class SheetsRepository(
         true
     }
 
+    /** Agrega un registro nuevo a la hoja "Cont-Sem-NN" de la semana indicada (antes esta hoja
+     * era de solo lectura, poblada solo por el script de Apps Script; Diego pidió poder agregar
+     * registros desde la app también). Genera un ID nuevo y regresa el Sem6Item creado. */
+    suspend fun appendSem6Row(
+        nombre: String, sem: String, req: String, cu: String, colonia: String, ubicacion: String, numTT: String,
+        sheetName: String = currentSem6SheetName()
+    ): Sem6Item = withContext(Dispatchers.IO) {
+        val id = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+        val fechaHora = java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX")).format(java.util.Date())
+        // Orden de columnas A-P igual al que lee fetchSem6Data: nombre, sem, req, id, cu,
+        // ubicacion, imagenUrl(vacío), (H sin usar), colonia, visitas(0), ultimaFechaVisita,
+        // numTT, seContiene, susceptible, observaciones, capital (estos últimos 4 vacíos).
+        appendRow(sheetName, listOf(nombre, sem, req, id, cu, ubicacion, "", "", colonia, 0, fechaHora, numTT, "", "", "", ""))
+        Sem6Item(
+            nombre = nombre, sem = sem, req = req, id = id, cu = cu, imagenUrl = null, colonia = colonia,
+            visitas = 0, ultimaFechaVisita = fechaHora, numTT = numTT, ubicacion = ubicacion
+        )
+    }
+
+    /** Elimina un registro de la hoja "Cont-Sem-NN" de la semana indicada, por su ID (columna D). */
+    suspend fun deleteSem6Row(id: String, sheetName: String = currentSem6SheetName()): Boolean = withContext(Dispatchers.IO) {
+        val realName = resolveSheetName(sheetName)
+        deleteRowById(realName, id, "D")
+    }
+
     suspend fun getDirtyMatrizItems() = matrizDao.getDirtyItems()
     suspend fun markMatrizAsClean(id: String, remoteImg: String?, remoteImg2: String?) = matrizDao.markAsClean(id, remoteImg, remoteImg2)
     suspend fun getDirtyPaseItems() = paseDao.getDirtyItems()
