@@ -62,6 +62,12 @@ class Sem6ViewModel(
     private val _errorNotas = MutableStateFlow<String?>(null)
     val errorNotas: StateFlow<String?> = _errorNotas
 
+    private val _isGuardandoRegistro = MutableStateFlow(false)
+    val isGuardandoRegistro: StateFlow<Boolean> = _isGuardandoRegistro
+
+    private val _errorRegistro = MutableStateFlow<String?>(null)
+    val errorRegistro: StateFlow<String?> = _errorRegistro
+
     // Semana que se está mostrando. Arranca en la actual; el usuario puede elegir una
     // semana pasada desde el selector, y desde ahí se lee/escribe en esa hoja mientras
     // no la vuelva a cambiar.
@@ -117,6 +123,49 @@ class Sem6ViewModel(
                 onDone(false)
             } finally {
                 _isSavingNotas.value = false
+            }
+        }
+    }
+
+    /** Agrega un registro nuevo a la hoja de la semana que se está viendo (antes esta hoja era
+     * de solo lectura; Diego pidió poder agregar registros desde la app). */
+    fun agregarRegistro(nombre: String, sem: String, req: String, cu: String, colonia: String, ubicacion: String, numTT: String, onDone: (Boolean) -> Unit = {}) {
+        _isGuardandoRegistro.value = true
+        _errorRegistro.value = null
+        viewModelScope.launch {
+            try {
+                val creado = repository.appendSem6Row(nombre, sem, req, cu, colonia, ubicacion, numTT, sheetName = _semanaSeleccionada.value)
+                _itemsRaw.value = _itemsRaw.value + creado
+                cacheStore.save(_itemsRaw.value)
+                onDone(true)
+            } catch (e: Exception) {
+                _errorRegistro.value = e.message ?: "No se pudo agregar"
+                onDone(false)
+            } finally {
+                _isGuardandoRegistro.value = false
+            }
+        }
+    }
+
+    /** Elimina un registro de la hoja de la semana que se está viendo. */
+    fun eliminarRegistro(id: String, onDone: (Boolean) -> Unit = {}) {
+        _isGuardandoRegistro.value = true
+        _errorRegistro.value = null
+        viewModelScope.launch {
+            try {
+                val ok = repository.deleteSem6Row(id, sheetName = _semanaSeleccionada.value)
+                if (ok) {
+                    _itemsRaw.value = _itemsRaw.value.filter { it.id != id }
+                    cacheStore.save(_itemsRaw.value)
+                } else {
+                    _errorRegistro.value = "No se encontró el registro en ${_semanaSeleccionada.value.replace("Cont-Sem-", "Semana ")}"
+                }
+                onDone(ok)
+            } catch (e: Exception) {
+                _errorRegistro.value = e.message ?: "No se pudo eliminar"
+                onDone(false)
+            } finally {
+                _isGuardandoRegistro.value = false
             }
         }
     }
