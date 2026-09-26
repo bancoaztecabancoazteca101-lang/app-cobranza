@@ -177,7 +177,30 @@ fun FiltrarItemCard(item: FiltrarItem, onCardClick: () -> Unit, onEditClick: () 
                 Spacer(Modifier.height(4.dp))
                 Text("Cercanos por GPS:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 item.cercanos.forEach { c ->
-                    Text("${c.nombre} (${c.distanciaM} m)", style = MaterialTheme.typography.bodySmall)
+                    Surface(
+                        color = if (c.yaAgregado) Color(0xFFE8F5E9) else Color.Transparent,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "${c.nombre} (${c.distanciaM} m)",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (c.yaAgregado) {
+                                Text(
+                                    "✓ CONTACTO AGREGADO",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
