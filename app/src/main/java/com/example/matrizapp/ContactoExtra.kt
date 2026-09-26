@@ -45,4 +45,8 @@ interface ContactoExtraDao {
      * de referencia de ese cliente. */
     @Query("SELECT * FROM contacto_extra_table WHERE clienteId = :clienteId")
     suspend fun obtenerPara(clienteId: String): List<ContactoExtraEntity>
+
+    /** Verifica si un teléfono de un cercano ya está agregado al titular, evitando duplicados. */
+    @Query("SELECT EXISTS(SELECT 1 FROM contacto_extra_table WHERE clienteId = :clienteId AND telefono = :telefono)")
+    suspend fun existeTelefono(clienteId: String, telefono: String): Boolean
 }
