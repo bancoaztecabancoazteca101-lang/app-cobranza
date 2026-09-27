@@ -187,36 +187,56 @@ function pollRetornos_() {
   const now=new Date();
   const props=PropertiesService.getScriptProperties();
   let sent=JSON.parse(props.getProperty('sentEvents') || '{}');
+  const smsEnabled=JSON.parse(props.getProperty('smsStatusEnabled') || '{}');
+  const smsDeviceId=String(props.getProperty('smsStatusDeviceId') || '');
   let delivered=0;
   const cutoff=now.getTime()-7*24*60*60*1000;
   Object.keys(sent).forEach(k=>{if(Number(sent[k])<cutoff) delete sent[k];});
 
   for(let r=1;r<values.length;r++) {
-    if(String(values[r][COL.ESTADO] || '').trim().toUpperCase() !== 'RETORNO') continue;
+    const status=String(values[r][COL.ESTADO] || '').trim().toUpperCase();
+    const isRetorno=status === 'RETORNO';
+    const wantsSms=smsEnabled[status] === true && !!smsDeviceId;
+    // RETORNO conserva las notificaciones multi-dispositivo actuales. Otros estados solo
+    // participan cuando su interruptor de SMS por Status está activo.
+    if(!isRetorno && !wantsSms) continue;
+
     const dt=combineDateTime_(values[r][COL.FECHA],values[r][COL.HORA]);
     if(!dt || Math.abs(dt.getTime()-now.getTime())>90*1000) continue;
+
     const rowId=String(values[r][COL.ID] || r+1);
-    const eventId='RETORNO:'+rowId+':'+Utilities.formatDate(dt,Session.getScriptTimeZone(),'yyyy-MM-dd-HH-mm');
+    const eventId=status+':'+rowId+':'+Utilities.formatDate(dt,Session.getScriptTimeZone(),'yyyy-MM-dd-HH-mm');
     if(sent[eventId]) continue;
 
     const ubicacion=String(values[r][COL.UBICACION] || '');
     const direccion=reverseGeocode_(ubicacion);
     const message={
-      title:'Retorno',
-      body:String(values[r][COL.NOMBRE] || 'Cliente')+' tiene retorno a las '+Utilities.formatDate(dt,Session.getScriptTimeZone(),'HH:mm'),
+      title:isRetorno ? 'Retorno' : 'SMS por Status',
+      body:String(values[r][COL.NOMBRE] || 'Cliente')+' — '+status,
       eventId:eventId, rowId:rowId,
       nombre:String(values[r][COL.NOMBRE] || 'Cliente'),
       requerido:String(values[r][COL.REQUERIDO] || ''),
       numTT:String(values[r][COL.NUMTT] || ''),
-      colonia:direccion.colonia, calle:direccion.calle, ubicacion:ubicacion
+      colonia:direccion.colonia, calle:direccion.calle, ubicacion:ubicacion,
+      smsStatus:'false', status:status
     };
-    const result=sendToEnabledDevices_(message,null);
-    if(result.ok && result.sent>0) { sent[eventId]=Date.now(); delivered+=result.sent; }
+
+    let sentThis=0;
+    if(isRetorno) {
+      const result=sendToEnabledDevices_(message,null);
+      sentThis += result.sent;
+    }
+    if(wantsSms) {
+      const smsMessage=Object.assign({},message,{smsStatus:'true'});
+      const smsResult=sendToEnabledDevices_(smsMessage,[smsDeviceId]);
+      sentThis += smsResult.sent;
+    }
+
+    if(sentThis>0) { sent[eventId]=Date.now(); delivered+=sentThis; }
   }
   props.setProperty('sentEvents',JSON.stringify(sent));
   return {ok:true,sent:delivered};
 }
-
 function combineDateTime_(dateValue,timeValue) {
   if(!dateValue) return null;
   const d=dateValue instanceof Date ? new Date(dateValue) : new Date(String(dateValue));
@@ -239,7 +259,7 @@ function sendFcm_(token,message) {
     payload:JSON.stringify({message:{token:token,data:{
       title:String(message.title || 'Matriz App'), body:String(message.body || ''), eventId:String(message.eventId || ''), rowId:String(message.rowId || ''),
       nombre:String(message.nombre || ''), requerido:String(message.requerido || ''), numTT:String(message.numTT || ''),
-      colonia:String(message.colonia || ''), calle:String(message.calle || ''), ubicacion:String(message.ubicacion || '')
+      colonia:String(message.colonia || ''), calle:String(message.calle || ''), ubicacion:String(message.ubicacion || ''), smsStatus:String(message.smsStatus || 'false'), status:String(message.status || '')
     },android:{priority:'HIGH'}}}), muteHttpExceptions:true
   });
   const code=response.getResponseCode();
