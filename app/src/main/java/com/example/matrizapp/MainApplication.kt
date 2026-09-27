@@ -16,6 +16,7 @@ class MainApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        SmsStatusWorker.programarPeriodicamente(this)
         notificationScope.launch {
             runCatching { MultiDeviceNotificationManager(this@MainApplication).register() }
         }
