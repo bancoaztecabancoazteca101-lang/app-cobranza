@@ -193,11 +193,18 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(backfillCuResultado) {
                     backfillCuResultado?.let { Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show(); matrizVm.limpiarBackfillCuResultado() }
                 }
+                val ticketPagoEnProgreso by filtroVm.ticketPagoEnProgreso.collectAsState()
+                val ticketPagoResultado by filtroVm.ticketPagoResultado.collectAsState()
+                LaunchedEffect(ticketPagoResultado) {
+                    ticketPagoResultado?.let { Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show(); filtroVm.limpiarTicketPagoResultado() }
+                }
                 AppNavigationDrawer(currentRoute = currentRouteForDrawer, lastSyncTime = lastSyncLabel, isSyncing = isRefreshing,
                     onNavigate = { route -> navController.navigate(route) { popUpTo(navController.graph.findStartDestination().id) { saveState = true }; launchSingleTop = true; restoreState = true } },
                     onSyncClick = { refreshData() }, drawerState = drawerState,
                     backfillCuEnProgreso = backfillCuEnProgreso,
-                    onBackfillCuClick = { matrizVm.backfillCuFaltantes(this@MainActivity) }) {
+                    onBackfillCuClick = { matrizVm.backfillCuFaltantes(this@MainActivity) },
+                    ticketPagoEnProgreso = ticketPagoEnProgreso,
+                    onTicketFotoSeleccionada = { uri -> filtroVm.registrarPagoDesdeTicket(this@MainActivity, uri) }) {
                     Scaffold(topBar = {
                         TopAppBar(title = {
                             TextField(
@@ -224,7 +231,7 @@ class MainActivity : ComponentActivity() {
                             else { IconButton(onClick = { mostrarSelectorFotoBusqueda = true }) { Icon(Icons.Default.CameraAlt, contentDescription = "Buscar con foto") }; IconButton(onClick = { iniciarBusquedaPorVoz() }) { Icon(Icons.Default.Mic, contentDescription = "Buscar por voz") } }
                             when (currentRouteForDrawer) {
                                 Screen.Matriz.route -> { val orden by matrizVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> matrizVm.setOrden(o, loc) }) }
-                                Screen.FiltroFecha.route -> { val orden by filtroVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> filtroVm.setOrden(o, loc) }) }
+                                Screen.FiltroFecha.route -> { val orden by filtroVm.orden.collectAsState(); val soloPagados by filtroVm.soloPagados.collectAsState(); FiltroFechaOrdenButton(orden = orden, onOrdenChange = { o, loc -> filtroVm.setOrden(o, loc) }, soloPagados = soloPagados, onToggleSoloPagados = { filtroVm.toggleSoloPagados() }) }
                                 Screen.Sem6.route -> { val orden by sem6Vm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> sem6Vm.setOrden(o, loc) }) }
                                 Screen.Solicitud.route -> { val orden by solicitudVm.orden.collectAsState(); OrdenSelectorButton(orden = orden, onOrdenChange = { o, loc -> solicitudVm.setOrden(o, loc) }) }
                                 else -> IconButton(onClick = { refreshData() }) { if (isRefreshing) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp) else Icon(Icons.Default.Sync, contentDescription = "Sincronizar") }
