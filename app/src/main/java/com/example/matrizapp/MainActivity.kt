@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -63,7 +64,30 @@ class MainActivity : ComponentActivity() {
                 outline = Color(0xFF71787E), outlineVariant = Color(0xFFC1C7CE),
                 inverseSurface = Color(0xFF2E3133), inverseOnSurface = Color(0xFFF0F0F3), scrim = Color.Black
             )
-            MaterialTheme(colorScheme = colorSchemeAzul) {
+            val modoOscuro = isSystemInDarkTheme()
+            val colorSchemeActual = if (modoOscuro) {
+                darkColorScheme(
+                    primary = Color(0xFF90CAF9), onPrimary = Color(0xFF003258),
+                    primaryContainer = Color(0xFF004A77), onPrimaryContainer = Color(0xFFD2E4FF),
+                    secondary = Color(0xFFA8C7FA), onSecondary = Color(0xFF0B3155),
+                    secondaryContainer = Color(0xFF244A73), onSecondaryContainer = Color(0xFFD3E4FF),
+                    tertiary = Color(0xFFA5CEDB), onTertiary = Color(0xFF08363F),
+                    tertiaryContainer = Color(0xFF264F59), onTertiaryContainer = Color(0xFFD0E7F0),
+                    background = Color(0xFF101417), onBackground = Color(0xFFE1E2E5),
+                    surface = Color(0xFF101417), onSurface = Color(0xFFE1E2E5),
+                    surfaceVariant = Color(0xFF41474D), onSurfaceVariant = Color(0xFFC1C7CE),
+                    outline = Color(0xFF8B9198), outlineVariant = Color(0xFF41474D),
+                    inverseSurface = Color(0xFFE1E2E5), inverseOnSurface = Color(0xFF2E3133)
+                )
+            } else {
+                colorSchemeAzul
+            }
+            SideEffect {
+                window.statusBarColor = android.graphics.Color.parseColor(
+                    if (modoOscuro) "#101417" else "#1565C0"
+                )
+            }
+            MaterialTheme(colorScheme = colorSchemeActual) {
                 var appNotification by remember { mutableStateOf(previousCrash?.let { "La app tuvo un cierre inesperado. Revisa la pantalla Diagnóstico si necesitas más información." }) }
                 var signedIn by remember { mutableStateOf(hasSignedInAccount(this)) }
                 if (!signedIn) { LoginScreen(onSignedIn = { signedIn = true }); return@MaterialTheme }
