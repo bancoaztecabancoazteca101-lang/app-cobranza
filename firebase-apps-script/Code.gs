@@ -33,9 +33,6 @@ function handle_(p) {
   if (action === 'delete') return withLock_(() => delete_(p));
   if (action === 'cleanup') return withLock_(() => cleanup_());
   if (action === 'test') return test_(p);
-  if (action === 'sms_status_config') return smsStatusConfig_();
-  if (action === 'sms_status_toggle') return smsStatusToggle_(p);
-  if (action === 'sms_status_device') return smsStatusDevice_(p);
   if (action === 'poll') return pollRetornos_();
   return { ok: false, error: 'unknown_action' };
 }
@@ -187,56 +184,36 @@ function pollRetornos_() {
   const now=new Date();
   const props=PropertiesService.getScriptProperties();
   let sent=JSON.parse(props.getProperty('sentEvents') || '{}');
-  const smsEnabled=JSON.parse(props.getProperty('smsStatusEnabled') || '{}');
-  const smsDeviceId=String(props.getProperty('smsStatusDeviceId') || '');
   let delivered=0;
   const cutoff=now.getTime()-7*24*60*60*1000;
   Object.keys(sent).forEach(k=>{if(Number(sent[k])<cutoff) delete sent[k];});
 
   for(let r=1;r<values.length;r++) {
-    const status=String(values[r][COL.ESTADO] || '').trim().toUpperCase();
-    const isRetorno=status === 'RETORNO';
-    const wantsSms=smsEnabled[status] === true && !!smsDeviceId;
-    // RETORNO conserva las notificaciones multi-dispositivo actuales. Otros estados solo
-    // participan cuando su interruptor de SMS por Status está activo.
-    if(!isRetorno && !wantsSms) continue;
-
+    if(String(values[r][COL.ESTADO] || '').trim().toUpperCase() !== 'RETORNO') continue;
     const dt=combineDateTime_(values[r][COL.FECHA],values[r][COL.HORA]);
     if(!dt || Math.abs(dt.getTime()-now.getTime())>90*1000) continue;
-
     const rowId=String(values[r][COL.ID] || r+1);
-    const eventId=status+':'+rowId+':'+Utilities.formatDate(dt,Session.getScriptTimeZone(),'yyyy-MM-dd-HH-mm');
+    const eventId='RETORNO:'+rowId+':'+Utilities.formatDate(dt,Session.getScriptTimeZone(),'yyyy-MM-dd-HH-mm');
     if(sent[eventId]) continue;
 
     const ubicacion=String(values[r][COL.UBICACION] || '');
     const direccion=reverseGeocode_(ubicacion);
     const message={
-      title:isRetorno ? 'Retorno' : 'SMS por Status',
-      body:String(values[r][COL.NOMBRE] || 'Cliente')+' — '+status,
+      title:'Retorno',
+      body:String(values[r][COL.NOMBRE] || 'Cliente')+' tiene retorno a las '+Utilities.formatDate(dt,Session.getScriptTimeZone(),'HH:mm'),
       eventId:eventId, rowId:rowId,
       nombre:String(values[r][COL.NOMBRE] || 'Cliente'),
       requerido:String(values[r][COL.REQUERIDO] || ''),
       numTT:String(values[r][COL.NUMTT] || ''),
-      colonia:direccion.colonia, calle:direccion.calle, ubicacion:ubicacion,
-      smsStatus:'false', status:status
+      colonia:direccion.colonia, calle:direccion.calle, ubicacion:ubicacion
     };
-
-    let sentThis=0;
-    if(isRetorno) {
-      const result=sendToEnabledDevices_(message,null);
-      sentThis += result.sent;
-    }
-    if(wantsSms) {
-      const smsMessage=Object.assign({},message,{smsStatus:'true'});
-      const smsResult=sendToEnabledDevices_(smsMessage,[smsDeviceId]);
-      sentThis += smsResult.sent;
-    }
-
-    if(sentThis>0) { sent[eventId]=Date.now(); delivered+=sentThis; }
+    const result=sendToEnabledDevices_(message,null);
+    if(result.ok && result.sent>0) { sent[eventId]=Date.now(); delivered+=result.sent; }
   }
   props.setProperty('sentEvents',JSON.stringify(sent));
   return {ok:true,sent:delivered};
 }
+
 function combineDateTime_(dateValue,timeValue) {
   if(!dateValue) return null;
   const d=dateValue instanceof Date ? new Date(dateValue) : new Date(String(dateValue));
@@ -259,7 +236,7 @@ function sendFcm_(token,message) {
     payload:JSON.stringify({message:{token:token,data:{
       title:String(message.title || 'Matriz App'), body:String(message.body || ''), eventId:String(message.eventId || ''), rowId:String(message.rowId || ''),
       nombre:String(message.nombre || ''), requerido:String(message.requerido || ''), numTT:String(message.numTT || ''),
-      colonia:String(message.colonia || ''), calle:String(message.calle || ''), ubicacion:String(message.ubicacion || ''), smsStatus:String(message.smsStatus || 'false'), status:String(message.status || '')
+      colonia:String(message.colonia || ''), calle:String(message.calle || ''), ubicacion:String(message.ubicacion || '')
     },android:{priority:'HIGH'}}}), muteHttpExceptions:true
   });
   const code=response.getResponseCode();
@@ -299,52 +276,3 @@ function configurarBackend() {
 }
 
 function json_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
-
-
-function smsStatusConfig_() {
-  const props = PropertiesService.getScriptProperties();
-  const enabled = JSON.parse(props.getProperty('smsStatusEnabled') || '{}');
-  const selectedDeviceId = String(props.getProperty('smsStatusDeviceId') || '');
-  const sh = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.SHEET_NAME);
-  const statuses = {};
-  if (sh) {
-    const values = sh.getDataRange().getValues();
-    for (let r = 1; r < values.length; r++) {
-      const s = String(values[r][COL.ESTADO] || '').trim();
-      if (s) statuses[s.toUpperCase()] = enabled[s.toUpperCase()] === true;
-    }
-  }
-  // RETORNO ya es el status que el backend manejaba; mantenerlo visible aunque la hoja
-  // todavía no tenga una fila en ese momento.
-  if (!Object.prototype.hasOwnProperty.call(statuses, 'RETORNO')) {
-    statuses.RETORNO = enabled.RETORNO === true;
-  }
-  return { ok:true, statuses:statuses, selectedDeviceId:selectedDeviceId };
-}
-
-function smsStatusToggle_(p) {
-  const status = String(p.status || '').trim().toUpperCase();
-  if (!status) return { ok:false, error:'status_required' };
-  const props = PropertiesService.getScriptProperties();
-  const enabled = JSON.parse(props.getProperty('smsStatusEnabled') || '{}');
-  enabled[status] = String(p.enabled).toLowerCase() === 'true';
-  props.setProperty('smsStatusEnabled', JSON.stringify(enabled));
-  return { ok:true, status:status, enabled:enabled[status] };
-}
-
-function smsStatusDevice_(p) {
-  const deviceId = String(p.deviceId || '').trim();
-  const props = PropertiesService.getScriptProperties();
-  if (String(p.enabled).toLowerCase() !== 'true') {
-    if (!deviceId || deviceId === String(props.getProperty('smsStatusDeviceId') || '')) {
-      props.deleteProperty('smsStatusDeviceId');
-    }
-    return { ok:true, deviceId:deviceId, selected:false };
-  }
-  if (!deviceId) return { ok:false, error:'deviceId_required' };
-  const devices = rows_();
-  const exists = devices.some(r => String(r[0]) === deviceId && (r[3] === true || String(r[3]).toLowerCase() === 'true'));
-  if (!exists) return { ok:false, error:'device_not_found_or_disabled' };
-  props.setProperty('smsStatusDeviceId', deviceId);
-  return { ok:true, deviceId:deviceId, selected:true };
-}
