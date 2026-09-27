@@ -31,10 +31,20 @@ fun AppNavigationDrawer(
     drawerState: DrawerState,
     backfillCuEnProgreso: Boolean = false,
     onBackfillCuClick: () -> Unit = {},
+    ticketPagoEnProgreso: Boolean = false,
+    onTicketFotoSeleccionada: (android.net.Uri) -> Unit = {},
     content: @Composable () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var mostrarSelectorTicket by remember { mutableStateOf(false) }
+    var ticketFotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val ticketTakePictureLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.TakePicture()
+    ) { success -> if (success) ticketFotoUri?.let(onTicketFotoSeleccionada) }
+    val ticketPickImageLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri -> uri?.let(onTicketFotoSeleccionada) }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -105,7 +115,20 @@ fun AppNavigationDrawer(
 
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
                     Text(text = "HERRAMIENTAS", style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.FilterList, contentDescription = null) }, label = { Text("Filtro Fecha") }, selected = currentRoute == "filtro", onClick = { onNavigate("filtro"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        NavigationDrawerItem(icon = { Icon(Icons.Default.FilterList, contentDescription = null) }, label = { Text("Filtro Fecha") }, selected = currentRoute == "filtro", onClick = { onNavigate("filtro"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                        if (ticketPagoEnProgreso) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 28.dp).size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            IconButton(
+                                onClick = { mostrarSelectorTicket = true },
+                                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp)
+                            ) { Icon(Icons.Default.DocumentScanner, contentDescription = "Escanear ticket de cobranza", tint = ClayPrimary) }
+                        }
+                    }
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Tune, contentDescription = null) }, label = { Text("Filtrar") }, selected = currentRoute == "filtrar", onClick = { onNavigate("filtrar"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.BarChart, contentDescription = null) }, label = { Text("Control") }, selected = currentRoute == "control", onClick = { onNavigate("control"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Map, contentDescription = null) }, label = { Text("Ubi") }, selected = currentRoute == "ubi", onClick = { onNavigate("ubi"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
@@ -134,4 +157,23 @@ fun AppNavigationDrawer(
         },
         content = content
     )
+    if (mostrarSelectorTicket) {
+        AlertDialog(
+            onDismissRequest = { mostrarSelectorTicket = false },
+            title = { Text("Escanear ticket de cobranza") },
+            text = { Text("Toma una foto o elige una de la galería. Se leerá el nombre y el monto pagado para marcar el registro de hoy como Pagado.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    mostrarSelectorTicket = false
+                    val photoFile = java.io.File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES), "ticket_${System.currentTimeMillis()}.jpg")
+                    val uri = androidx.core.content.FileProvider.getUriForFile(context, "com.example.matrizapp.fileprovider", photoFile)
+                    ticketFotoUri = uri
+                    ticketTakePictureLauncher.launch(uri)
+                }) { Text("Cámara") }
+            },
+            dismissButton = {
+                TextButton(onClick = { mostrarSelectorTicket = false; ticketPickImageLauncher.launch("image/*") }) { Text("Galería") }
+            }
+        )
+    }
 }
