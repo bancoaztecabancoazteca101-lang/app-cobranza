@@ -33,6 +33,7 @@ fun AppNavigationDrawer(
     onBackfillCuClick: () -> Unit = {},
     ticketPagoEnProgreso: Boolean = false,
     onTicketFotoSeleccionada: (android.net.Uri) -> Unit = {},
+    notificacionesAppCount: Int = 0,
     content: @Composable () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -151,6 +152,14 @@ fun AppNavigationDrawer(
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Schedule, contentDescription = null) }, label = { Text("Bloques de horario") }, selected = currentRoute == "bloques_llamada", onClick = { onNavigate("bloques_llamada"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Message, contentDescription = null) }, label = { Text("Plantillas de SMS") }, selected = currentRoute == "plantillas_sms", onClick = { onNavigate("plantillas_sms"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
                     NavigationDrawerItem(icon = { Icon(Icons.Default.BugReport, contentDescription = null) }, label = { Text("Diagnóstico") }, selected = currentRoute == "diagnostico", onClick = { onNavigate("diagnostico"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Default.Notifications, contentDescription = null) },
+                        label = { Text("Notificaciones") },
+                        badge = { if (notificacionesAppCount > 0) Badge { Text("$notificacionesAppCount") } },
+                        selected = currentRoute == "notificaciones_app",
+                        onClick = { onNavigate("notificaciones_app"); scope.launch { drawerState.close() } },
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
