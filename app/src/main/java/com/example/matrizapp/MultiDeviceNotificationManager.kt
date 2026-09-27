@@ -86,30 +86,6 @@ class MultiDeviceNotificationManager(private val context: Context) {
         put("deviceId", deviceId)
     }).map { }
 
-    suspend fun smsStatusConfig(): Result<SmsStatusConfig> = request("sms_status_config").map { root ->
-        val statusesObj = root.optJSONObject("statuses") ?: JSONObject()
-        val statuses = buildMap {
-            val keys = statusesObj.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                put(key, statusesObj.optBoolean(key, false))
-            }
-        }
-        SmsStatusConfig(statuses, root.optString("selectedDeviceId", ""))
-    }
-
-    suspend fun setSmsStatus(status: String, enabled: Boolean): Result<Unit> =
-        request("sms_status_toggle", JSONObject().apply {
-            put("status", status)
-            put("enabled", enabled)
-        }).map { }
-
-    suspend fun setSmsStatusDevice(deviceId: String?, enabled: Boolean): Result<Unit> =
-        request("sms_status_device", JSONObject().apply {
-            put("deviceId", deviceId ?: "")
-            put("enabled", enabled)
-        }).map { }
-
     suspend fun sendTest(deviceId: String? = null): Result<Int> = request("test", JSONObject().apply {
         if (!deviceId.isNullOrBlank()) put("deviceId", deviceId)
         put("title", "Matriz App")
@@ -143,7 +119,7 @@ class MultiDeviceNotificationManager(private val context: Context) {
         }
     }
 
-    data class SmsStatusConfig(\n        val statuses: Map<String, Boolean>,\n        val selectedDeviceId: String\n    )\n\n    data class RemoteDevice(
+    data class RemoteDevice(
         val deviceId: String,
         val name: String,
         val enabled: Boolean,
