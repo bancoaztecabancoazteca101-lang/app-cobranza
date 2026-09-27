@@ -122,7 +122,6 @@ fun SmsStatusScreen(onBack: () -> Unit = {}) {
                         Text(status, style = MaterialTheme.typography.bodyLarge)
                         Switch(
                             checked = status in enabledStatuses,
-                            enabled = senderEnabled,
                             onCheckedChange = { value ->
                                 val next = enabledStatuses.toMutableSet()
                                 if (value) next.add(status) else next.remove(status)
