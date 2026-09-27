@@ -44,7 +44,7 @@ fun SmsStatusScreen(onBack: () -> Unit = {}) {
     }
 
     val statuses = remember(registros) {
-        (registros.mapNotNull { it.estado.trim().takeIf { s -> s.isNotBlank() } } + "RETORNO")
+        (registros.mapNotNull { it.estado.trim().takeIf { s -> s.isNotBlank() } } + "APP")
             .map { it.uppercase() }
             .distinct()
             .sorted()
