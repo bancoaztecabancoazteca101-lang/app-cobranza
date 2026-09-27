@@ -33,6 +33,9 @@ function handle_(p) {
   if (action === 'delete') return withLock_(() => delete_(p));
   if (action === 'cleanup') return withLock_(() => cleanup_());
   if (action === 'test') return test_(p);
+  if (action === 'sms_status_config') return smsStatusConfig_();
+  if (action === 'sms_status_toggle') return smsStatusToggle_(p);
+  if (action === 'sms_status_device') return smsStatusDevice_(p);
   if (action === 'poll') return pollRetornos_();
   return { ok: false, error: 'unknown_action' };
 }
@@ -276,3 +279,52 @@ function configurarBackend() {
 }
 
 function json_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
+
+
+function smsStatusConfig_() {
+  const props = PropertiesService.getScriptProperties();
+  const enabled = JSON.parse(props.getProperty('smsStatusEnabled') || '{}');
+  const selectedDeviceId = String(props.getProperty('smsStatusDeviceId') || '');
+  const sh = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.SHEET_NAME);
+  const statuses = {};
+  if (sh) {
+    const values = sh.getDataRange().getValues();
+    for (let r = 1; r < values.length; r++) {
+      const s = String(values[r][COL.ESTADO] || '').trim();
+      if (s) statuses[s.toUpperCase()] = enabled[s.toUpperCase()] === true;
+    }
+  }
+  // RETORNO ya es el status que el backend manejaba; mantenerlo visible aunque la hoja
+  // todavía no tenga una fila en ese momento.
+  if (!Object.prototype.hasOwnProperty.call(statuses, 'RETORNO')) {
+    statuses.RETORNO = enabled.RETORNO === true;
+  }
+  return { ok:true, statuses:statuses, selectedDeviceId:selectedDeviceId };
+}
+
+function smsStatusToggle_(p) {
+  const status = String(p.status || '').trim().toUpperCase();
+  if (!status) return { ok:false, error:'status_required' };
+  const props = PropertiesService.getScriptProperties();
+  const enabled = JSON.parse(props.getProperty('smsStatusEnabled') || '{}');
+  enabled[status] = String(p.enabled).toLowerCase() === 'true';
+  props.setProperty('smsStatusEnabled', JSON.stringify(enabled));
+  return { ok:true, status:status, enabled:enabled[status] };
+}
+
+function smsStatusDevice_(p) {
+  const deviceId = String(p.deviceId || '').trim();
+  const props = PropertiesService.getScriptProperties();
+  if (String(p.enabled).toLowerCase() !== 'true') {
+    if (!deviceId || deviceId === String(props.getProperty('smsStatusDeviceId') || '')) {
+      props.deleteProperty('smsStatusDeviceId');
+    }
+    return { ok:true, deviceId:deviceId, selected:false };
+  }
+  if (!deviceId) return { ok:false, error:'deviceId_required' };
+  const devices = rows_();
+  const exists = devices.some(r => String(r[0]) === deviceId && (r[3] === true || String(r[3]).toLowerCase() === 'true'));
+  if (!exists) return { ok:false, error:'device_not_found_or_disabled' };
+  props.setProperty('smsStatusDeviceId', deviceId);
+  return { ok:true, deviceId:deviceId, selected:true };
+}
