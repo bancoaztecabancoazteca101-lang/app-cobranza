@@ -34,7 +34,7 @@ private fun nombreFuente(f: FuenteSms): String = when (f) {
 }
 
 @Composable
-fun SmsScreen(viewModel: SmsViewModel) {
+fun SmsScreen(viewModel: SmsViewModel, onNavigateToStatus: () -> Unit = {}) {
     val context = LocalContext.current
     val fuente by viewModel.fuente.collectAsState()
 
@@ -69,6 +69,13 @@ fun SmsScreen(viewModel: SmsViewModel) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         )
+
+        OutlinedButton(
+            onClick = onNavigateToStatus,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        ) {
+            Text("SMS por Status APP")
+        }
 
         TabRow(selectedTabIndex = fuente.ordinal) {
             FuenteSms.values().forEach { f ->
