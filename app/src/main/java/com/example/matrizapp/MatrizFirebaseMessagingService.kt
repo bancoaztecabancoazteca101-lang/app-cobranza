@@ -38,17 +38,6 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
         val nombre = data["nombre"]?.takeIf { it.isNotBlank() }
         val requerido = data["requerido"]?.takeIf { it.isNotBlank() }
         val eventId = data["eventId"] ?: ""
-        val smsStatus = data["smsStatus"] == "true"
-        val rowId = data["rowId"].orEmpty()
-
-        // SMS por Status llega como mensaje de datos para que onMessageReceived se ejecute
-        // también con la app en segundo plano. WorkManager completa el envío fuera de la
-        // ventana corta de ejecución de FCM.
-        if (smsStatus && rowId.isNotBlank() && eventId.isNotBlank()) {
-            SmsStatusWorker.programar(this, rowId, eventId)
-            return
-        }
-
         val ubicacion = data["ubicacion"]
         val colonia = data["colonia"]?.takeIf { it.isNotBlank() }
         val calle = data["calle"]?.takeIf { it.isNotBlank() }
