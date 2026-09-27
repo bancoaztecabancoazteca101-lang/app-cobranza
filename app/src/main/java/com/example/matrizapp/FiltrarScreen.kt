@@ -23,6 +23,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("filtrar_contactos", android.content.Context.MODE_PRIVATE) }
+    var agregarAutomaticamente by remember {
+        mutableStateOf(prefs.getBoolean("agregar_automaticamente", false))
+    }
     val allItems by viewModel.items.collectAsState()
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
@@ -31,16 +35,57 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
                 item.cercanos.any { coincideBusqueda(it.nombre, q) || coincideBusqueda(it.numTT, q) }
         }
     }
+    LaunchedEffect(agregarAutomaticamente, allItems) {
+        if (agregarAutomaticamente && allItems.isNotEmpty()) {
+            viewModel.agregarContactosAutomaticamente(allItems)
+        }
+    }
+
     var itemToView by remember { mutableStateOf<FiltrarItem?>(null) }
     var itemToEdit by remember { mutableStateOf<FiltrarItem?>(null) }
     var itemToFullEdit by remember { mutableStateOf<FiltrarItem?>(null) }
 
-    if (items.isEmpty()) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
-    } else {
-        LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Surface(tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Agregar contactos automáticamente",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (agregarAutomaticamente) "Activado: los cercanos se agregan solos"
+                        else "Desactivado: usa el botón para agregar manualmente",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                }
+                Switch(
+                    checked = agregarAutomaticamente,
+                    onCheckedChange = { nuevoValor ->
+                        agregarAutomaticamente = nuevoValor
+                        prefs.edit().putBoolean("agregar_automaticamente", nuevoValor).apply()
+                        if (nuevoValor) {
+                            viewModel.agregarContactosAutomaticamente(allItems)
+                        }
+                    }
+                )
+            }
+        }
+
+        if (items.isEmpty()) {
+            Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros", color = Color.Gray) }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(items, key = { it.id }) { item ->
                 FiltrarItemCard(item, onCardClick = { itemToView = item }, onEditClick = { itemToEdit = item })
+            }
             }
         }
     }
@@ -177,7 +222,30 @@ fun FiltrarItemCard(item: FiltrarItem, onCardClick: () -> Unit, onEditClick: () 
                 Spacer(Modifier.height(4.dp))
                 Text("Cercanos por GPS:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 item.cercanos.forEach { c ->
-                    Text("${c.nombre} (${c.distanciaM} m)", style = MaterialTheme.typography.bodySmall)
+                    Surface(
+                        color = if (c.yaAgregado) Color(0xFFE8F5E9) else Color.Transparent,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "${c.nombre} (${c.distanciaM} m)",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (c.yaAgregado) {
+                                Text(
+                                    "✓ CONTACTO AGREGADO",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

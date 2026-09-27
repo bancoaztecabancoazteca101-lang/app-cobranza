@@ -161,7 +161,40 @@ class FiltrarViewModel(
     fun agregarContactoExtra(clienteId: String, cercano: CercanoDetalle) {
         viewModelScope.launch {
             listOfNotNull(cercano.ref1.takeIf { it.isNotBlank() }, cercano.ref2.takeIf { it.isNotBlank() }).forEach { tel ->
-                contactoExtraDao.insertar(ContactoExtraEntity(clienteId = clienteId, telefono = tel, nombreOrigen = cercano.nombre))
+                if (!contactoExtraDao.existeTelefono(clienteId, tel)) {
+                    contactoExtraDao.insertar(
+                        ContactoExtraEntity(
+                            clienteId = clienteId,
+                            telefono = tel,
+                            nombreOrigen = cercano.nombre
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    /** Modo automático: agrega los Ref1/Ref2 de todos los cercanos detectados en Filtrar.
+     * El DAO verifica cada teléfono antes de insertarlo, así que no se duplican contactos. */
+    fun agregarContactosAutomaticamente(items: List<FiltrarItem>) {
+        viewModelScope.launch {
+            items.forEach { item ->
+                item.cercanos.forEach { cercano ->
+                    listOfNotNull(
+                        cercano.ref1.takeIf { it.isNotBlank() },
+                        cercano.ref2.takeIf { it.isNotBlank() }
+                    ).forEach { tel ->
+                        if (!contactoExtraDao.existeTelefono(item.id, tel)) {
+                            contactoExtraDao.insertar(
+                                ContactoExtraEntity(
+                                    clienteId = item.id,
+                                    telefono = tel,
+                                    nombreOrigen = cercano.nombre
+                                )
+                            )
+                        }
+                    }
+                }
             }
         }
     }

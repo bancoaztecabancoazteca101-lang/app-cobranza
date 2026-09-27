@@ -16,13 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -66,12 +64,7 @@ class MainActivity : ComponentActivity() {
                 inverseSurface = Color(0xFF2E3133), inverseOnSurface = Color(0xFFF0F0F3), scrim = Color.Black
             )
             MaterialTheme(colorScheme = colorSchemeAzul) {
-                var crashLog by remember { mutableStateOf(previousCrash) }
-                crashLog?.let { text ->
-                    AlertDialog(onDismissRequest = { crashLog = null }, title = { Text("La app se cerró inesperadamente") },
-                        text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { SelectionContainer { Text(text, style = MaterialTheme.typography.bodySmall) } } },
-                        confirmButton = { TextButton(onClick = { crashLog = null }) { Text("Cerrar") } })
-                }
+                var appNotification by remember { mutableStateOf(previousCrash?.let { "La app tuvo un cierre inesperado. Revisa la pantalla Diagnóstico si necesitas más información." }) }
                 var signedIn by remember { mutableStateOf(hasSignedInAccount(this)) }
                 if (!signedIn) { LoginScreen(onSignedIn = { signedIn = true }); return@MaterialTheme }
                 val navController = rememberNavController()
@@ -99,12 +92,11 @@ class MainActivity : ComponentActivity() {
                 var mostrarSelectorFotoBusqueda by remember { mutableStateOf(false) }
                 var fotoBusquedaUri by remember { mutableStateOf<Uri?>(null) }
                 var isRefreshing by remember { mutableStateOf(false) }
-                var syncError by remember { mutableStateOf<String?>(null) }
                 fun refreshData() {
                     if (isRefreshing) return
                     isRefreshing = true
                     coroutineScope.launch {
-                        try { container.repository.refreshAll() } catch (e: Exception) { syncError = e.stackTraceToString() }
+                        try { container.repository.refreshAll() } catch (e: Exception) { appNotification = "Error de sincronización: " + (e.message ?: "revisa tu conexión") }
                         try { container.repository.reportarDispositivo(DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId) } catch (e: Exception) { }
                         isRefreshing = false
                     }
@@ -139,11 +131,6 @@ class MainActivity : ComponentActivity() {
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
                     onDispose { pollingJob?.cancel(); lifecycleOwner.lifecycle.removeObserver(observer) }
-                }
-                syncError?.let { errorText ->
-                    AlertDialog(onDismissRequest = { syncError = null }, title = { Text("Error al sincronizar") },
-                        text = { Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) { SelectionContainer { Text(errorText, style = MaterialTheme.typography.bodySmall) } } },
-                        confirmButton = { TextButton(onClick = { syncError = null }) { Text("Cerrar") } })
                 }
                 val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { if (!it.values.all { p -> p }) Toast.makeText(this, "Permisos necesarios", Toast.LENGTH_SHORT).show() }
                 fun procesarFotoBusqueda(uri: Uri?) {
@@ -238,7 +225,27 @@ class MainActivity : ComponentActivity() {
                             }
                         })
                     }) { innerPadding ->
-                        NavHost(navController, Screen.Matriz.route, Modifier.padding(innerPadding)) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            appNotification?.let { message ->
+                                Surface(
+                                    tonalElevation = 2.dp,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                                    shape = MaterialTheme.shapes.small
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Notifications, contentDescription = "Notificación de la app", modifier = Modifier.size(20.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                        IconButton(onClick = { appNotification = null }, modifier = Modifier.size(32.dp)) {
+                                            Icon(Icons.Default.Close, contentDescription = "Cerrar notificación", modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                            }
+                            NavHost(navController, Screen.Matriz.route, Modifier.weight(1f).padding(innerPadding)) {
                             composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery) }
                             composable(Screen.PaseCartera.route) { PaseCarteraScreen(paseVm, searchQuery) }
                             composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
@@ -265,6 +272,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm, searchQuery) }
                             composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
                             composable(Screen.ExportarMatriz.route) { ExportarMatrizScreen(matrizVm) }
+                        }
                         }
                     }
                 }
