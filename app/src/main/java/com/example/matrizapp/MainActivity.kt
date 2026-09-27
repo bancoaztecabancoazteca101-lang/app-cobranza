@@ -121,6 +121,7 @@ class MainActivity : ComponentActivity() {
                     isRefreshing = true
                     coroutineScope.launch {
                         try { container.repository.refreshAll() } catch (e: Exception) { appNotification = "Error de sincronización: " + (e.message ?: "revisa tu conexión") }
+                        SmsStatusWorker.programarAhora(this@MainActivity)
                         try { container.repository.reportarDispositivo(DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId) } catch (e: Exception) { }
                         isRefreshing = false
                     }
