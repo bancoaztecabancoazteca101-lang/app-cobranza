@@ -32,6 +32,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
@@ -64,7 +67,17 @@ class MainActivity : ComponentActivity() {
                 inverseSurface = Color(0xFF2E3133), inverseOnSurface = Color(0xFFF0F0F3), scrim = Color.Black
             )
             MaterialTheme(colorScheme = colorSchemeAzul) {
-                var appNotification by remember { mutableStateOf(previousCrash?.let { "La app tuvo un cierre inesperado. Revisa la pantalla Diagnóstico si necesitas más información." }) }
+                val horaNotifFormato = remember { SimpleDateFormat("dd/MM HH:mm", Locale("es", "MX")) }
+                val notificacionesApp = remember {
+                    mutableStateListOf<NotificacionApp>().apply {
+                        previousCrash?.let { add(NotificacionApp("La app tuvo un cierre inesperado. Revisa Notificaciones si necesitas más información.", horaNotifFormato.format(Date()))) }
+                    }
+                }
+                var bannerNotifVisible by remember { mutableStateOf(notificacionesApp.isNotEmpty()) }
+                fun agregarNotificacion(mensaje: String) {
+                    notificacionesApp.add(0, NotificacionApp(mensaje, horaNotifFormato.format(Date())))
+                    bannerNotifVisible = true
+                }
                 var signedIn by remember { mutableStateOf(hasSignedInAccount(this)) }
                 if (!signedIn) { LoginScreen(onSignedIn = { signedIn = true }); return@MaterialTheme }
                 val navController = rememberNavController()
@@ -96,7 +109,7 @@ class MainActivity : ComponentActivity() {
                     if (isRefreshing) return
                     isRefreshing = true
                     coroutineScope.launch {
-                        try { container.repository.refreshAll() } catch (e: Exception) { appNotification = "Error de sincronización: " + (e.message ?: "revisa tu conexión") }
+                        try { container.repository.refreshAll() } catch (e: Exception) { agregarNotificacion("Error de sincronización: " + (e.message ?: "revisa tu conexión")) }
                         try { container.repository.reportarDispositivo(DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId) } catch (e: Exception) { }
                         isRefreshing = false
                     }
@@ -191,7 +204,8 @@ class MainActivity : ComponentActivity() {
                     backfillCuEnProgreso = backfillCuEnProgreso,
                     onBackfillCuClick = { matrizVm.backfillCuFaltantes(this@MainActivity) },
                     ticketPagoEnProgreso = ticketPagoEnProgreso,
-                    onTicketFotoSeleccionada = { uri -> filtroVm.registrarPagoDesdeTicket(this@MainActivity, uri) }) {
+                    onTicketFotoSeleccionada = { uri -> filtroVm.registrarPagoDesdeTicket(this@MainActivity, uri) },
+                    notificacionesAppCount = notificacionesApp.size) {
                     Scaffold(topBar = {
                         TopAppBar(title = {
                             TextField(
@@ -226,7 +240,8 @@ class MainActivity : ComponentActivity() {
                         })
                     }) { innerPadding ->
                         Column(modifier = Modifier.fillMaxSize()) {
-                            appNotification?.let { message ->
+                            if (bannerNotifVisible && notificacionesApp.isNotEmpty()) {
+                                val message = notificacionesApp.first().mensaje
                                 Surface(
                                     tonalElevation = 2.dp,
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -239,7 +254,7 @@ class MainActivity : ComponentActivity() {
                                         Icon(Icons.Default.Notifications, contentDescription = "Notificación de la app", modifier = Modifier.size(20.dp))
                                         Spacer(Modifier.width(8.dp))
                                         Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                                        IconButton(onClick = { appNotification = null }, modifier = Modifier.size(32.dp)) {
+                                        IconButton(onClick = { bannerNotifVisible = false }, modifier = Modifier.size(32.dp)) {
                                             Icon(Icons.Default.Close, contentDescription = "Cerrar notificación", modifier = Modifier.size(18.dp))
                                         }
                                     }
@@ -271,6 +286,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
                             composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm, searchQuery) }
                             composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
+                            composable(Screen.Notificaciones.route) { NotificacionesAppScreen(notificacionesApp, onLimpiar = { notificacionesApp.clear() }) }
                             composable(Screen.ExportarMatriz.route) { ExportarMatrizScreen(matrizVm) }
                         }
                         }
@@ -295,6 +311,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object PlantillasSms : Screen("plantillas_sms", "Plantillas de SMS", Icons.Default.Message)
     object RutaIA : Screen("ruta_ia", "Ruta IA", Icons.Default.Route)
     object Diagnostico : Screen("diagnostico", "Diagnóstico", Icons.Default.BugReport)
+    object Notificaciones : Screen("notificaciones_app", "Notificaciones", Icons.Default.Notifications)
     object ExportarMatriz : Screen("exportar_matriz", "Exportar Matriz", Icons.Default.FileDownload)
     // Submenú de Control (no tienen entrada propia en el drawer -- solo se llega desde las
     // tarjetas dentro de ControlScreen: Penalización, Comisión, Avance, Bolsa Gerencia).
