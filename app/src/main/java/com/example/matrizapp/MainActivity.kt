@@ -282,7 +282,8 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.BolsaGerencia.route) { BolsaGerenciaScreen(bolsaGerenciaVm) }
                             composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
                             composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
-                            composable(Screen.Sms.route) { SmsScreen(smsVm) }
+                            composable(Screen.Sms.route) { SmsScreen(smsVm, onNavigateToStatus = { navController.navigate(Screen.SmsStatus.route) }) }
+                            composable(Screen.SmsStatus.route) { SmsStatusScreen(onBack = { navController.popBackStack() }) }
                             composable(Screen.Llamadas.route) { CallScreen(callVm) }
                             composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
                             composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
@@ -307,6 +308,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Ubi : Screen("ubi", "Ubi", Icons.Default.Map)
     object Sem6 : Screen("sem6", "Semana 6", Icons.Default.Visibility)
     object Sms : Screen("sms", "SMS", Icons.Default.Send)
+    object SmsStatus : Screen("sms_status", "SMS por Status APP", Icons.Default.Sms)
     object Llamadas : Screen("llamadas", "Llamadas", Icons.Default.Call)
     object BloquesLlamada : Screen("bloques_llamada", "Bloques de horario", Icons.Default.Schedule)
     object PlantillasSms : Screen("plantillas_sms", "Plantillas de SMS", Icons.Default.Message)
@@ -325,7 +327,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
  * en cuál hoja/pantalla estás (Matriz, Filtro Fecha, Pase, etc.), cosa que antes no se mostraba. */
 fun screenTitleFor(route: String): String = listOf(
     Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.Filtrar,
-    Screen.Control, Screen.Ubi, Screen.Sem6, Screen.Sms, Screen.Llamadas, Screen.BloquesLlamada,
+    Screen.Control, Screen.Ubi, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada,
     Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Penalizacion,
     Screen.Comision, Screen.Avance, Screen.BolsaGerencia
 ).find { it.route == route }?.title ?: ""
