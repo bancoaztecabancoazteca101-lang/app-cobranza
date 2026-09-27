@@ -18,6 +18,16 @@ interface MatrizDao {
     suspend fun updateEstadoYHora(id: String, nuevoEstado: String, nuevaHora: String)
     @Query("UPDATE matriz_table SET estado = 'PASE', isDirty = 1 WHERE id = :id")
     suspend fun marcarComoPase(id: String)
+    // Marca "Pagado" + guarda el monto leído del ticket de cobranza (foto) -- ver
+    // FiltroFechaViewModel.registrarPagoDesdeTicket. montoCobrado es 100% local (no se sube
+    // al Sheet, ver SyncWorker.syncMatriz), isDirty=1 solo sube estado/hora como cualquier
+    // otro cambio de status.
+    @Query("UPDATE matriz_table SET estado = 'Pagado', montoCobrado = :monto, hora = :hora, isDirty = 1 WHERE id = :id")
+    suspend fun marcarPagadoConMonto(id: String, monto: Double, hora: String)
+    // Consulta puntual (no Flow) usada para el match por nombre del ticket de cobranza contra
+    // los registros del día -- ver FiltroFechaViewModel.registrarPagoDesdeTicket.
+    @Query("SELECT * FROM matriz_table WHERE fecha BETWEEN :desde AND :hasta")
+    suspend fun getMatrizEnRango(desde: Long, hasta: Long): List<MatrizEntity>
     @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
         ubicacion = :ubicacion, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP,
