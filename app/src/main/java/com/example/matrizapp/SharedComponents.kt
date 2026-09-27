@@ -1129,6 +1129,68 @@ fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista, Pair<Doub
     }
 }
 
+/** Variante de OrdenSelectorButton solo para Filtro Fecha: mismas opciones de orden, más una
+ * opción extra "Pagados" al fondo del mismo menú que filtra la lista a solo los registros con
+ * Status="Pagado" del rango de fecha actual (con checkmark cuando está activa). No se tocó
+ * OrdenSelectorButton porque lo comparten Matriz, Sem6 y Solicitud, donde "Pagados" no aplica. */
+@Composable
+fun FiltroFechaOrdenButton(
+    orden: OrdenLista,
+    onOrdenChange: (OrdenLista, Pair<Double, Double>?) -> Unit,
+    soloPagados: Boolean,
+    onToggleSoloPagados: () -> Unit
+) {
+    var expandido by remember { mutableStateOf(false) }
+    var buscandoUbicacion by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    Box {
+        IconButton(onClick = { expandido = true }, enabled = !buscandoUbicacion) {
+            if (buscandoUbicacion) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    Icons.Default.Sort,
+                    contentDescription = "Ordenar / filtrar",
+                    tint = if (orden != OrdenLista.ORIGINAL || soloPagados) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                )
+            }
+        }
+        DropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
+            OrdenLista.values().forEach { opcion ->
+                DropdownMenuItem(
+                    text = { Text(opcion.etiqueta) },
+                    leadingIcon = { if (opcion == orden) Icon(Icons.Default.Check, contentDescription = null) },
+                    onClick = {
+                        expandido = false
+                        if (opcion.necesitaUbicacionActual()) {
+                            buscandoUbicacion = true
+                            scope.launch {
+                                val ubic = parseLatLngOrden(obtenerUbicacionActual(context))
+                                buscandoUbicacion = false
+                                if (ubic == null) {
+                                    Toast.makeText(context, "No se pudo obtener tu ubicación actual (revisa el GPS)", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    onOrdenChange(opcion, ubic)
+                                }
+                            }
+                        } else {
+                            onOrdenChange(opcion, null)
+                        }
+                    }
+                )
+            }
+            Divider()
+            DropdownMenuItem(
+                text = { Text("Pagados") },
+                leadingIcon = { if (soloPagados) Icon(Icons.Default.Check, contentDescription = null) },
+                onClick = { expandido = false; onToggleSoloPagados() }
+            )
+        }
+    }
+}
+
 /** OCR local (ML Kit, on-device, sin costo) para el buscador con foto: intenta detectar el
  * nombre más probable en la imagen (línea sin números, 2 a 5 palabras, elige la de texto
  * más grande/alto ya que suele ser el título/nombre del cliente en la pantalla fotografiada).
@@ -1292,5 +1354,44 @@ suspend fun extraerCuDeImagen(context: android.content.Context, uri: Uri): Strin
             .addOnFailureListener { if (cont.isActive) cont.resume(null) {} }
     } catch (e: Exception) {
         if (cont.isActive) cont.resume(null) {}
+    }
+}
+
+/** Resultado del OCR del ticket de cobranza (foto): nombre, monto pagado y CU detectados
+ * (los tres nullable de forma independiente). */
+data class DatosTicketOcr(val nombre: String?, val monto: Double?, val cu: String?)
+
+private val patronUstedPago = Regex("(?i)Usted\\s+pag[oó]:?\\s*\\$?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")
+private val patronNoCliente = Regex("(?i)No\\.?\\s*de\\s*Cliente")
+
+/** OCR local (ML Kit) para el escaneo de ticket de cobranza en Filtro Fecha (ver
+ * FiltroFechaViewModel.registrarPagoDesdeTicket). Soporta varios formatos reales de ticket
+ * de Banco Azteca (recibo estándar con "DATOS DEL CLIENTE" y terminal/compropago con
+ * "Tu pago fue Aprobado"): en todos ellos el nombre del cliente queda siempre en la línea
+ * inmediatamente arriba de "No. de Cliente:", así que esa es la heurística usada en vez de
+ * depender de un encabezado fijo. El monto siempre aparece como "Usted pagó: $X.XX". El CU
+ * a veces viene parcialmente enmascarado con X (formato de terminal), en cuyo caso el regex
+ * simplemente no encuentra match y queda null -- el match en el ViewModel se hace por nombre. */
+suspend fun extraerDatosTicketDeImagen(context: android.content.Context, uri: Uri): DatosTicketOcr = suspendCancellableCoroutine { cont ->
+    try {
+        val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
+            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
+        )
+        recognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                val texto = java.text.Normalizer.normalize(visionText.text, java.text.Normalizer.Form.NFC)
+                val lineas = texto.split("\n").map { it.trim() }
+                val idxNoCliente = lineas.indexOfFirst { patronNoCliente.containsMatchIn(it) }
+                val nombre = if (idxNoCliente > 0) {
+                    (idxNoCliente - 1 downTo 0).map { lineas[it] }.firstOrNull { it.isNotBlank() }?.uppercase()
+                } else null
+                val monto = patronUstedPago.find(texto)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
+                val cu = patronCuOcr.find(texto)?.aCu()
+                if (cont.isActive) cont.resume(DatosTicketOcr(nombre, monto, cu)) {}
+            }
+            .addOnFailureListener { if (cont.isActive) cont.resume(DatosTicketOcr(null, null, null)) {} }
+    } catch (e: Exception) {
+        if (cont.isActive) cont.resume(DatosTicketOcr(null, null, null)) {}
     }
 }
