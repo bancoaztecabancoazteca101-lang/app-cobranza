@@ -35,6 +35,13 @@ class FiltroFechaViewModel(
         if (miUbicacion != null) _miUbicacion.value = miUbicacion
     }
 
+    // Filtro "Pagados" (ver FiltroFechaOrdenButton en SharedComponents.kt): muestra solo los
+    // registros con Status="Pagado" del rango de fecha actual, junto con la sumatoria del
+    // monto cobrado ese rango (ver totalCobradoRango más abajo).
+    private val _soloPagados = MutableStateFlow(false)
+    val soloPagados: StateFlow<Boolean> = _soloPagados
+    fun toggleSoloPagados() { _soloPagados.value = !_soloPagados.value }
+
     private fun ordenar(list: List<MatrizEntity>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<MatrizEntity> = when (o) {
         OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending { it.fecha ?: 0L }
         OrdenLista.FECHA_HORA_ANTIGUA -> list.sortedBy { it.fecha ?: 0L }
@@ -47,20 +54,34 @@ class FiltroFechaViewModel(
     private fun distanciaOrNull(raw: String?, miUbicacion: Pair<Double, Double>): Double? =
         parseLatLngOrden(raw)?.let { distanciaKm(miUbicacion, it) }
 
+    private data class FiltroParams(val desde: Long?, val hasta: Long?, val orden: OrdenLista, val loc: Pair<Double, Double>?, val soloPagados: Boolean)
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    val filteredList: StateFlow<List<MatrizEntity>> = combine(_desde, _hasta, _orden, _miUbicacion) { d, h, o, loc ->
-        Triple(d, h, o) to loc
-    }.flatMapLatest { (t, loc) ->
-        val (d, h, o) = t
+    val filteredList: StateFlow<List<MatrizEntity>> = combine(_desde, _hasta, _orden, _miUbicacion, _soloPagados) { d, h, o, loc, solo ->
+        FiltroParams(d, h, o, loc, solo)
+    }.flatMapLatest { p ->
         matrizDao.getAllMatriz().map { list ->
-            val enRango = if (d != null && h != null) {
-                list.filter { val f = it.fecha; f != null && f in d..h && !it.estado.equals("PASE", ignoreCase = true) }
+            val enRango = if (p.desde != null && p.hasta != null) {
+                list.filter { val f = it.fecha; f != null && f in p.desde..p.hasta && !it.estado.equals("PASE", ignoreCase = true) }
             } else {
                 list.filter { !it.estado.equals("PASE", ignoreCase = true) }
             }
-            ordenar(enRango, o, loc)
+            val filtrada = if (p.soloPagados) enRango.filter { it.estado.equals("Pagado", ignoreCase = true) } else enRango
+            ordenar(filtrada, p.orden, p.loc)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Sumatoria de montoCobrado de los registros "Pagado" del rango de fecha actual (para el
+     * encabezado que se muestra cuando el filtro "Pagados" está activo). Independiente de
+     * orden/soloPagados a propósito: siempre refleja el total del rango visible. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val totalCobradoRango: StateFlow<Double> = combine(_desde, _hasta) { d, h -> d to h }
+        .flatMapLatest { (d, h) ->
+            matrizDao.getAllMatriz().map { list ->
+                list.filter { val f = it.fecha; (d == null || h == null || (f != null && f in d..h)) && it.estado.equals("Pagado", ignoreCase = true) }
+                    .sumOf { it.montoCobrado ?: 0.0 }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     fun setRangoFecha(desde: Long?, hasta: Long?) {
         _desde.value = desde
@@ -76,6 +97,44 @@ class FiltroFechaViewModel(
         viewModelScope.launch {
             matrizDao.updateEstadoYHora(id, nuevoEstado, nuevaHora)
             onResult(notificacionesHelper.evaluarProgramacion(nuevoEstado, nuevaHora))
+        }
+    }
+
+    // Escaneo de ticket de cobranza (foto) -- ver FiltroFechaOrdenButton/ícono en el drawer
+    // (AppNavigationDrawer.kt) y extraerDatosTicketDeImagen (SharedComponents.kt).
+    private val _ticketPagoEnProgreso = MutableStateFlow(false)
+    val ticketPagoEnProgreso: StateFlow<Boolean> = _ticketPagoEnProgreso
+    private val _ticketPagoResultado = MutableStateFlow<String?>(null)
+    val ticketPagoResultado: StateFlow<String?> = _ticketPagoResultado
+    fun limpiarTicketPagoResultado() { _ticketPagoResultado.value = null }
+
+    /** Lee la foto del ticket de cobranza (OCR), busca el registro del día cuyo nombre
+     * coincida (tolerante a acentos/mayúsculas, como el resto de la app) y lo marca "Pagado"
+     * con el monto leído. Si hay más de un match por nombre, toma el primero -- no debería
+     * haber nombres repetidos en Filtro Fecha. */
+    fun registrarPagoDesdeTicket(context: android.content.Context, uri: android.net.Uri) {
+        viewModelScope.launch {
+            _ticketPagoEnProgreso.value = true
+            val datos = extraerDatosTicketDeImagen(context, uri)
+            if (datos.nombre.isNullOrBlank()) {
+                _ticketPagoEnProgreso.value = false
+                _ticketPagoResultado.value = "No se pudo leer el nombre del cliente en el ticket"
+                return@launch
+            }
+            val nombreNormalizado = quitarAcentos(datos.nombre).trim()
+            val candidatos = matrizDao.getMatrizEnRango(inicioDeHoy(), finDeHoy())
+                .filter { !it.estado.equals("PASE", ignoreCase = true) }
+            val match = candidatos.firstOrNull { quitarAcentos(it.nombre).trim().equals(nombreNormalizado, ignoreCase = true) }
+            _ticketPagoEnProgreso.value = false
+            if (match == null) {
+                _ticketPagoResultado.value = "No se encontró un registro de hoy con el nombre \"${datos.nombre}\""
+                return@launch
+            }
+            val hora = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+            matrizDao.marcarPagadoConMonto(match.id, datos.monto ?: 0.0, hora)
+            _ticketPagoResultado.value = if (datos.monto != null)
+                "Marcado como Pagado: ${match.nombre} ($${"%.2f".format(java.util.Locale.US, datos.monto)})"
+            else "Marcado como Pagado: ${match.nombre} (no se detectó el monto, revísalo manualmente)"
         }
     }
 }
