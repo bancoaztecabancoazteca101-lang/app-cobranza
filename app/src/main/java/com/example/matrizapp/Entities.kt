@@ -12,6 +12,8 @@ data class MatrizEntity(
     val descuentoPago: String? = null, val descuentoAhorro: String? = null,
     // Campos 100% locales (no existen en el Sheet): ver MatrizDao.actualizarDesdeSheet().
     val ref3: String? = null, val ref4: String? = null, val diaPago: String? = null, val domicilioLaboral: String? = null,
+    // Monto cobrado leído del ticket de cobranza (foto), 100% local -- ver FiltroFechaViewModel.registrarPagoDesdeTicket.
+    val montoCobrado: Double? = null,
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 
