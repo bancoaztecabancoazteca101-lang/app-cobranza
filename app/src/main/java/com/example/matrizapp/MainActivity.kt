@@ -301,7 +301,10 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             composable(Screen.Penalizacion.route) { PenalizacionScreen(penalizacionVm) }
-                            composable(Screen.Comision.route) { ComisionScreen(comisionVm) }
+                            composable(Screen.Comision.route) {
+                                val velocidadActual by penalizacionVm.item.collectAsState()
+                                ComisionScreen(comisionVm, metaPlan = velocidadActual.plan100)
+                            }
                             composable(Screen.Avance.route) { AvanceScreen(controlVm) }
                             composable(Screen.BolsaGerencia.route) { BolsaGerenciaScreen(bolsaGerenciaVm) }
                             composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
@@ -343,10 +346,10 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object ExportarMatriz : Screen("exportar_matriz", "Exportar Matriz", Icons.Default.FileDownload)
     // Submenú de Control (no tienen entrada propia en el drawer -- solo se llega desde las
     // tarjetas dentro de ControlScreen: Penalización, Comisión, Avance, Bolsa Gerencia).
-    object Penalizacion : Screen("penalizacion", "Penalización", Icons.Default.BarChart)
-    object Comision : Screen("comision", "Comisión", Icons.Default.BarChart)
-    object Avance : Screen("avance", "Avance", Icons.Default.BarChart)
-    object BolsaGerencia : Screen("bolsa_gerencia", "Bolsa Gerencia", Icons.Default.BarChart)
+    object Penalizacion : Screen("penalizacion", "Tabla de Velocidades", Icons.Default.BarChart)
+    object Comision : Screen("comision", "Comisión Individual", Icons.Default.BarChart)
+    object Avance : Screen("avance", "Requerido Pisado", Icons.Default.BarChart)
+    object BolsaGerencia : Screen("bolsa_gerencia", "Bolsa Gerencial", Icons.Default.BarChart)
 }
 
 /** Nombre de la pantalla actual para mostrarlo tenue en la barra superior -- así siempre se ve

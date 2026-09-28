@@ -21,8 +21,10 @@ import kotlin.math.abs
  * por segmento de semana de atraso abajo. Mismo patrón de captura (lápiz -> AlertDialog) que
  * PenalizacionScreen.kt. */
 @Composable
-fun ComisionScreen(viewModel: ComisionViewModel) {
-    val fila by viewModel.item.collectAsState()
+fun ComisionScreen(viewModel: ComisionViewModel, metaPlan: Double = 0.0) {
+    val filaGuardada by viewModel.item.collectAsState()
+    // La meta del periodo ya no se captura aquí: se toma de "Meta Plan" en Tabla de Velocidades
+    val fila = filaGuardada.copy(meta = metaPlan)
     var mostrarEditor by remember { mutableStateOf(false) }
     val calculo = fila.calcular()
 
@@ -32,7 +34,7 @@ fun ComisionScreen(viewModel: ComisionViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Comisión", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Comisión Individual", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             IconButton(onClick = { mostrarEditor = true }) {
                 Icon(Icons.Default.Edit, contentDescription = "Editar datos")
             }
@@ -117,13 +119,17 @@ private fun EditorComisionDialog(inicial: ComisionEntity, onDismiss: () -> Unit,
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Editar Comisión") },
+        title = { Text("Editar Comisión Individual") },
         text = {
             Column(
                 modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                CampoNumeroComision("Meta del periodo", meta) { meta = it }
+                OutlinedTextField(
+                    value = meta, onValueChange = {}, enabled = false, singleLine = true,
+                    label = { Text("Meta del periodo (de Meta Plan)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Text("Semanas 1 a 2", style = MaterialTheme.typography.labelLarge, color = ClayPrimary)
                 CampoNumeroComision("Al momento", momento12) { momento12 = it }
                 CampoNumeroComision("Indirecta", indirecta12) { indirecta12 = it }

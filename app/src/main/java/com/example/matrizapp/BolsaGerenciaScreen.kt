@@ -32,7 +32,7 @@ fun BolsaGerenciaScreen(viewModel: BolsaGerenciaViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Bolsa Gerencia", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Bolsa Gerencial", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             IconButton(onClick = { mostrarEditor = true }) {
                 Icon(Icons.Default.Edit, contentDescription = "Editar datos")
             }
@@ -104,7 +104,7 @@ private fun EditorBolsaGerenciaDialog(inicial: BolsaGerenciaEntity, onDismiss: (
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Editar Bolsa Gerencia") },
+        title = { Text("Editar Bolsa Gerencial") },
         text = {
             Column(
                 modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),

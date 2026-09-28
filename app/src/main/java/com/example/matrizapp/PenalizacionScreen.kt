@@ -30,7 +30,7 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Penalización", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Tabla de Velocidades", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             IconButton(onClick = { mostrarEditor = true }) {
                 Icon(Icons.Default.Edit, contentDescription = "Editar datos")
             }
@@ -39,15 +39,15 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
 
         SeccionTitulo("Semana")
         ClayCard {
-            FilaDato("Plan 100%", formatMoney(fila.plan100))
-            FilaDato("Total", formatMoney(fila.total), destacado = true)
+            FilaDato("Meta Plan", formatMoney(fila.plan100))
+            FilaDato("Total Cobrado", formatMoney(fila.total), destacado = true)
             FilaDato("Avance vs plan", formatPercent(calculo.planAvance))
         }
 
         SeccionTitulo("Semanas 3-6")
         ClayCard {
-            FilaDato("Reque 3-6", formatMoney(fila.reque36))
-            FilaDato("$ 3-6", formatMoney(fila.monto36))
+            FilaDato("Requerido Pisado", formatMoney(fila.reque36))
+            FilaDato("Requerido Cobrado", formatMoney(fila.monto36))
             FilaDato("% 3-6", formatPercent(calculo.porcentaje36))
             FilaDato("$ Arriba", formatMoney(calculo.arriba))
             FilaDato("Reque a favor", formatMoney(calculo.requeFavor))
@@ -56,7 +56,7 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
         SeccionTitulo("Cartera")
         ClayCard {
             if (fila.rk.isNotBlank()) FilaDato("RK", fila.rk)
-            FilaDato("CU Pase", fila.cuPase.toString())
+            FilaDato("Cuentas de Pase", fila.cuPase.toString())
             FilaDato("$ Capital", formatMoney(fila.capital))
             FilaDato("Pérdida", formatMoney(calculo.perdida))
         }
@@ -94,18 +94,18 @@ private fun EditorVelocidadDialog(inicial: VelocidadEntity, onDismiss: () -> Uni
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Editar Penalización") },
+        title = { Text("Editar Tabla de Velocidades") },
         text = {
             Column(
                 modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CampoTexto("RK", rk) { rk = it }
-                CampoNumero("Plan 100% (meta semanal)", plan100) { plan100 = it }
-                CampoNumero("Total", total) { total = it }
-                CampoNumero("Reque 3-6", reque36) { reque36 = it }
-                CampoNumero("$ 3-6", monto36) { monto36 = it }
-                CampoNumero("CU Pase", cuPase) { cuPase = it }
+                CampoNumero("Meta Plan", plan100) { plan100 = it }
+                CampoNumero("Total Cobrado", total) { total = it }
+                CampoNumero("Requerido Pisado", reque36) { reque36 = it }
+                CampoNumero("Requerido Cobrado", monto36) { monto36 = it }
+                CampoNumero("Cuentas de Pase", cuPase) { cuPase = it }
                 CampoNumero("$ Capital", capital) { capital = it }
                 CampoNumero("Días operados", diasOp) { diasOp = it }
             }

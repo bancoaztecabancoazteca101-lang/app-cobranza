@@ -26,10 +26,10 @@ fun ControlScreen(
         modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        ControlMenuCard("Penalización", onNavigateToPenalizacion)
-        ControlMenuCard("Comisión", onNavigateToComision)
-        ControlMenuCard("Avance", onNavigateToAvance)
-        ControlMenuCard("Bolsa Gerencia", onNavigateToBolsaGerencia)
+        ControlMenuCard("Tabla de Velocidades", onNavigateToPenalizacion)
+        ControlMenuCard("Comisión Individual", onNavigateToComision)
+        ControlMenuCard("Requerido Pisado", onNavigateToAvance)
+        ControlMenuCard("Bolsa Gerencial", onNavigateToBolsaGerencia)
     }
 }
 
