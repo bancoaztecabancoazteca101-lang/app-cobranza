@@ -109,7 +109,6 @@ class MatrizViewModel(
         fecha: Long?, hora: String?, ruta: String?, folioP: String?,
         descuentoPago: String? = null, descuentoAhorro: String? = null,
         ref3: String? = null, ref4: String? = null, diaPago: String? = null, domicilioLaboral: String? = null,
-        diasAtraso: String? = null, diasApertura: String? = null,
         diasAtraso: String? = null, diasApertura: String? = null
     ) {
         viewModelScope.launch {
