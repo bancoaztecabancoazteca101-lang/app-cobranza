@@ -1379,9 +1379,14 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
                 // línea por línea) porque el OCR a veces separa la etiqueta y el número en
                 // bloques distintos que igual quedan consecutivos en visionText.text.
                 val textoCompleto = java.text.Normalizer.normalize(visionText.text, java.text.Normalizer.Form.NFC)
-                val montoMatch = Regex("(?i)Requerido\\s*\\$?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)").find(textoCompleto)
+                // Monto: si viene con comas de miles se corta en el último grupo de 3 dígitos (así "$5,39336 días"
+                // no se traga el "36" de los días); sin comas toma todos los dígitos.
+                val montoMatch = Regex("(?i)Requerido\\s*\\$?\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+(?:\\.\\d{1,2})?)").find(textoCompleto)
                 val monto = montoMatch?.groupValues?.get(1)?.let { "$$it" }
-                val diasMatch = Regex("(?i)([0-9]+)\\s*d[ií]as?\\s*de\\s*atraso").find(textoCompleto)
+                // Días de atraso: se busca en el texto SIN el monto, y solo se exige "de atr" porque en fotos
+                // con la pantalla cortada la palabra "atraso" sale incompleta ("36 días de atras").
+                val textoSinMonto = montoMatch?.let { textoCompleto.removeRange(it.range) } ?: textoCompleto
+                val diasMatch = Regex("(?i)(\\d{1,3})\\s*d[ií]as?\\s*de\\s*a").find(textoSinMonto)
                 val semana = diasMatch?.groupValues?.get(1)?.toIntOrNull()?.let { diasAtrasoASemana(it).toString() }
                 val cu = patronCuOcr.find(textoCompleto)?.aCu()
                 val diasAtrasoTxt = diasMatch?.groupValues?.get(1)?.toIntOrNull()?.toString()
