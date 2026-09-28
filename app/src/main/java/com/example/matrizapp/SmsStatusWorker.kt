@@ -81,8 +81,9 @@ object SmsStatusLocalConfig {
             .edit().putStringSet(KEY_SENT_EVENTS, values).apply()
     }
 
-    private fun eventKey(rowId: String, status: String): String =
-        rowId + "|" + status.uppercase()
+    private fun eventKey(rowId: String, status: String, extra: String = ""): String =
+        if (extra.isBlank()) rowId + "|" + status.uppercase()
+        else rowId + "|" + extra + "|" + status.uppercase()
 
     private fun baselineStatus(
         context: Context,
@@ -112,14 +113,14 @@ object SmsStatusLocalConfig {
         if (changed) saveSentEvents(context, sent)
     }
 
-    fun markSent(context: Context, rowId: String, status: String) {
+    fun markSent(context: Context, rowId: String, status: String, extra: String = "") {
         val sent = getSentEvents(context).toMutableSet()
-        sent.add(eventKey(rowId, status))
+        sent.add(eventKey(rowId, status, extra))
         saveSentEvents(context, sent)
     }
 
-    fun wasSent(context: Context, rowId: String, status: String): Boolean =
-        eventKey(rowId, status) in getSentEvents(context)
+    fun wasSent(context: Context, rowId: String, status: String, extra: String = ""): Boolean =
+        eventKey(rowId, status, extra) in getSentEvents(context)
 }
 
 class SmsStatusWorker(
@@ -137,11 +138,12 @@ class SmsStatusWorker(
         val container = (context as MainApplication).container
         val registros = container.database.matrizDao().getAllMatriz().first()
 
-        SmsStatusLocalConfig.baseline(context, statuses, registros)
-
         val subId = SmsStatusLocalConfig.getSubscriptionId(context)
         if (!SmsHelper.tienePermisos(context)) return Result.failure()
 
+        val ahora = System.currentTimeMillis()
+        val hoyCal = java.util.Calendar.getInstance()
+        val dia = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date(ahora))
         var enviados = 0
         for (registro in registros) {
             val status = registro.estado.trim().uppercase()
@@ -149,7 +151,22 @@ class SmsStatusWorker(
 
             val telefono = registro.numTT.trim()
             if (telefono.isBlank()) continue
-            if (SmsStatusLocalConfig.wasSent(context, registro.id, status)) continue
+
+            // Solo registros de HOY con Hora fijada: el SMS sale a esa hora, una sola vez
+            val hora = registro.hora?.trim().orEmpty()
+            if (hora.isBlank()) continue
+            val fechaReg = registro.fecha ?: continue
+            if (!esMismoDia(fechaReg, hoyCal)) continue
+            val trigger = triggerDeHoy(hora) ?: continue
+
+            val extra = dia + "@" + hora
+            if (SmsStatusLocalConfig.wasSent(context, registro.id, status, extra)) continue
+
+            if (ahora < trigger) {
+                programarEn(context, registro.id, trigger - ahora)
+                continue
+            }
+            if (ahora - trigger > GRACIA_MS) continue // ya pasó demasiado: no se manda tarde
 
             val semana = registro.semana.toIntOrNull()?.coerceIn(1, 5) ?: 1
             val plantilla = container.database.plantillaSmsDao()
@@ -165,7 +182,7 @@ class SmsStatusWorker(
             )
 
             if (SmsHelper.enviarSms(context, subId, telefono, mensaje)) {
-                SmsStatusLocalConfig.markSent(context, registro.id, status)
+                SmsStatusLocalConfig.markSent(context, registro.id, status, extra)
                 enviados++
                 if (enviados < 20) delay(3000)
             }
@@ -176,6 +193,34 @@ class SmsStatusWorker(
 
     companion object {
         private const val PERIODIC_NAME = "sms_status_periodic"
+        private const val GRACIA_MS = 60 * 60 * 1000L
+
+        private fun esMismoDia(millis: Long, hoy: java.util.Calendar): Boolean {
+            val c = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+            return c.get(java.util.Calendar.YEAR) == hoy.get(java.util.Calendar.YEAR) &&
+                c.get(java.util.Calendar.DAY_OF_YEAR) == hoy.get(java.util.Calendar.DAY_OF_YEAR)
+        }
+
+        private fun triggerDeHoy(hora: String): Long? {
+            val partes = hora.split(":").mapNotNull { it.trim().toIntOrNull() }
+            if (partes.size < 2) return null
+            return java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, partes[0])
+                set(java.util.Calendar.MINUTE, partes[1])
+                set(java.util.Calendar.SECOND, if (partes.size > 2) partes[2] else 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        }
+
+        private fun programarEn(context: Context, rowId: String, delayMs: Long) {
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "sms_status_at_" + rowId,
+                ExistingWorkPolicy.REPLACE,
+                OneTimeWorkRequestBuilder<SmsStatusWorker>()
+                    .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+                    .build()
+            )
+        }
 
         fun programarPeriodicamente(context: Context) {
             val request = PeriodicWorkRequestBuilder<SmsStatusWorker>(
