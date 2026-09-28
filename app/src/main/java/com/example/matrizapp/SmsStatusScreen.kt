@@ -102,7 +102,7 @@ fun SmsStatusScreen(onBack: () -> Unit = {}) {
         Spacer(Modifier.height(12.dp))
         Text("Status que disparan SMS", style = MaterialTheme.typography.titleMedium)
         Text(
-            "Activa uno o varios. El SMS se envía al número del Titular (NumTT) usando la plantilla TT de su semana.",
+            "Activa uno o varios. El SMS se envía al número del Titular (NumTT) a la Hora que tenga el registro (solo hoy, una sola vez).",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 4.dp)
@@ -132,6 +132,30 @@ fun SmsStatusScreen(onBack: () -> Unit = {}) {
                         )
                     }
                 }
+            }
+
+            item {
+                var textoMensaje by remember { mutableStateOf(SmsStatusLocalConfig.getMessageTemplate(context)) }
+                Spacer(Modifier.height(8.dp))
+                Text("Mensaje del recordatorio", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Puedes usar %nombre%, %monto% y %hora%. Es independiente de las plantillas del flujo automático.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = textoMensaje,
+                    onValueChange = {
+                        textoMensaje = it
+                        SmsStatusLocalConfig.setMessageTemplate(context, it)
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    minLines = 3
+                )
+                TextButton(onClick = {
+                    textoMensaje = SmsStatusLocalConfig.DEFAULT_TEMPLATE
+                    SmsStatusLocalConfig.setMessageTemplate(context, SmsStatusLocalConfig.DEFAULT_TEMPLATE)
+                }) { Text("Restaurar texto original") }
             }
 
             item {

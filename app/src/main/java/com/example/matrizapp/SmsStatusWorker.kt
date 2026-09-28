@@ -41,6 +41,20 @@ object SmsStatusLocalConfig {
             .apply()
     }
 
+    const val DEFAULT_TEMPLATE =
+        "Hola %nombre%, le recordamos su pago acordado para hoy a las %hora%. Banco Azteca."
+
+    fun getMessageTemplate(context: Context): String =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString("message_template", null)
+            ?.takeIf { it.isNotBlank() }
+            ?: DEFAULT_TEMPLATE
+
+    fun setMessageTemplate(context: Context, text: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString("message_template", text).apply()
+    }
+
     fun isSenderEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getBoolean(KEY_SENDER_ENABLED, false)
@@ -168,18 +182,11 @@ class SmsStatusWorker(
             }
             if (ahora - trigger > GRACIA_MS) continue // ya pasó demasiado: no se manda tarde
 
-            val semana = registro.semana.toIntOrNull()?.coerceIn(1, 5) ?: 1
-            val plantilla = container.database.plantillaSmsDao()
-                .obtenerActivasPara("TT", semana)
-                .firstOrNull()?.texto
-                ?: PlantillasSemillaSms.textoDeFabrica("TT", semana, 1)
-                ?: "Hola %nombre%, tiene un pago pendiente%monto% con Banco Azteca."
-
             val mensaje = SmsHelper.armarMensaje(
-                plantilla = plantilla,
+                plantilla = SmsStatusLocalConfig.getMessageTemplate(context),
                 nombre = registro.nombre,
                 monto = registro.requisito
-            )
+            ).replace("%hora%", hora, ignoreCase = true)
 
             if (SmsHelper.enviarSms(context, subId, telefono, mensaje)) {
                 SmsStatusLocalConfig.markSent(context, registro.id, status, extra)
