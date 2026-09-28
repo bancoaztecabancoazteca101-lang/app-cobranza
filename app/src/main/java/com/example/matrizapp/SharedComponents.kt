@@ -1382,8 +1382,8 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
                 // Monto: si viene con comas de miles se corta en el último grupo de 3 dígitos (así "$5,39336 días"
                 // no se traga el "36" de los días); sin comas toma todos los dígitos.
                 val patronMonto = "\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+(?:\\.\\d{1,2})?"
-                // 1) Por etiqueta ("Requerido $X"), tolerando que el OCR estropee la R o la u.
-                var montoMatch = Regex("(?i)[qg]u?erido\\s*\\$?\\s*($patronMonto)").find(textoCompleto)
+                // 1) Por etiqueta ("Requerido $X" o "Mínimo $X", los dos formatos de la app), tolerando OCR imperfecto.
+                var montoMatch = Regex("(?i)(?:[qg]u?erido|m[ií]n[ií]mo)\\s*\\$?\\s*($patronMonto)").find(textoCompleto)
                 // 2) Respaldo si la etiqueta no se leyó: el monto en $ que va antes de "días de atraso"
                 //    (o el último $ de la foto), ignorando el de "Último pago $X el ...".
                 if (montoMatch == null) {
