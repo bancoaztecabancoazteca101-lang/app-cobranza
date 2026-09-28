@@ -1381,9 +1381,21 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
                 val textoCompleto = java.text.Normalizer.normalize(visionText.text, java.text.Normalizer.Form.NFC)
                 // Monto: si viene con comas de miles se corta en el último grupo de 3 dígitos (así "$5,39336 días"
                 // no se traga el "36" de los días); sin comas toma todos los dígitos.
-                val montoMatch = Regex("(?i)Requerido\\s*\\$?\\s*(\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+(?:\\.\\d{1,2})?)").find(textoCompleto)
+                val patronMonto = "\\d{1,3}(?:,\\d{3})+(?:\\.\\d{1,2})?|\\d+(?:\\.\\d{1,2})?"
+                // 1) Por etiqueta ("Requerido $X"), tolerando que el OCR estropee la R o la u.
+                var montoMatch = Regex("(?i)[qg]u?erido\\s*\\$?\\s*($patronMonto)").find(textoCompleto)
+                // 2) Respaldo si la etiqueta no se leyó: el monto en $ que va antes de "días de atraso"
+                //    (o el último $ de la foto), ignorando el de "Último pago $X el ...".
+                if (montoMatch == null) {
+                    val diasIdx = Regex("(?i)d[ií]as?\\s*de\\s*a").find(textoCompleto)?.range?.first ?: textoCompleto.length
+                    val candidatos = Regex("\\$\\s*($patronMonto)").findAll(textoCompleto).filter { m ->
+                        val previo = textoCompleto.substring(maxOf(0, m.range.first - 25), m.range.first)
+                        !previo.contains("pago", ignoreCase = true)
+                    }.toList()
+                    montoMatch = candidatos.lastOrNull { it.range.first < diasIdx } ?: candidatos.lastOrNull()
+                }
                 val monto = montoMatch?.groupValues?.get(1)?.let { "$$it" }
-                // Días de atraso: se busca en el texto SIN el monto, y solo se exige "de atr" porque en fotos
+                // Días de atraso: se busca en el texto SIN el monto, y solo se exige "de a" porque en fotos
                 // con la pantalla cortada la palabra "atraso" sale incompleta ("36 días de atras").
                 val textoSinMonto = montoMatch?.let { textoCompleto.removeRange(it.range) } ?: textoCompleto
                 val diasMatch = Regex("(?i)(\\d{1,3})\\s*d[ií]as?\\s*de\\s*a").find(textoSinMonto)
