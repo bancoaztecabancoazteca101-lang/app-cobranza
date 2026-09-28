@@ -334,7 +334,8 @@ fun MatrizFullFormDialog(
     onSave: (id: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String,
              observaciones: String, estado: String, ubicacion: String, fecha: Long, hora: String, ruta: String, folioP: String,
              descuentoPago: String, descuentoAhorro: String,
-             ref3: String, ref4: String, diaPago: String, domicilioLaboral: String) -> Unit,
+             ref3: String, ref4: String, diaPago: String, domicilioLaboral: String,
+             diasAtraso: String, diasApertura: String) -> Unit,
     // Ref 3/Ref 4/Día de pago/Domicilio Laboral solo existen en matriz_table (no en Pase): el
     // alta de Pase pasa false para no mostrar campos que luego no se guardarían en ningún lado.
     mostrarCamposExtra: Boolean = true,
@@ -373,6 +374,8 @@ fun MatrizFullFormDialog(
     var ref4 by remember { mutableStateOf(item?.ref4 ?: "") }
     var diaPago by remember { mutableStateOf(item?.diaPago ?: "") }
     var domicilioLaboral by remember { mutableStateOf(item?.domicilioLaboral ?: "") }
+    var diasAtraso by remember { mutableStateOf(item?.diasAtraso ?: "") }
+    var diasApertura by remember { mutableStateOf(item?.diasApertura ?: "") }
     var buscandoUbicacionLaboral by remember { mutableStateOf(false) }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
     var buscandoUbicacion by remember { mutableStateOf(esNuevo && prefill?.ubicacion.isNullOrBlank()) }
@@ -396,12 +399,16 @@ fun MatrizFullFormDialog(
         coroutineScope.launch {
             val datos = extraerDatosClienteDeImagen(context, uri)
             buscandoNombrePorFoto = false
-            if (datos.nombre.isNullOrBlank() && datos.monto.isNullOrBlank() && datos.semana.isNullOrBlank() && datos.cu.isNullOrBlank()) {
+            if (datos.nombre.isNullOrBlank() && datos.monto.isNullOrBlank() && datos.semana.isNullOrBlank() && datos.cu.isNullOrBlank() && datos.diasAtraso.isNullOrBlank()) {
                 Toast.makeText(context, "No se detectó un nombre en la foto, intenta con otra más clara", Toast.LENGTH_LONG).show()
             } else {
                 if (!datos.nombre.isNullOrBlank()) nombre = datos.nombre
                 if (!datos.monto.isNullOrBlank()) requisito = datos.monto
                 if (!datos.semana.isNullOrBlank()) semana = datos.semana
+                if (!datos.diasAtraso.isNullOrBlank()) {
+                    diasAtraso = datos.diasAtraso
+                    diasApertura = calcularDiasApertura(datos.diasAtraso.toInt()).toString()
+                }
                 if (!datos.cu.isNullOrBlank() && folioP.isBlank()) folioP = datos.cu
             }
         }
@@ -462,11 +469,44 @@ fun MatrizFullFormDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = semana, onValueChange = { semana = it }, label = { Text("Sem") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (mostrarCamposExtra) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = semana, onValueChange = { semana = it }, label = { Text("Sem") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = diasAtraso,
+                            onValueChange = { nuevo ->
+                                diasAtraso = nuevo.filter { it.isDigit() }.take(4)
+                                // Apertura se recalcula con el día actual solo cuando cambia Días de atraso
+                                // (así un registro guardado no se mueve solo al abrirlo otro día).
+                                diasApertura = diasAtraso.toIntOrNull()?.let { calcularDiasApertura(it).toString() } ?: ""
+                            },
+                            label = { Text("Días atraso") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = diasApertura, onValueChange = {}, readOnly = true, label = { Text("Días apertura") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = diasApertura.toIntOrNull()?.let { diasAperturaASemanas(it).toString() } ?: "",
+                            onValueChange = {}, readOnly = true, label = { Text("Sem apertura") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = semana, onValueChange = { semana = it }, label = { Text("Sem") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 OutlinedTextField(
                     value = requisito, onValueChange = { requisito = it }, label = { Text("Req") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -703,7 +743,7 @@ fun MatrizFullFormDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(idEditable, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fechaMillis, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral)
+                    onSave(idEditable, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fechaMillis, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura)
                 },
                 enabled = nombre.isNotBlank() && idEditable.isNotBlank()
             ) { Text("Guardar") }
@@ -1260,7 +1300,21 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
 /** Resultado del OCR usado en el diálogo de Editar/Nuevo registro: nombre, monto "Requerido",
  * semana de atraso (calculada a partir de los "días de atraso") y CU detectados en la misma
  * foto (los cuatro nullable de forma independiente, puede venir solo alguno de ellos). */
-data class DatosClienteOcr(val nombre: String?, val monto: String?, val semana: String?, val cu: String?)
+data class DatosClienteOcr(val nombre: String?, val monto: String?, val semana: String?, val cu: String?, val diasAtraso: String? = null)
+
+/** Días transcurridos desde el lunes de la semana actual (lunes=0 ... domingo=6). */
+fun diasDesdeLunes(hoy: java.util.Calendar = java.util.Calendar.getInstance()): Int =
+    (hoy.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
+
+/** Días de atraso que el cliente tenía el lunes de esta semana (apertura): días de atraso de hoy
+ * menos los días que han pasado desde el lunes. Ej.: hoy sábado (5 días desde lunes), 20 de atraso -> 15. */
+fun calcularDiasApertura(diasAtraso: Int, hoy: java.util.Calendar = java.util.Calendar.getInstance()): Int =
+    (diasAtraso - diasDesdeLunes(hoy)).coerceAtLeast(0)
+
+/** Tabla de Diego (cortes "menos de"): menos de 6 días = semana 1, menos de 13 = 2, menos de 20 = 3,
+ * menos de 27 = 4, menos de 34 = 5, menos de 41 = 6, menos de 48 = 7, 48 o más = 8. Tabla base: 1 a 6, 6 a 13, ... 41 a 48
+ * (el límite superior ya pertenece a la semana siguiente). 0 días = 0 (no traía atraso el lunes). */
+fun diasAperturaASemanas(dias: Int): Int = if (dias < 1) 0 else ((dias + 1) / 7) + 1
 
 /** Mismo patrón de 4 bloques que `patronCu` en PaseFotoImport.kt (CU formato
  * 01-01-01627-89102: 2-2-5-5 dígitos), pero tolerante al separador: en fotos tomadas con
@@ -1330,7 +1384,8 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
                 val diasMatch = Regex("(?i)([0-9]+)\\s*d[ií]as?\\s*de\\s*atraso").find(textoCompleto)
                 val semana = diasMatch?.groupValues?.get(1)?.toIntOrNull()?.let { diasAtrasoASemana(it).toString() }
                 val cu = patronCuOcr.find(textoCompleto)?.aCu()
-                if (cont.isActive) cont.resume(DatosClienteOcr(mejorLinea?.uppercase(), monto, semana, cu)) {}
+                val diasAtrasoTxt = diasMatch?.groupValues?.get(1)?.toIntOrNull()?.toString()
+                if (cont.isActive) cont.resume(DatosClienteOcr(mejorLinea?.uppercase(), monto, semana, cu, diasAtrasoTxt)) {}
             }
             .addOnFailureListener { if (cont.isActive) cont.resume(DatosClienteOcr(null, null, null, null)) {} }
     } catch (e: Exception) {

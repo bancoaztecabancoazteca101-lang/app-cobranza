@@ -349,8 +349,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
     paradaFormulario?.let { parada ->
         val registro = matrizList.firstOrNull { it.id == parada.cuMatrizMatch }
         if (registro != null) {
-            MatrizFullFormDialog(registro, matrizViewModel, onDismiss = { paradaFormulario = null }, onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral ->
-                matrizViewModel.cambiarIdYGuardar(registro.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral) { exito, error ->
+            MatrizFullFormDialog(registro, matrizViewModel, onDismiss = { paradaFormulario = null }, onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura ->
+                matrizViewModel.cambiarIdYGuardar(registro.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura) { exito, error ->
                     if (!exito) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
                     else if (idEditado.trim().isNotBlank() && idEditado.trim() != registro.id) viewModel.vincularConMatriz(parada.id, idEditado.trim())
                 }
@@ -362,8 +362,8 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
                 viewModel = matrizViewModel,
                 prefill = viewModel.prefillMatrizDesdeParada(parada),
                 onDismiss = { paradaFormulario = null },
-                onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral ->
-                    matrizViewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral) { creado ->
+                onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura ->
+                    matrizViewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura) { creado ->
                         viewModel.vincularConMatriz(parada.id, creado.id)
                     }
                     paradaFormulario = null

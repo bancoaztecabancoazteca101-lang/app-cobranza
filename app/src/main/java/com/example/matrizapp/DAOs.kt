@@ -32,14 +32,16 @@ interface MatrizDao {
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
         ubicacion = :ubicacion, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP,
         descuentoPago = :descuentoPago, descuentoAhorro = :descuentoAhorro,
-        ref3 = :ref3, ref4 = :ref4, diaPago = :diaPago, domicilioLaboral = :domicilioLaboral, isDirty = 1
+        ref3 = :ref3, ref4 = :ref4, diaPago = :diaPago, domicilioLaboral = :domicilioLaboral,
+        diasAtraso = :diasAtraso, diasApertura = :diasApertura, isDirty = 1
         WHERE id = :id""")
     suspend fun updateRegistroCompleto(
         id: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
         fecha: Long?, hora: String?, ruta: String?, folioP: String?,
         descuentoPago: String?, descuentoAhorro: String?,
-        ref3: String?, ref4: String?, diaPago: String?, domicilioLaboral: String?
+        ref3: String?, ref4: String?, diaPago: String?, domicilioLaboral: String?,
+        diasAtraso: String?, diasApertura: String?
     )
     @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
