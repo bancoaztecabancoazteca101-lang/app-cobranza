@@ -1320,7 +1320,7 @@ fun diasAperturaASemanas(dias: Int): Int = if (dias < 1) 0 else ((dias + 1) / 7)
  * 01-01-01627-89102: 2-2-5-5 dígitos), pero tolerante al separador: en fotos tomadas con
  * cámara (con glare/ruido, no capturas limpias) ML Kit a veces lee el guion como espacio o
  * como guion largo (–/—) en vez de "-". Los grupos se reconstruyen siempre con "-" normal. */
-private val patronCuOcr = Regex("(?<!\\d)(\\d{1,2})[\\s\\-–—](\\d{1,2})[\\s\\-–—](\\d{3,6})[\\s\\-–—](\\d{3,6})(?!\\d)")
+private val patronCuOcr = Regex("(?<!\\d)(\\d{1,2})[\\s\\-–—](\\d{1,2})[\\s\\-–—](\\d{3,6})[\\s\\-–—](\\d{3,8})(?!\\d)")
 private fun MatchResult.aCu(): String = "${groupValues[1]}-${groupValues[2]}-${groupValues[3]}-${groupValues[4]}"
 
 /** Convierte "días de atraso" (como lo muestra la app de Banco Azteca) a la "Sem" que usa

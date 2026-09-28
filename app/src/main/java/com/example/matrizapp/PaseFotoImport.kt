@@ -55,7 +55,7 @@ private fun esFlores(valor: String): Boolean {
 
 private fun puntoMedio(a: Float, b: Float): Float = (a + b) / 2f
 
-private val patronCu = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,6}(?!\\d)")
+private val patronCu = Regex("(?<!\\d)\\d{1,2}-\\d{1,2}-\\d{3,6}-\\d{3,8}(?!\\d)")
 private val patronImporte = Regex("\\$?\\s*[0-9OIL]{1,3}(?:[,.][0-9OIL]{3})*(?:[,.][0-9OIL]{1,2})?")
 
 private enum class ColumnaObjetivo {
