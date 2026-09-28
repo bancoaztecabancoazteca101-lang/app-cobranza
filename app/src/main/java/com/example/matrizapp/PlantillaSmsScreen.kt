@@ -31,7 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-private val AZUL_ACENTO_PLANTILLAS = Color(0xFF1565C0)
+private val AZUL_ACENTO_PLANTILLAS: Color @Composable get() = ClayPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,7 +102,7 @@ private fun PlantillaCard(plantilla: PlantillaSmsEntity, onGuardar: (String) -> 
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = if (plantilla.texto.isBlank()) Color(0xFFF5F5F5) else Color(0xFFE3F2FD))
+        colors = CardDefaults.cardColors(containerColor = if (plantilla.texto.isBlank()) ClayNeutralContainer else ClayBlueContainer)
     ) {
         Column(Modifier.padding(12.dp)) {
             Text(

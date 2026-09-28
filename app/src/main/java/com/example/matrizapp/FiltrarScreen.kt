@@ -187,7 +187,7 @@ fun FiltrarDetailDialog(
                     val hayTelefono = cercano.ref1.isNotBlank() || cercano.ref2.isNotBlank()
                     if (hayTelefono) {
                         if (cercano.yaAgregado) {
-                            Text("✓ Agregado como contacto de ${item.nombre}", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
+                            Text("✓ Agregado como contacto de ${item.nombre}", style = MaterialTheme.typography.labelSmall, color = ClayGreenSuccess)
                         } else {
                             OutlinedButton(onClick = { onAgregarContacto(cercano) }, modifier = Modifier.padding(top = 2.dp)) {
                                 Text("Agregar como contacto de ${item.nombre}")
@@ -223,7 +223,7 @@ fun FiltrarItemCard(item: FiltrarItem, onCardClick: () -> Unit, onEditClick: () 
                 Text("Cercanos por GPS:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 item.cercanos.forEach { c ->
                     Surface(
-                        color = if (c.yaAgregado) Color(0xFFE8F5E9) else Color.Transparent,
+                        color = if (c.yaAgregado) ClayGreenContainer else Color.Transparent,
                         shape = MaterialTheme.shapes.small,
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -240,7 +240,7 @@ fun FiltrarItemCard(item: FiltrarItem, onCardClick: () -> Unit, onEditClick: () 
                                 Text(
                                     "✓ CONTACTO AGREGADO",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF2E7D32),
+                                    color = ClayGreenSuccess,
                                     fontWeight = FontWeight.Bold
                                 )
                             }

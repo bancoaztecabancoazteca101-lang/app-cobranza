@@ -57,7 +57,7 @@ import androidx.compose.ui.unit.dp
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-private val AZUL_ACENTO = Color(0xFF1565C0)
+private val AZUL_ACENTO: Color @Composable get() = ClayPrimary
 private val FORMATO_HORA = DateTimeFormatter.ofPattern("HH:mm")
 
 /** Desde Android 12 (API 31) el sistema exige que el usuario autorice manualmente las alarmas
@@ -246,7 +246,7 @@ private fun PruebaClienteCard(onProbar: (String) -> Unit) {
     var idCliente by remember { mutableStateOf("") }
     Card(
         modifier = Modifier.fillMaxWidth().padding(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+        colors = CardDefaults.cardColors(containerColor = ClayNeutralContainer)
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Probar cliente ahora", style = MaterialTheme.typography.titleMedium)
@@ -275,7 +275,7 @@ private fun PruebaClienteCard(onProbar: (String) -> Unit) {
 private fun InterruptorGeneralCard(activa: Boolean, onCambiar: (Boolean) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(12.dp),
-        colors = CardDefaults.cardColors(containerColor = if (activa) Color(0xFFE3F2FD) else Color(0xFFF5F5F5))
+        colors = CardDefaults.cardColors(containerColor = if (activa) ClayBlueContainer else ClayNeutralContainer)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -308,7 +308,7 @@ private fun InterruptorGeneralCard(activa: Boolean, onCambiar: (Boolean) -> Unit
 private fun InterruptorCatchupCard(activa: Boolean, onCambiar: (Boolean) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-        colors = CardDefaults.cardColors(containerColor = if (activa) Color(0xFFE3F2FD) else Color(0xFFF5F5F5))
+        colors = CardDefaults.cardColors(containerColor = if (activa) ClayBlueContainer else ClayNeutralContainer)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -464,7 +464,7 @@ private fun FrecuenciaPorSemanaCard(
                                 Text(
                                     if (regla.catchupActivo) "Catchup" else "Catchup apagado",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (regla.catchupActivo) Color.Gray else Color(0xFFB00020)
+                                    color = if (regla.catchupActivo) Color.Gray else ClayRedText
                                 )
                                 Switch(
                                     checked = regla.catchupActivo,
@@ -495,21 +495,21 @@ private fun FrecuenciaPorSemanaCard(
 private fun PermisoAlarmasBanner(onAutorizar: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD))
+        colors = CardDefaults.cardColors(containerColor = ClayYellowContainer)
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFF8A6D00))
+                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFFC107))
                 Text(
                     "  Falta autorizar alarmas exactas",
                     style = MaterialTheme.typography.titleSmall,
-                    color = Color(0xFF5C4600)
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
             Text(
                 "Sin este permiso, los bloques quedan guardados pero no se van a disparar solos cada día.",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF5C4600),
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
             )
             Button(onClick = onAutorizar) { Text("Autorizar en Ajustes") }
@@ -528,7 +528,7 @@ private fun BloqueCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (bloque.activo) Color(0xFFE3F2FD) else Color(0xFFF5F5F5)
+            containerColor = if (bloque.activo) ClayBlueContainer else ClayNeutralContainer
         )
     ) {
         Row(

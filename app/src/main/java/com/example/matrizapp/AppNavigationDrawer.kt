@@ -47,6 +47,14 @@ fun AppNavigationDrawer(
         androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri -> uri?.let(onTicketFotoSeleccionada) }
 
+    val itemColors = NavigationDrawerItemDefaults.colors(
+        unselectedContainerColor = Color.Transparent,
+        selectedContainerColor = ClayPrimaryContainer,
+        unselectedTextColor = ClayOnSurface,
+        selectedTextColor = ClayOnSurface,
+        unselectedIconColor = ClayPrimary,
+        selectedIconColor = ClayPrimary
+    )
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -70,7 +78,7 @@ fun AppNavigationDrawer(
                     Spacer(modifier = Modifier.height(12.dp))
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = Color.White,
+                        color = ClaySurface,
                         shadowElevation = 2.dp
                     ) {
                         Row(
@@ -96,7 +104,7 @@ fun AppNavigationDrawer(
                 Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     Text(text = "FLUJO DE TRABAJO", style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        NavigationDrawerItem(icon = { Icon(Icons.Default.TableChart, contentDescription = null) }, label = { Text("Matriz") }, selected = currentRoute == "matriz", onClick = { onNavigate("matriz"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                        NavigationDrawerItem(icon = { Icon(Icons.Default.TableChart, contentDescription = null) }, label = { Text("Matriz") }, selected = currentRoute == "matriz", onClick = { onNavigate("matriz"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
                         if (backfillCuEnProgreso) {
                             CircularProgressIndicator(
                                 modifier = Modifier.align(Alignment.CenterEnd).padding(end = 28.dp).size(20.dp),
@@ -109,15 +117,15 @@ fun AppNavigationDrawer(
                             ) { Icon(Icons.Default.DocumentScanner, contentDescription = "Recuperar CU faltantes", tint = ClayPrimary) }
                         }
                     }
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Assignment, contentDescription = null) }, label = { Text("Pase") }, selected = currentRoute == "pase", onClick = { onNavigate("pase"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Description, contentDescription = null) }, label = { Text("Solicitud") }, selected = currentRoute == "solicitud", onClick = { onNavigate("solicitud"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Route, contentDescription = null) }, label = { Text("Ruta IA") }, selected = currentRoute == "ruta_ia", onClick = { onNavigate("ruta_ia"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.FileDownload, contentDescription = null) }, label = { Text("Exportar Matriz") }, selected = currentRoute == "exportar_matriz", onClick = { onNavigate("exportar_matriz"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Assignment, contentDescription = null) }, label = { Text("Pase") }, selected = currentRoute == "pase", onClick = { onNavigate("pase"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Description, contentDescription = null) }, label = { Text("Solicitud") }, selected = currentRoute == "solicitud", onClick = { onNavigate("solicitud"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Route, contentDescription = null) }, label = { Text("Ruta IA") }, selected = currentRoute == "ruta_ia", onClick = { onNavigate("ruta_ia"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.FileDownload, contentDescription = null) }, label = { Text("Exportar Matriz") }, selected = currentRoute == "exportar_matriz", onClick = { onNavigate("exportar_matriz"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
 
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
                     Text(text = "HERRAMIENTAS", style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        NavigationDrawerItem(icon = { Icon(Icons.Default.FilterList, contentDescription = null) }, label = { Text("Filtro Fecha") }, selected = currentRoute == "filtro", onClick = { onNavigate("filtro"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                        NavigationDrawerItem(icon = { Icon(Icons.Default.FilterList, contentDescription = null) }, label = { Text("Filtro Fecha") }, selected = currentRoute == "filtro", onClick = { onNavigate("filtro"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
                         if (ticketPagoEnProgreso) {
                             CircularProgressIndicator(
                                 modifier = Modifier.align(Alignment.CenterEnd).padding(end = 28.dp).size(20.dp),
@@ -130,9 +138,9 @@ fun AppNavigationDrawer(
                             ) { Icon(Icons.Default.DocumentScanner, contentDescription = "Escanear ticket de cobranza", tint = ClayPrimary) }
                         }
                     }
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Tune, contentDescription = null) }, label = { Text("Filtrar") }, selected = currentRoute == "filtrar", onClick = { onNavigate("filtrar"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.BarChart, contentDescription = null) }, label = { Text("Control") }, selected = currentRoute == "control", onClick = { onNavigate("control"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Map, contentDescription = null) }, label = { Text("Ubi") }, selected = currentRoute == "ubi", onClick = { onNavigate("ubi"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Tune, contentDescription = null) }, label = { Text("Filtrar") }, selected = currentRoute == "filtrar", onClick = { onNavigate("filtrar"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.BarChart, contentDescription = null) }, label = { Text("Control") }, selected = currentRoute == "control", onClick = { onNavigate("control"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Map, contentDescription = null) }, label = { Text("Ubi") }, selected = currentRoute == "ubi", onClick = { onNavigate("ubi"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Devices, contentDescription = null) },
                         label = { Text("Dispositivos") },
@@ -141,24 +149,26 @@ fun AppNavigationDrawer(
                             context.startActivity(Intent(context, NotificacionesDispositivosActivity::class.java))
                             scope.launch { drawerState.close() }
                         },
-                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                        colors = itemColors
                     )
 
                     Divider(modifier = Modifier.padding(vertical = 8.dp))
                     Text(text = "CONSULTA", style = MaterialTheme.typography.labelSmall, color = Color.Gray, modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Visibility, contentDescription = null) }, label = { Text("Semana 6") }, selected = currentRoute == "sem6", onClick = { onNavigate("sem6"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Send, contentDescription = null) }, label = { Text("SMS") }, selected = currentRoute == "sms", onClick = { onNavigate("sms"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Call, contentDescription = null) }, label = { Text("Llamadas") }, selected = currentRoute == "llamadas", onClick = { onNavigate("llamadas"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Schedule, contentDescription = null) }, label = { Text("Bloques de horario") }, selected = currentRoute == "bloques_llamada", onClick = { onNavigate("bloques_llamada"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.Message, contentDescription = null) }, label = { Text("Plantillas de SMS") }, selected = currentRoute == "plantillas_sms", onClick = { onNavigate("plantillas_sms"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
-                    NavigationDrawerItem(icon = { Icon(Icons.Default.BugReport, contentDescription = null) }, label = { Text("Diagnóstico") }, selected = currentRoute == "diagnostico", onClick = { onNavigate("diagnostico"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding))
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Visibility, contentDescription = null) }, label = { Text("Semana 6") }, selected = currentRoute == "sem6", onClick = { onNavigate("sem6"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Send, contentDescription = null) }, label = { Text("SMS") }, selected = currentRoute == "sms", onClick = { onNavigate("sms"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Call, contentDescription = null) }, label = { Text("Llamadas") }, selected = currentRoute == "llamadas", onClick = { onNavigate("llamadas"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Schedule, contentDescription = null) }, label = { Text("Bloques de horario") }, selected = currentRoute == "bloques_llamada", onClick = { onNavigate("bloques_llamada"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Message, contentDescription = null) }, label = { Text("Plantillas de SMS") }, selected = currentRoute == "plantillas_sms", onClick = { onNavigate("plantillas_sms"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.BugReport, contentDescription = null) }, label = { Text("Diagnóstico") }, selected = currentRoute == "diagnostico", onClick = { onNavigate("diagnostico"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Notifications, contentDescription = null) },
                         label = { Text("Notificaciones") },
                         badge = { if (notificacionesAppCount > 0) Badge { Text("$notificacionesAppCount") } },
                         selected = currentRoute == "notificaciones_app",
                         onClick = { onNavigate("notificaciones_app"); scope.launch { drawerState.close() } },
-                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
+                        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                        colors = itemColors
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }

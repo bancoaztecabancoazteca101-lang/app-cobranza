@@ -131,11 +131,11 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
         }
 
         error?.let { msg ->
-            Surface(color = Color(0xFFFFEBEE)) {
+            Surface(color = ClayRedContainer) {
                 Text(
                     text = "No se pudo actualizar: $msg. Mostrando el último dato disponible.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFC62828),
+                    color = ClayRedText,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
@@ -199,8 +199,8 @@ private fun formatCapitalTotal(v: Double): String {
 @Composable
 fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) {
     val cardColor = when {
-        item.susceptible.equals("Recuperado", ignoreCase = true) -> Color(0xFFDCEDD9)
-        item.susceptible.equals("Susceptible", ignoreCase = true) -> Color(0xFFFFF3C4)
+        item.susceptible.equals("Recuperado", ignoreCase = true) -> ClayGreenContainer
+        item.susceptible.equals("Susceptible", ignoreCase = true) -> ClayYellowContainer
         else -> ClaySurface
     }
     ClayCard(onClick = onClick, containerColor = cardColor) {
@@ -274,7 +274,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                 Text(item.nombre, modifier = Modifier.weight(1f))
                 IconButton(onClick = { mostrarConfirmarEliminar = true }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Eliminar registro de Semana 6", tint = Color(0xFFC62828))
+                    Icon(Icons.Default.Delete, contentDescription = "Eliminar registro de Semana 6", tint = ClayRedText)
                 }
             }
         },
@@ -353,7 +353,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                 )
 
                 errorNotas?.let { msg ->
-                    Text(msg, color = Color(0xFFC62828), style = MaterialTheme.typography.bodySmall)
+                    Text(msg, color = ClayRedText, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -383,7 +383,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
             text = {
                 Column {
                     Text("¿Seguro que quieres eliminar a \"${item.nombre}\" de esta semana? Esto borra la fila en Google Sheets y no se puede deshacer.")
-                    errorRegistro?.let { msg -> Text(msg, color = Color(0xFFC62828), style = MaterialTheme.typography.bodySmall) }
+                    errorRegistro?.let { msg -> Text(msg, color = ClayRedText, style = MaterialTheme.typography.bodySmall) }
                 }
             },
             confirmButton = {
@@ -394,7 +394,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                         }
                     },
                     enabled = !isGuardandoRegistro,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+                    colors = ButtonDefaults.buttonColors(containerColor = ClayRedText)
                 ) {
                     if (isGuardandoRegistro) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
@@ -462,7 +462,7 @@ fun Sem6NuevoRegistroDialog(viewModel: Sem6ViewModel, onDismiss: () -> Unit, onC
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
-                errorRegistro?.let { msg -> Text(msg, color = Color(0xFFC62828), style = MaterialTheme.typography.bodySmall) }
+                errorRegistro?.let { msg -> Text(msg, color = ClayRedText, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {

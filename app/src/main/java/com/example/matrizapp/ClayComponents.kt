@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,17 +22,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// Color Palette - Claymorphism Style
-val ClayBackground = Color(0xFFF3F7FD)
-val ClaySurface = Color(0xFFEAF1FB)
-val ClayPrimary = Color(0xFF1565C0)
-val ClayPrimaryContainer = Color(0xFFD2E4FF)
-val ClayOnSurface = Color(0xFF1D1B20)
-val ClayGreenSuccess = Color(0xFF2E7D32)
+// Paleta que sigue el modo del dispositivo. Oscuro = igual a la hoja Matriz: fondo negro,
+// texto blanco, iconos de color. Son getters @Composable: solo se pueden leer dentro de composables.
+@Composable @ReadOnlyComposable private fun dark(): Boolean = isSystemInDarkTheme()
+
+val ClayBackground: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF101417) else Color(0xFFF3F7FD)
+val ClaySurface: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF1B2126) else Color(0xFFEAF1FB)
+val ClayPrimary: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF64B5F6) else Color(0xFF1565C0)
+val ClayPrimaryContainer: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF0F2B45) else Color(0xFFD2E4FF)
+val ClayOnSurface: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFFFFFFFF) else Color(0xFF1D1B20)
+val ClayGreenSuccess: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF66BB6A) else Color(0xFF2E7D32)
+val ClayRedText: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFFEF5350) else Color(0xFFC62828)
 val ClayWhatsAppGreen = Color(0xFF25D366)
 val ClayMapsRed = Color(0xFFE53935)
 val ClayCallBlue = Color(0xFF1976D2)
 val ClaySmsTeal = Color(0xFF00897B)
+
+// Fondos de tarjetas de color (antes pasteles fijos que en oscuro dejaban texto blanco sobre blanco)
+val ClayNeutralContainer: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF1B2126) else Color(0xFFF5F5F5)
+val ClayBlueContainer: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF12304D) else Color(0xFFE3F2FD)
+val ClayGreenContainer: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF14301C) else Color(0xFFE8F5E9)
+val ClayYellowContainer: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF3A3210) else Color(0xFFFFF3C4)
+val ClayOrangeContainer: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF3D2A12) else Color(0xFFFFE0B2)
+val ClayRedContainer: Color @Composable @ReadOnlyComposable get() = if (dark()) Color(0xFF3A1A1C) else Color(0xFFFFEBEE)
 
 @Composable
 fun ClayCard(
@@ -72,7 +85,7 @@ fun AppSearchBar(
             .fillMaxWidth()
             .padding(12.dp),
         shape = RoundedCornerShape(20.dp),
-        color = Color.White,
+        color = ClaySurface,
         shadowElevation = 4.dp
     ) {
         Row(
@@ -192,7 +205,7 @@ fun CustomerClayCard(
             Text(text = "Ref 2: $ref2", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         }
         if (!observaciones.isNullOrBlank()) {
-            Text(text = "Obs: $observaciones", style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
+            Text(text = "Obs: $observaciones", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         }
         if (!status.isNullOrBlank()) {
             Text(text = "Estatus: $status", style = MaterialTheme.typography.labelMedium, color = ClayPrimary)

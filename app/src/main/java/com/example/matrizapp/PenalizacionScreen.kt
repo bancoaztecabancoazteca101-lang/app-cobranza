@@ -175,11 +175,12 @@ private fun FilaDato(etiqueta: String, valor: String, destacado: Boolean = false
     }
 }
 
+@Composable
 private fun colorParaValor(valor: String): Color {
     val negativo = valor.trim().startsWith("-")
     return when {
-        negativo -> Color(0xFFC62828)
-        valor.contains("$") || valor.contains("%") -> Color(0xFF2E7D32)
+        negativo -> ClayRedText
+        valor.contains("$") || valor.contains("%") -> ClayGreenSuccess
         else -> Color.Unspecified
     }
 }

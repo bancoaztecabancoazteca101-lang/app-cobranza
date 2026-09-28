@@ -451,7 +451,7 @@ private fun RutaIANuevaCard(
     // Azul = ya está en Matriz (ya agregado o coincidía); naranja = aún NO está en Matriz (hay que
     // registrarlo con el botón "Matriz" para no duplicar). "Visitado" ya no cambia el fondo: se
     // marca con borde verde para no perder la información de azul/naranja.
-    val colorFondo = if (enMatriz) Color(0xFFE3F2FD) else Color(0xFFFFE0B2)
+    val colorFondo = if (enMatriz) ClayBlueContainer else ClayOrangeContainer
     var alturaTarjetaPx by remember { mutableStateOf(0f) }
     Card(
         // Tocar la tarjeta abre la ruta en Google Maps hacia la parada
@@ -463,7 +463,7 @@ private fun RutaIANuevaCard(
             .shadow(if (arrastrando) 10.dp else 0.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = colorFondo),
-        border = if (visitado) androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF2E7D32)) else null
+        border = if (visitado) androidx.compose.foundation.BorderStroke(2.dp, ClayGreenSuccess) else null
     ) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

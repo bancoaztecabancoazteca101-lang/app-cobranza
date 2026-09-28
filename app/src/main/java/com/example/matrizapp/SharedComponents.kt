@@ -998,7 +998,7 @@ fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: andro
         modifier = Modifier
             .size(size)
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFE0E0E0))
+            .background(ClayNeutralContainer)
             .then(
                 if (uriResuelta != null) Modifier.clickable { mostrarGrande = true } else Modifier
             ),

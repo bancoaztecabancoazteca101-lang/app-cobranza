@@ -217,7 +217,7 @@ fun MatrizItemCard(
         onClick = onCardClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (pagado) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surface
+            containerColor = if (pagado) ClayGreenContainer else MaterialTheme.colorScheme.surface
         )
     ) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
