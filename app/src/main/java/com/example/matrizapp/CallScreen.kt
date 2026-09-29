@@ -36,6 +36,8 @@ private fun nombreTipoLlamada(t: TipoLlamada): String = when (t) {
     TipoLlamada.TT -> "Titular"
     TipoLlamada.REF1 -> "Ref 1"
     TipoLlamada.REF2 -> "Ref 2"
+    TipoLlamada.REF3 -> "Ref 3"
+    TipoLlamada.REF4 -> "Ref 4"
 }
 
 @Composable
@@ -96,7 +98,7 @@ fun CallScreen(viewModel: CallViewModel) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         )
 
-        TabRow(selectedTabIndex = tipo.ordinal) {
+        ScrollableTabRow(selectedTabIndex = tipo.ordinal, edgePadding = 0.dp) {
             TipoLlamada.values().forEach { t ->
                 Tab(
                     selected = tipo == t,

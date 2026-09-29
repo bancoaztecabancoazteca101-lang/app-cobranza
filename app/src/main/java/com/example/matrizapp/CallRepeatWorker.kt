@@ -50,6 +50,8 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
                 TipoLlamada.TT -> registro.numTT
                 TipoLlamada.REF1 -> registro.ref1
                 TipoLlamada.REF2 -> registro.ref2
+                TipoLlamada.REF3 -> registro.ref3
+                TipoLlamada.REF4 -> registro.ref4
             }
             if (telefono.isNullOrBlank()) continue
             CallHelper.realizarLlamada(applicationContext, subId, telefono, ocultarNumero = ocultarNumero)

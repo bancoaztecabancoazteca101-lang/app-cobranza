@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 enum class EstadoLlamada { PENDIENTE, LLAMANDO, HECHA }
-enum class TipoLlamada { TT, REF1, REF2 }
+enum class TipoLlamada { TT, REF1, REF2, REF3, REF4 }
 
 data class LlamadaItem(
     val id: String, val nombre: String, val tipo: TipoLlamada, val telefono: String,
@@ -117,7 +117,9 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
     private val _plantillaSmsPorTipo: Map<TipoLlamada, MutableStateFlow<String>> = mapOf(
         TipoLlamada.TT to MutableStateFlow(PLANTILLA_SMS_TT_DEFAULT),
         TipoLlamada.REF1 to MutableStateFlow(PLANTILLA_SMS_REF_DEFAULT),
-        TipoLlamada.REF2 to MutableStateFlow(PLANTILLA_SMS_REF_DEFAULT)
+        TipoLlamada.REF2 to MutableStateFlow(PLANTILLA_SMS_REF_DEFAULT),
+        TipoLlamada.REF3 to MutableStateFlow(PLANTILLA_SMS_REF_DEFAULT),
+        TipoLlamada.REF4 to MutableStateFlow(PLANTILLA_SMS_REF_DEFAULT)
     )
     fun plantillaSmsFlow(t: TipoLlamada): StateFlow<String> = _plantillaSmsPorTipo.getValue(t)
     fun setPlantillaSms(t: TipoLlamada, texto: String) { _plantillaSmsPorTipo.getValue(t).value = texto }
@@ -161,6 +163,8 @@ class CallViewModel(private val matrizDao: MatrizDao, private val workManager: W
                 TipoLlamada.TT -> r.numTT
                 TipoLlamada.REF1 -> r.ref1
                 TipoLlamada.REF2 -> r.ref2
+                TipoLlamada.REF3 -> r.ref3
+                TipoLlamada.REF4 -> r.ref4
             }
             if (telefono.isNullOrBlank()) return@mapNotNull null
             LlamadaItem(r.id, r.nombre, tipoActual, telefono, r.requisito, r.ubicacion, r.id !in excluidos, estados[r.id] ?: EstadoLlamada.PENDIENTE)
