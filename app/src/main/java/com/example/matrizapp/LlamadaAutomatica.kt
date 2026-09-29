@@ -210,6 +210,30 @@ class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
 // duración máxima) — independiente de la pantalla manual de
 // Llamadas, para que ajustar una no afecte a la otra.
 // ============================================================
+/** Marca `numero`, silencia el micrófono mientras dura y espera a que termine (o la cuelga a la
+ * fuerza al llegar a la duración máxima). Compartido por la llamada al titular y a cada Ref. */
+private suspend fun llamarSilenciadoYEsperar(context: Context, subIdLlamada: Int?, numero: String, config: ConfiguracionAutomatizacionEntity) {
+    CallHelper.realizarLlamada(context, subIdLlamada, numero, ocultarNumero = config.ocultarNumero)
+    delay(2_000)
+    // Silencia el micrófono del lado del titular durante la llamada automática -- es un
+    // recordatorio unidireccional, no una conversación, así que no debe captar audio
+    // ambiente mientras espera a que conteste o cuelgue. Se restaura al terminar para no
+    // dejar el micrófono mudo en llamadas manuales posteriores.
+    // try/finally con NonCancellable: si el interruptor se apaga (o el Worker se cancela
+    // por tag) MIENTRAS esperamos a que la llamada termine, esperarFinOForzarColgar se
+    // corta por la cancelación -- pero eso dejaría la llamada activa y el micrófono mudo.
+    // El finally cuelga y des-silencia igual, aunque la corrutina ya esté cancelándose.
+    CallHelper.silenciarMicrofono(context, true)
+    try {
+        CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaLlamada * 1_000L)
+    } finally {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            if (CallHelper.llamadaActiva(context)) CallHelper.colgarLlamadaConFallback(context)
+            CallHelper.silenciarMicrofono(context, false)
+        }
+    }
+}
+
 private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, config: ConfiguracionAutomatizacionEntity, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao, contactoExtraDao: ContactoExtraDao): String {
     // Devuelve un resumen de lo que se hizo -- lo usa probarClienteAhora() (botón de prueba en
     // Bloques de horario) para mostrarle a Diego exactamente qué se mandó y qué no, sin tener
@@ -220,25 +244,7 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
     if (r.numTT.isNotBlank()) {
         resumen.appendLine("• Llamada + SMS normal a TT (${r.numTT})")
-        CallHelper.realizarLlamada(context, subIdLlamada, r.numTT, ocultarNumero = config.ocultarNumero)
-        delay(2_000)
-        // Silencia el micrófono del lado del titular durante la llamada automática -- es un
-        // recordatorio unidireccional, no una conversación, así que no debe captar audio
-        // ambiente mientras espera a que conteste o cuelgue. Se restaura al terminar para no
-        // dejar el micrófono mudo en llamadas manuales posteriores.
-        // try/finally con NonCancellable: si el interruptor se apaga (o el Worker se cancela
-        // por tag) MIENTRAS esperamos a que la llamada termine, esperarFinOForzarColgar se
-        // corta por la cancelación -- pero eso dejaría la llamada activa y el micrófono mudo.
-        // El finally cuelga y des-silencia igual, aunque la corrutina ya esté cancelándose.
-        CallHelper.silenciarMicrofono(context, true)
-        try {
-            CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaLlamada * 1_000L)
-        } finally {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                if (CallHelper.llamadaActiva(context)) CallHelper.colgarLlamadaConFallback(context)
-                CallHelper.silenciarMicrofono(context, false)
-            }
-        }
+        llamarSilenciadoYEsperar(context, subIdLlamada, r.numTT, config)
         SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
         // Oferta de descuento del día: se agrega como línea extra después del SMS normal,
         // solo al titular -- nunca a Ref1/Ref2 (ver el forEach de telefonosReferencia abajo,
@@ -253,16 +259,25 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     } else {
         resumen.appendLine("• Sin NumTT -- no se llamó ni se mandó nada al titular")
     }
-    // Referencias propias del cliente (Ref1/Ref2 capturados en Matriz) + referencias extra
+    // Referencias propias del cliente (Ref1 a Ref4 capturados en Matriz) + referencias extra
     // confirmadas a mano desde Filtrar (números de un "cercano" que probablemente conoce al
-    // titular) -- todas reciben el mismo mensaje de referencia, mencionando siempre el nombre
-    // del titular (r.nombre), nunca el del cercano de donde salió el número.
-    val telefonosReferencia = listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }) +
-        contactoExtraDao.obtenerPara(r.id).map { it.telefono }
+    // titular). A CADA una se le llama (mismo silenciado de micrófono y duración máxima que al
+    // titular) y después se le manda el mensaje de referencia, mencionando siempre el nombre
+    // del titular (r.nombre), nunca el del cercano de donde salió el número. Se omiten números
+    // repetidos (por sus últimos 10 dígitos), el mismo del titular (ya se llamó) y basura sin
+    // dígitos suficientes (ej. "N/A").
+    fun ultimos10(t: String) = t.filter { it.isDigit() }.takeLast(10)
+    val ttDigitos = ultimos10(r.numTT)
+    val telefonosReferencia = (listOf(r.ref1, r.ref2, r.ref3, r.ref4) + contactoExtraDao.obtenerPara(r.id).map { it.telefono })
+        .mapNotNull { it?.trim()?.takeIf { t -> t.filter { c -> c.isDigit() }.length >= 7 } }
+        .distinctBy { ultimos10(it) }
+        .filter { ttDigitos.isEmpty() || ultimos10(it) != ttDigitos }
     telefonosReferencia.forEach { tel ->
+        llamarSilenciadoYEsperar(context, subIdLlamada, tel, config)
         SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
     }
-    if (telefonosReferencia.isNotEmpty()) resumen.appendLine("• SMS de referencia a ${telefonosReferencia.size} número(s)")
+    if (telefonosReferencia.isNotEmpty()) resumen.appendLine("• Llamada + SMS de referencia a ${telefonosReferencia.size} número(s): ${telefonosReferencia.joinToString(", ")}")
+    else resumen.appendLine("• Sin referencias con número válido (Ref1-Ref4 / contactos extra)")
     return resumen.toString().trim()
 }
 
