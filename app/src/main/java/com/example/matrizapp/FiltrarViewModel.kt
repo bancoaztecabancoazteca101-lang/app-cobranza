@@ -31,6 +31,14 @@ data class CercanoDetalle(
     val yaAgregado: Boolean = false
 )
 
+/** Una solicitud (solicitud_table) cuya ubicación (GPS) cae a <= 10 m del registro de Matriz de la
+ * tarjeta -- se usa para identificar en Filtrar que ese cliente "viene de solicitud". */
+data class SolicitudCoincide(
+    val id: String,
+    val nombre: String,
+    val distanciaM: Int
+)
+
 /** El titular con Status = "Filtrar", solo con lo que de verdad se ocupa de él (nombre, foto,
  * dirección) más la lista de registros encontrados cerca con sus datos completos. Guarda también
  * el MatrizEntity original completo (para el diálogo de "Actualizar Gestión", que sí necesita
@@ -42,7 +50,8 @@ data class FiltrarItem(
     val imagen: String?,
     val ubicacion: String?,
     val cercanos: List<CercanoDetalle>,
-    val original: MatrizEntity
+    val original: MatrizEntity,
+    val solicitudes: List<SolicitudCoincide> = emptyList()
 )
 
 /**
@@ -98,7 +107,8 @@ class FiltrarViewModel(
     private val workManager: WorkManager,
     val driveHelper: DriveHelper,
     private val repository: SheetsRepository,
-    private val contactoExtraDao: ContactoExtraDao
+    private val contactoExtraDao: ContactoExtraDao,
+    private val solicitudDao: SolicitudDao
 ) : ViewModel() {
 
     private fun inicioDeHoy(): Long = java.time.LocalDate.now()
@@ -106,12 +116,18 @@ class FiltrarViewModel(
     private fun finDeHoy(): Long = java.time.LocalDate.now().plusDays(1)
         .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
 
-    val items: StateFlow<List<FiltrarItem>> = combine(matrizDao.getAllMatriz(), contactoExtraDao.observarTodos()) { todos, extras ->
+    val items: StateFlow<List<FiltrarItem>> = combine(
+        matrizDao.getAllMatriz(), contactoExtraDao.observarTodos(), solicitudDao.getAllSolicitud()
+    ) { todos, extras, solicitudes ->
         val agregados = extras.map { it.clienteId to it.nombreOrigen }.toSet()
-        calcularFiltrar(todos.filter { val f = it.fecha; f != null && f in inicioDeHoy()..finDeHoy() }, agregados)
+        calcularFiltrar(todos.filter { val f = it.fecha; f != null && f in inicioDeHoy()..finDeHoy() }, agregados, solicitudes)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private fun calcularFiltrar(todos: List<MatrizEntity>, agregados: Set<Pair<String, String>>): List<FiltrarItem> {
+    private fun calcularFiltrar(
+        todos: List<MatrizEntity>,
+        agregados: Set<Pair<String, String>>,
+        solicitudes: List<SolicitudEntity>
+    ): List<FiltrarItem> {
         // Coordenadas ya parseadas una sola vez para no repetir el parseo por cada comparación.
         val coords = todos.associateWith { parseLatLngOrden(it.ubicacion) }
 
@@ -126,9 +142,25 @@ class FiltrarViewModel(
                 .toList()
         }
 
+        // Solicitudes con coordenadas GPS válidas, parseadas una sola vez. Un registro de Matriz
+        // "viene de solicitud" si su ubicación cae a <= RADIO_CERCANOS_METROS (10 m) de alguna.
+        val solicitudesConCoord = solicitudes.mapNotNull { sol -> parseLatLngOrden(sol.ubicacionRaw)?.let { sol to it } }
+
+        fun solicitudesDe(item: MatrizEntity): List<SolicitudCoincide> {
+            val miCoord = coords[item] ?: return emptyList()
+            return solicitudesConCoord
+                .map { (sol, c) -> sol to distanciaKm(miCoord, c) * 1000.0 }
+                .filter { (_, metros) -> metros <= RADIO_CERCANOS_METROS }
+                .sortedBy { (_, metros) -> metros }
+                .map { (sol, metros) -> SolicitudCoincide(sol.id, sol.nombre, metros.toInt()) }
+        }
+
         val candidatos = todos.filter { item ->
             val manual = item.estado.trim().equals("Filtrar", ignoreCase = true)
             if (manual) return@filter true
+            // Coincide con una solicitud por coordenadas: entra a Filtrar siempre (aunque esté en
+            // zona unidad o no tenga vecinos), porque la coincidencia con la solicitud es específica.
+            if (solicitudesDe(item).isNotEmpty()) return@filter true
             // Antes solo calificaba el miembro de id menor del grupo (para no repetir tarjeta
             // por grupo); ahora, a petición de Diego, la relación es mutua: cualquier miembro
             // con 1 a MAX_VECINOS_AUTOMATICO vecinos a <=10m califica y sale con su propia
@@ -150,9 +182,9 @@ class FiltrarViewModel(
             FiltrarItem(
                 id = item.id, nombre = item.nombre, estado = item.estado,
                 imagen = item.imagenUrl, ubicacion = item.ubicacion, cercanos = cercanos,
-                original = item
+                original = item, solicitudes = solicitudesDe(item)
             )
-        }
+        }.sortedByDescending { it.solicitudes.isNotEmpty() } // los que vienen de solicitud primero (orden estable)
     }
 
     /** Confirma sumar los Ref1/Ref2 de un cercano (encontrado por Filtrar) como contacto extra

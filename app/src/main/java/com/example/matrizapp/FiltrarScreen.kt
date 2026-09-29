@@ -20,6 +20,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
     val context = LocalContext.current
@@ -28,11 +29,14 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
         mutableStateOf(prefs.getBoolean("agregar_automaticamente", false))
     }
     val allItems by viewModel.items.collectAsState()
-    val items = remember(allItems, searchQuery) {
-        if (searchQuery.isBlank()) allItems else allItems.filter { item ->
+    var soloSolicitud by remember { mutableStateOf(false) }
+    val items = remember(allItems, searchQuery, soloSolicitud) {
+        val base = if (soloSolicitud) allItems.filter { it.solicitudes.isNotEmpty() } else allItems
+        if (searchQuery.isBlank()) base else base.filter { item ->
             val q = searchQuery.trim()
             coincideBusqueda(item.nombre, q) ||
-                item.cercanos.any { coincideBusqueda(it.nombre, q) || coincideBusqueda(it.numTT, q) }
+                item.cercanos.any { coincideBusqueda(it.nombre, q) || coincideBusqueda(it.numTT, q) } ||
+                item.solicitudes.any { coincideBusqueda(it.nombre, q) }
         }
     }
     LaunchedEffect(agregarAutomaticamente, allItems) {
@@ -77,6 +81,17 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
                     }
                 )
             }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilterChip(
+                selected = soloSolicitud,
+                onClick = { soloSolicitud = !soloSolicitud },
+                label = { Text("Solo de solicitud (${allItems.count { it.solicitudes.isNotEmpty() }})") }
+            )
         }
 
         if (items.isEmpty()) {
@@ -161,6 +176,14 @@ fun FiltrarDetailDialog(
                 }
                 ColoniaLabel(ubicacion = item.ubicacion, style = MaterialTheme.typography.bodyMedium)
 
+                if (item.solicitudes.isNotEmpty()) {
+                    Divider(modifier = Modifier.padding(top = 4.dp))
+                    Text("Viene de solicitud (10 m):", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    item.solicitudes.forEach { sol ->
+                        Text("${sol.nombre} (${sol.distanciaM} m)", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
                 Divider(modifier = Modifier.padding(top = 4.dp))
                 Text(
                     if (item.cercanos.isEmpty()) "Registros cercanos (10 m): ninguno"
@@ -218,6 +241,17 @@ fun FiltrarItemCard(item: FiltrarItem, onCardClick: () -> Unit, onEditClick: () 
                 StatusBadge(item.estado)
             }
             ColoniaLabel(ubicacion = item.ubicacion)
+            if (item.solicitudes.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text("SOLICITUD", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        item.solicitudes.forEach { sol ->
+                            Text("${sol.nombre} (${sol.distanciaM} m)", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
             if (item.cercanos.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Text("Cercanos por GPS:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
