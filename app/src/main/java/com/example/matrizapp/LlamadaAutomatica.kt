@@ -26,6 +26,7 @@ object AutomatizacionPrefs {
     private const val PREFS_NAME = "automatizacion_prefs"
     private const val KEY_ACTIVA = "activa"
     private const val KEY_CATCHUP_ACTIVA = "catchup_activa"
+    private const val KEY_SOLO_LLAMADAS = "solo_llamadas"
 
     /** Tag común en los Workers de llamada automática (bloque normal y catchup) para poder
      * cancelarlos de inmediato con WorkManager.cancelAllWorkByTag() cuando se apaga el
@@ -47,6 +48,14 @@ object AutomatizacionPrefs {
 
     fun setCatchupActiva(context: Context, valor: Boolean) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_CATCHUP_ACTIVA, valor).apply()
+    }
+
+    /** Modo por dispositivo: los bloques programados siguen haciendo las llamadas, pero no envian SMS. */
+    fun soloLlamadas(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_SOLO_LLAMADAS, false)
+
+    fun setSoloLlamadas(context: Context, valor: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_SOLO_LLAMADAS, valor).apply()
     }
 }
 
@@ -218,8 +227,9 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     val variante = logDao.contarTotalContactos(r.id)
     val subIdLlamada = config.simSeleccionada
     val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
+    val soloLlamadas = AutomatizacionPrefs.soloLlamadas(context)
     if (r.numTT.isNotBlank()) {
-        resumen.appendLine("• Llamada + SMS normal a TT (${r.numTT})")
+        resumen.appendLine(if (soloLlamadas) "• Solo llamada a TT (${r.numTT}) — SMS desactivado en este dispositivo" else "• Llamada + SMS normal a TT (${r.numTT})")
         CallHelper.realizarLlamada(context, subIdLlamada, r.numTT, ocultarNumero = config.ocultarNumero)
         delay(2_000)
         // Silencia el micrófono del lado del titular durante la llamada automática -- es un
@@ -239,17 +249,19 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
                 CallHelper.silenciarMicrofono(context, false)
             }
         }
-        SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
+        if (!soloLlamadas) SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
         // Oferta de descuento del día: se agrega como línea extra después del SMS normal,
         // solo al titular -- nunca a Ref1/Ref2 (ver el forEach de telefonosReferencia abajo,
         // que no la toca). Si no hay descuentoPago/descuentoAhorro capturados hoy, no manda nada.
-        val oferta = MensajesCobranza.ofertaDescuento(r.descuentoPago, r.descuentoAhorro)
-        if (oferta != null) {
-            SmsHelper.enviarSms(context, subIdSms, r.numTT, oferta)
-            resumen.appendLine("• Oferta de descuento SÍ enviada (pago=${r.descuentoPago}, ahorro=${r.descuentoAhorro})")
-        } else {
-            resumen.appendLine("• Oferta de descuento NO enviada -- descuentoPago='${r.descuentoPago}' / descuentoAhorro='${r.descuentoAhorro}' (falta uno o los dos)")
-        }
+        if (!soloLlamadas) {
+            val oferta = MensajesCobranza.ofertaDescuento(r.descuentoPago, r.descuentoAhorro)
+            if (oferta != null) {
+                SmsHelper.enviarSms(context, subIdSms, r.numTT, oferta)
+                resumen.appendLine("• Oferta de descuento SÍ enviada (pago=${r.descuentoPago}, ahorro=${r.descuentoAhorro})")
+            } else {
+                resumen.appendLine("• Oferta de descuento NO enviada -- descuentoPago='${r.descuentoPago}' / descuentoAhorro='${r.descuentoAhorro}' (falta uno o los dos)")
+            }
+        } else resumen.appendLine("• SMS al titular y oferta: NO enviados por modo Solo llamadas")
     } else {
         resumen.appendLine("• Sin NumTT -- no se llamó ni se mandó nada al titular")
     }
@@ -259,10 +271,12 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     // del titular (r.nombre), nunca el del cercano de donde salió el número.
     val telefonosReferencia = listOfNotNull(r.ref1.takeIf { it.isNotBlank() }, r.ref2.takeIf { it.isNotBlank() }) +
         contactoExtraDao.obtenerPara(r.id).map { it.telefono }
-    telefonosReferencia.forEach { tel ->
-        SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
-    }
-    if (telefonosReferencia.isNotEmpty()) resumen.appendLine("• SMS de referencia a ${telefonosReferencia.size} número(s)")
+    if (!soloLlamadas) {
+        telefonosReferencia.forEach { tel ->
+            SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
+        }
+        if (telefonosReferencia.isNotEmpty()) resumen.appendLine("• SMS de referencia a ${telefonosReferencia.size} número(s)")
+    } else if (telefonosReferencia.isNotEmpty()) resumen.appendLine("• SMS de referencia: NO enviados por modo Solo llamadas")
     return resumen.toString().trim()
 }
 
