@@ -77,6 +77,7 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
     val reglasSemana by viewModel.reglasSemana.collectAsState()
     val context = LocalContext.current
     val lineas = remember { SmsHelper.lineasActivas(context) }
+    var soloLlamadas by remember { mutableStateOf(AutomatizacionPrefs.soloLlamadas(context)) }
 
     var mostrarDialogoNuevo by remember { mutableStateOf(false) }
     var bloqueEnEdicion by remember { mutableStateOf<BloqueHorarioEntity?>(null) }
@@ -126,6 +127,15 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                 InterruptorCatchupCard(
                     activa = catchupActiva,
                     onCambiar = { viewModel.setCatchupActiva(it) }
+                )
+            }
+            item {
+                SoloLlamadasProgramadasCard(
+                    activa = soloLlamadas,
+                    onCambiar = {
+                        soloLlamadas = it
+                        AutomatizacionPrefs.setSoloLlamadas(context, it)
+                    }
                 )
             }
             if (!permisoAlarmasOk) {
@@ -334,6 +344,38 @@ private fun InterruptorCatchupCard(activa: Boolean, onCambiar: (Boolean) -> Unit
     }
 }
 
+/** Modo independiente por dispositivo: mantiene las llamadas programadas de los bloques,
+ * pero impide todos los SMS que forman parte de ese flujo automático. No afecta SMS manuales
+ * ni SMS por Status APP. */
+@Composable
+private fun SoloLlamadasProgramadasCard(activa: Boolean, onCambiar: (Boolean) -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = if (activa) Color(0xFFE8F5E9) else Color(0xFFF5F5F5))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Llamadas programadas por dispositivo",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (activa) Color(0xFF2E7D32) else Color.Gray
+                )
+                Text(
+                    if (activa) "ACTIVO — los bloques harán llamadas únicamente; no enviarán SMS"
+                    else "Apagado — los bloques conservan el comportamiento configurado de llamadas + SMS",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+            Switch(checked = activa, onCheckedChange = onCambiar)
+        }
+    }
+}
 /** Configuración exclusiva del flujo automático de Bloques de horario (SIM, ocultar número,
  * pausa entre llamadas, duración máxima) — independiente de la que usa la pantalla manual de
  * Llamadas, para que ajustar una no cambie el comportamiento de la otra. */
