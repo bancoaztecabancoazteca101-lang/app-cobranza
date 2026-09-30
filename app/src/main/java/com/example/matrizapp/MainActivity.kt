@@ -111,6 +111,7 @@ class MainActivity : ComponentActivity() {
                 val paseVm: PaseCarteraViewModel = viewModel(factory = factory)
                 val solicitudVm: SolicitudViewModel = viewModel(factory = factory)
                 val filtroVm: FiltroFechaViewModel = viewModel(factory = factory)
+                val filtroSemanalVm: FiltroSemanalViewModel = viewModel(factory = factory)
                 val filtrarVm: FiltrarViewModel = viewModel(factory = factory)
                 val controlVm: ControlViewModel = viewModel(factory = factory)
                 val sem6Vm: Sem6ViewModel = viewModel(factory = factory)
@@ -291,6 +292,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.PaseCartera.route) { PaseCarteraScreen(paseVm, searchQuery) }
                             composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
                             composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, container.notificacionesHelper, searchQuery) }
+                            composable(Screen.FiltroSemanal.route) { FiltroSemanalScreen(filtroSemanalVm, container.notificacionesHelper, searchQuery) }
                             composable(Screen.Filtrar.route) { FiltrarScreen(filtrarVm, searchQuery) }
                             composable(Screen.Control.route) {
                                 ControlScreen(
@@ -331,6 +333,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object PaseCartera : Screen("pase", "Pase", Icons.Default.AccountBalanceWallet)
     object Solicitud : Screen("solicitud", "Solicitud", Icons.Default.Assignment)
     object FiltroFecha : Screen("filtro", "Filtro Fecha", Icons.Default.DateRange)
+    object FiltroSemanal : Screen("filtro_semanal", "Filtro Semanal", Icons.Default.CalendarViewWeek)
     object Filtrar : Screen("filtrar", "Filtrar", Icons.Default.FilterAlt)
     object Control : Screen("control", "Control", Icons.Default.BarChart)
     object Ubi : Screen("ubi", "Ubi", Icons.Default.Map)
@@ -355,7 +358,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
 /** Nombre de la pantalla actual para mostrarlo tenue en la barra superior -- así siempre se ve
  * en cuál hoja/pantalla estás (Matriz, Filtro Fecha, Pase, etc.), cosa que antes no se mostraba. */
 fun screenTitleFor(route: String): String = listOf(
-    Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.Filtrar,
+    Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.FiltroSemanal, Screen.Filtrar,
     Screen.Control, Screen.Ubi, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada,
     Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Penalizacion,
     Screen.Comision, Screen.Avance, Screen.BolsaGerencia
