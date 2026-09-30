@@ -44,6 +44,7 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
         val registros = container.database.matrizDao().getAllMatriz().first()
         val porId = registros.associateBy { it.id }
 
+        val vistos = mutableSetOf<String>() // mismo número (últimos 10 dígitos) una sola vez por corrida
         for ((i, contactoId) in ids.withIndex()) {
             val registro = porId[contactoId] ?: continue
             // La cola se armó al programar; si desde entonces se marcó Pagado (o en una repetición
@@ -57,6 +58,7 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
                 TipoLlamada.REF4 -> registro.ref4
             }
             if (telefono.isNullOrBlank()) continue
+            if (!vistos.add(ultimos10Digitos(telefono))) continue
             CallHelper.realizarLlamada(applicationContext, subId, telefono, ocultarNumero = ocultarNumero)
             delay(2000)
             // Espera a que termine sola; si sigue activa al llegar a la duración máxima

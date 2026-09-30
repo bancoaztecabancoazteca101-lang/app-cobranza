@@ -35,6 +35,11 @@ interface ContactoLogDao {
     /** Total histórico de contactos a este cliente (todas las fechas) — se usa como índice de
      * rotación de plantillas de SMS, así cada contacto sucesivo usa una variante distinta y no
      * se manda el mismo texto exacto una y otra vez en la semana. */
+    /** ¿Ya se contactó a este cliente en ESTE bloque de hoy? Evita repetir llamadas/SMS cuando
+     * WorkManager reinicia un Worker interrumpido o corren dos Workers del mismo bloque. */
+    @Query("SELECT COUNT(*) FROM contacto_log_table WHERE clienteId = :clienteId AND fechaDia = :fechaDia AND bloqueIndex = :bloqueIndex")
+    suspend fun contarContactosEnBloque(clienteId: String, fechaDia: Long, bloqueIndex: Int): Int
+
     @Query("SELECT COUNT(*) FROM contacto_log_table WHERE clienteId = :clienteId")
     suspend fun contarTotalContactos(clienteId: String): Int
 

@@ -38,6 +38,7 @@ class SmsRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Cor
         // programó), así cada ronda usa el teléfono/monto más reciente si algo cambió.
         val registros = container.database.matrizDao().getAllMatriz().first().filter { it.id in ids && !esPagado(it.estado) }
 
+        val vistos = mutableSetOf<String>() // mismo número (últimos 10 dígitos) una sola vez por corrida
         for ((i, r) in registros.withIndex()) {
             val telefono = when (fuente) {
                 FuenteSms.TT -> r.numTT
@@ -45,6 +46,7 @@ class SmsRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Cor
                 FuenteSms.REF2 -> r.ref2
             }
             if (telefono.isBlank()) continue
+            if (!vistos.add(ultimos10Digitos(telefono))) continue
             val mensaje = SmsHelper.armarMensaje(plantilla, r.nombre, r.requisito, agente, contacto)
             SmsHelper.enviarSms(applicationContext, subId, telefono, mensaje)
             if (i < registros.lastIndex) delay(delaySegundos * 1000L)

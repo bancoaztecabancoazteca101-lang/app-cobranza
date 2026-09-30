@@ -108,3 +108,7 @@ fun coincideBusqueda(texto: String?, query: String): Boolean {
 /** ¿El registro ya está Pagado? Un solo criterio para llamadas, SMS y bloques: tolera
  * mayúsculas y espacios sobrantes ("Pagado ", "PAGADO"). */
 fun esPagado(estado: String?): Boolean = estado?.trim().equals("Pagado", ignoreCase = true)
+
+/** Últimos 10 dígitos de un teléfono: sirve para reconocer el MISMO número aunque venga con
+ * lada, espacios o guiones distintos ("+52 55 1234 5678" == "5512345678"). */
+fun ultimos10Digitos(t: String?): String = (t ?: "").filter { it.isDigit() }.takeLast(10)

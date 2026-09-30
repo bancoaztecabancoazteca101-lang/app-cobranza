@@ -6,11 +6,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -174,7 +176,9 @@ class LlamadaBloqueAlarmReceiver : BroadcastReceiver() {
             .setInputData(workDataOf(LlamadaAutomaticaWorker.KEY_BLOQUE_ID to bloqueId))
             .addTag(AutomatizacionPrefs.TAG_AUTOMATIZACION)
             .build()
-        WorkManager.getInstance(context).enqueue(request)
+        // Cola ÚNICA y en serie: bloques y catchup nunca corren al mismo tiempo (el teléfono no puede
+        // hacer dos llamadas a la vez, y en paralelo mandaban SMS duplicados al mismo número).
+        WorkManager.getInstance(context).enqueueUniqueWork(COLA_AUTOMATICA, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
     companion object { const val EXTRA_BLOQUE_ID = "bloque_id" }
 }
@@ -198,9 +202,22 @@ class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
         val request = OneTimeWorkRequestBuilder<CatchupLlamadaWorker>()
             .addTag(AutomatizacionPrefs.TAG_AUTOMATIZACION)
             .build()
-        WorkManager.getInstance(context).enqueue(request)
+        WorkManager.getInstance(context).enqueueUniqueWork(COLA_AUTOMATICA, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 }
+
+private const val COLA_AUTOMATICA = "automatizacion_llamadas_cola"
+
+/** Reclama (check + insert atómico dentro del proceso) el contacto de `clienteId` en este bloque.
+ * Devuelve false si ya se le contactó en este bloque hoy: reintento del Worker tras ser
+ * interrumpido, o Worker duplicado. Se reclama ANTES de llamar, así ni un reinicio a mitad de
+ * cliente ni dos Workers repiten los SMS. */
+private val reclamoMutex = kotlinx.coroutines.sync.Mutex()
+private suspend fun reclamarContactoEnBloque(logDao: ContactoLogDao, clienteId: String, fechaDia: Long, bloqueIndex: Int): Boolean =
+    reclamoMutex.withLock {
+        if (logDao.contarContactosEnBloque(clienteId, fechaDia, bloqueIndex) > 0) false
+        else { logDao.insertar(ContactoLogEntity(clienteId = clienteId, fechaDia = fechaDia, bloqueIndex = bloqueIndex)); true }
+    }
 
 // ============================================================
 // Lógica de contacto compartida entre el worker de bloque normal
@@ -234,16 +251,17 @@ private suspend fun llamarSilenciadoYEsperar(context: Context, subIdLlamada: Int
     }
 }
 
-private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, config: ConfiguracionAutomatizacionEntity, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao, contactoExtraDao: ContactoExtraDao): String {
+private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: MatrizEntity, sem: Int, config: ConfiguracionAutomatizacionEntity, logDao: ContactoLogDao, plantillaDao: PlantillaSmsDao, contactoExtraDao: ContactoExtraDao, yaContactados: MutableSet<String>? = null, varianteFija: Int? = null): String {
     // Devuelve un resumen de lo que se hizo -- lo usa probarClienteAhora() (botón de prueba en
     // Bloques de horario) para mostrarle a Diego exactamente qué se mandó y qué no, sin tener
     // que esperar a que corra un bloque real ni adivinar por qué algo no llegó.
     val resumen = StringBuilder()
-    val variante = logDao.contarTotalContactos(r.id)
+    val variante = varianteFija ?: logDao.contarTotalContactos(r.id)
     val subIdLlamada = config.simSeleccionada
     val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
     if (r.numTT.isNotBlank()) {
         resumen.appendLine("• Llamada + SMS normal a TT (${r.numTT})")
+        yaContactados?.add(ultimos10Digitos(r.numTT))
         llamarSilenciadoYEsperar(context, subIdLlamada, r.numTT, config)
         SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
         // Oferta de descuento del día: se agrega como línea extra después del SMS normal,
@@ -272,6 +290,10 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         .mapNotNull { it?.trim()?.takeIf { t -> t.filter { c -> c.isDigit() }.length >= 7 } }
         .distinctBy { ultimos10(it) }
         .filter { ttDigitos.isEmpty() || ultimos10(it) != ttDigitos }
+        // Una referencia compartida por varios clientes (o que ya es titular de otro) se contacta
+        // UNA sola vez por corrida: antes recibía un SMS (y llamada) por cada cliente, todos juntos.
+        .filter { yaContactados == null || ultimos10(it) !in yaContactados }
+    yaContactados?.addAll(telefonosReferencia.map { ultimos10(it) })
     telefonosReferencia.forEach { tel ->
         llamarSilenciadoYEsperar(context, subIdLlamada, tel, config)
         SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
@@ -344,6 +366,7 @@ class LlamadaAutomaticaWorker(
         val reglas = reglaSemanaDao.obtenerMapaOSembrar()
         val hoyMillis = inicioDeDiaMillis(LocalDate.now())
         var esPrimerContacto = true
+        val yaContactados = mutableSetOf<String>() // teléfonos ya contactados en esta corrida (dedup de referencias compartidas)
 
         for (r in registros) {
             // Chequeo por-cliente (no solo al inicio de doWork()): si el interruptor se apaga
@@ -360,6 +383,9 @@ class LlamadaAutomaticaWorker(
             val bloqueAltaIndex = ReglaRepeticion.calcularBloqueDeAlta(fechaAlta, bloquesActivos)
             if (!ReglaRepeticion.debeContactarseEnBloque(sem, bloqueActualIndex, bloqueAltaIndex, reglas)) continue
 
+            // Ya contactado en este bloque (Worker reiniciado por Android): no repetir ni esperar la pausa.
+            if (logDao.contarContactosEnBloque(r.id, hoyMillis, bloqueActualIndex) > 0) continue
+
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
             esPrimerContacto = false
             // Relee el registro justo antes de llamar (la lista `registros` es una foto de cuando
@@ -368,8 +394,9 @@ class LlamadaAutomaticaWorker(
             val fresco = matrizDao.getById(r.id) ?: continue
             if (esPagado(fresco.estado)) continue
             if (!AutomatizacionPrefs.activa(applicationContext)) break
-            procesarClienteLlamadaAutomatica(applicationContext, fresco, sem, config, logDao, plantillaDao, contactoExtraDao)
-            logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = hoyMillis, bloqueIndex = bloqueActualIndex))
+            val variante = logDao.contarTotalContactos(r.id) // antes de reclamar, para no correr la rotación de plantillas
+            if (!reclamarContactoEnBloque(logDao, r.id, hoyMillis, bloqueActualIndex)) continue
+            procesarClienteLlamadaAutomatica(applicationContext, fresco, sem, config, logDao, plantillaDao, contactoExtraDao, yaContactados, variante)
         }
         return Result.success()
     }
@@ -408,6 +435,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
         val ayer = LocalDate.now().minusDays(1)
         val ayerMillis = inicioDeDiaMillis(ayer)
         var esPrimerContacto = true
+        val yaContactados = mutableSetOf<String>()
 
         for (r in registros) {
             // Mismo chequeo por-cliente que el worker de bloque normal (ver comentario ahí):
@@ -438,7 +466,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
             val fresco = matrizDao.getById(r.id) ?: continue // relee: puede haberse marcado Pagado durante la pausa
             if (esPagado(fresco.estado)) continue
             if (!AutomatizacionPrefs.activa(applicationContext)) break
-            procesarClienteLlamadaAutomatica(applicationContext, fresco, sem, config, logDao, plantillaDao, contactoExtraDao)
+            procesarClienteLlamadaAutomatica(applicationContext, fresco, sem, config, logDao, plantillaDao, contactoExtraDao, yaContactados)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = ayerMillis, bloqueIndex = -1))
         }
 
