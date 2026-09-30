@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 class SolicitudViewModel(
     private val repository: SheetsRepository,
     private val solicitudDao: SolicitudDao,
+    private val matrizDao: MatrizDao,
     private val audioHelper: AudioHelper,
     private val workManager: WorkManager,
     val driveHelper: DriveHelper
@@ -45,6 +46,10 @@ class SolicitudViewModel(
         .flatMapLatest { (o, loc) ->
             solicitudDao.getAllSolicitud().map { list -> ordenar(list, o, loc) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Cartera de Matriz (local, Room) para buscar clientes al agregar un registro a Solicitud. */
+    val matrizList: StateFlow<List<MatrizEntity>> = matrizDao.getAllMatriz()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording

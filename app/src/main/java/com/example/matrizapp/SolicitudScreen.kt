@@ -3,6 +3,7 @@ import android.Manifest
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -49,6 +50,9 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
     // siempre use el dato más reciente, en vez de lo que había al abrir el diálogo.
     val itemToEdit = itemToEditId?.let { id -> items.find { it.id == id } }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showBuscarMatriz by remember { mutableStateOf(false) }
+    var prefillMatriz by remember { mutableStateOf<MatrizEntity?>(null) }
+    val matrizList by viewModel.matrizList.collectAsState()
     // Cuando compartir un registro con audio, el audio se manda como mensaje aparte (ver
     // comentario en shareSolicitudPorWhatsApp). Este estado guarda el audio pendiente para
     // ofrecer un botón "Enviar audio" que el usuario toca cuando ya terminó de compartir
@@ -86,7 +90,7 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
             }
         }
         FloatingActionButton(
-            onClick = { showCreateDialog = true },
+            onClick = { showBuscarMatriz = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
         ) { Icon(Icons.Default.Add, contentDescription = "Nuevo registro") }
 
@@ -171,16 +175,26 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
         )
     }
 
+    if (showBuscarMatriz) {
+        SolicitudBuscarMatrizDialog(
+            matriz = matrizList,
+            onDismiss = { showBuscarMatriz = false },
+            onElegir = { m -> prefillMatriz = m; showBuscarMatriz = false; showCreateDialog = true },
+            onDesdeCero = { prefillMatriz = null; showBuscarMatriz = false; showCreateDialog = true }
+        )
+    }
+
     if (showCreateDialog) {
         var nuevoAudioPath by remember { mutableStateOf<String?>(null) }
         SolicitudFullFormDialog(
             item = null,
+            prefill = prefillMatriz,
             driveHelper = viewModel.driveHelper,
             viewModel = viewModel,
             audioUrlOverride = nuevoAudioPath,
             isRecording = isRecording,
             audioGrabadoLocal = nuevoAudioPath != null,
-            onDismiss = { showCreateDialog = false },
+            onDismiss = { showCreateDialog = false; prefillMatriz = null },
             onAudioToggle = {
                 if (isRecording) {
                     nuevoAudioPath = viewModel.stopRecordingLocalOnly()
@@ -193,6 +207,7 @@ fun SolicitudScreen(viewModel: SolicitudViewModel, searchQuery: String = "") {
             onSave = { nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, nuevaImagenUrl, nuevaImagenUrl2, nuevaImagenUrl3, nuevaImagenUrl4, fechaHora ->
                 viewModel.crearRegistro(nombre, numero, sucursal, ubicacion, nombreRef1, ref1, nombreRef2, ref2, observaciones, estado, nuevoAudioPath, nuevaImagenUrl, nuevaImagenUrl2, nuevaImagenUrl3, nuevaImagenUrl4, fechaHora)
                 showCreateDialog = false
+                prefillMatriz = null
             }
         )
     }
@@ -256,6 +271,7 @@ fun SolicitudItemCard(
 fun SolicitudFullFormDialog(
     item: SolicitudEntity?,
     driveHelper: DriveHelper,
+    prefill: MatrizEntity? = null,
     viewModel: SolicitudViewModel? = null,
     isRecording: Boolean,
     audioGrabadoLocal: Boolean = false,
@@ -273,14 +289,14 @@ fun SolicitudFullFormDialog(
 ) {
     val context = LocalContext.current
     val esNuevo = item == null
-    var nombre by remember { mutableStateOf(item?.nombre ?: "") }
-    var numero by remember { mutableStateOf(item?.numero ?: "") }
+    var nombre by remember { mutableStateOf(item?.nombre ?: prefill?.nombre ?: "") }
+    var numero by remember { mutableStateOf(item?.numero ?: prefill?.numTT ?: "") }
     var sucursal by remember { mutableStateOf(item?.sucursal ?: "") }
-    var ubicacion by remember { mutableStateOf(item?.ubicacionRaw ?: "") }
+    var ubicacion by remember { mutableStateOf(item?.ubicacionRaw ?: prefill?.ubicacion ?: "") }
     var nombreRef1 by remember { mutableStateOf(item?.nombreRef1 ?: "") }
-    var ref1 by remember { mutableStateOf(item?.ref1 ?: "") }
+    var ref1 by remember { mutableStateOf(item?.ref1 ?: prefill?.ref1 ?: "") }
     var nombreRef2 by remember { mutableStateOf(item?.nombreRef2 ?: "") }
-    var ref2 by remember { mutableStateOf(item?.ref2 ?: "") }
+    var ref2 by remember { mutableStateOf(item?.ref2 ?: prefill?.ref2 ?: "") }
     var observaciones by remember { mutableStateOf(item?.observaciones ?: "") }
     var estado by remember { mutableStateOf(item?.estado ?: "") }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
@@ -302,8 +318,8 @@ fun SolicitudFullFormDialog(
     // Para un registro NUEVO (esNuevo=true, item=null) las fotos se guardan localmente en
     // estas variables y se mandan al crear el registro; para uno existente se escriben
     // directo a la base local vía el ViewModel.
-    var nuevaImagenUrl by remember { mutableStateOf<String?>(null) }
-    var nuevaImagenUrl2 by remember { mutableStateOf<String?>(null) }
+    var nuevaImagenUrl by remember { mutableStateOf<String?>(prefill?.imagenUrl?.takeIf { it.isNotBlank() }) }
+    var nuevaImagenUrl2 by remember { mutableStateOf<String?>(prefill?.imagenUrl2?.takeIf { it.isNotBlank() }) }
     var nuevaImagenUrl3 by remember { mutableStateOf<String?>(null) }
     var nuevaImagenUrl4 by remember { mutableStateOf<String?>(null) }
     var slotActivo by remember { mutableStateOf(1) }
@@ -602,4 +618,58 @@ fun SolicitudFullFormDialog(
             }
         )
     }
+}
+
+
+/**
+ * Buscador de clientes de Matriz para agregar un registro a Solicitud: al elegir uno se abre
+ * el formulario ya precargado (nombre, número TT, refs, ubicación y fotos). "Crear desde
+ * cero" conserva el flujo anterior para clientes que no están en Matriz.
+ */
+@Composable
+fun SolicitudBuscarMatrizDialog(
+    matriz: List<MatrizEntity>,
+    onDismiss: () -> Unit,
+    onElegir: (MatrizEntity) -> Unit,
+    onDesdeCero: () -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    val resultados = remember(matriz, query) {
+        val q = query.trim()
+        if (q.isBlank()) emptyList() else matriz.filter { m ->
+            coincideBusqueda(m.nombre, q) || coincideBusqueda(m.folioP, q) ||
+                coincideBusqueda(m.numTT, q) || coincideBusqueda(m.ref1, q) || coincideBusqueda(m.ref2, q)
+        }.take(50)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Buscar en Matriz") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it },
+                    label = { Text("Nombre, CU o teléfono") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                if (query.isNotBlank() && resultados.isEmpty()) {
+                    Text("Sin resultados en Matriz.", style = MaterialTheme.typography.bodySmall)
+                }
+                LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                    items(resultados, key = { it.id }) { m ->
+                        Column(modifier = Modifier.fillMaxWidth().clickable { onElegir(m) }.padding(vertical = 8.dp)) {
+                            Text(m.nombre, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                listOf(m.numTT, m.folioP.orEmpty()).filter { it.isNotBlank() }.joinToString("  ·  "),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDesdeCero) { Text("Crear desde cero") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
 }
