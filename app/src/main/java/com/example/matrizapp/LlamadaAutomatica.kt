@@ -206,6 +206,37 @@ class CatchupLlamadaAlarmReceiver : BroadcastReceiver() {
     }
 }
 
+/** Sube el Worker a primer plano (notificación fija). Sin esto Android lo corta a los ~10 min y
+ * lo REINICIA desde el primer cliente -- y con llamadas a Ref1-Ref4 un bloque tarda mucho más que
+ * eso. Si el sistema no permite primer plano en ese momento, sigue como antes (sin abortar). */
+private suspend fun CoroutineWorker.mantenerEnPrimerPlano(texto: String) {
+    try {
+        val ctx = applicationContext
+        val canal = "bloques_automaticos"
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel(canal) == null) {
+                nm.createNotificationChannel(android.app.NotificationChannel(canal, "Bloques automáticos", android.app.NotificationManager.IMPORTANCE_LOW))
+            }
+        }
+        val notif = androidx.core.app.NotificationCompat.Builder(ctx, canal)
+            .setSmallIcon(android.R.drawable.sym_action_call)
+            .setContentTitle("Bloque automático en curso")
+            .setContentText(texto)
+            .setOngoing(true)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+            .build()
+        val info = if (android.os.Build.VERSION.SDK_INT >= 29)
+            androidx.work.ForegroundInfo(7301, notif, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        else androidx.work.ForegroundInfo(7301, notif)
+        setForeground(info)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        // sin primer plano: continúa como antes
+    }
+}
+
 private const val COLA_AUTOMATICA = "automatizacion_llamadas_cola"
 
 /** Reclama (check + insert atómico dentro del proceso) el contacto de `clienteId` en este bloque.
@@ -347,6 +378,7 @@ class LlamadaAutomaticaWorker(
 
     override suspend fun doWork(): Result {
         if (!AutomatizacionPrefs.activa(applicationContext)) return Result.success() // se apagó el interruptor general mientras este worker esperaba encolado
+        mantenerEnPrimerPlano("Llamando y mandando SMS a los clientes del bloque")
 
         val bloqueId = inputData.getLong(KEY_BLOQUE_ID, -1)
         if (bloqueId < 0) return Result.failure()
@@ -422,6 +454,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
     override suspend fun doWork(): Result {
         if (!AutomatizacionPrefs.activa(applicationContext)) return Result.success()
         if (!AutomatizacionPrefs.catchupActiva(applicationContext)) return Result.success() // se apagó el interruptor de catchup mientras esta alarma esperaba
+        mantenerEnPrimerPlano("Catchup de ayer en curso")
 
         val container = (applicationContext as MainApplication).container
         val matrizDao = container.database.matrizDao()
