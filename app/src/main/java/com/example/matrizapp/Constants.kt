@@ -104,3 +104,7 @@ fun coincideBusqueda(texto: String?, query: String): Boolean {
     if (texto.isNullOrBlank()) return false
     return quitarAcentos(texto).contains(quitarAcentos(query), ignoreCase = true)
 }
+
+/** ¿El registro ya está Pagado? Un solo criterio para llamadas, SMS y bloques: tolera
+ * mayúsculas y espacios sobrantes ("Pagado ", "PAGADO"). */
+fun esPagado(estado: String?): Boolean = estado?.trim().equals("Pagado", ignoreCase = true)

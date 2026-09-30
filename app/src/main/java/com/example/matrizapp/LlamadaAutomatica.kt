@@ -351,7 +351,7 @@ class LlamadaAutomaticaWorker(
             // porque solo se miraba activa() una vez al arrancar. Ahora corta aquí mismo, entre
             // un cliente y el siguiente, sin esperar a que termine todo el bloque.
             if (!AutomatizacionPrefs.activa(applicationContext)) break
-            if (r.estado.equals("Pagado", ignoreCase = true)) continue
+            if (esPagado(r.estado)) continue
             val sem = r.semana.trim().toIntOrNull() ?: continue
             if (sem !in 1..5) continue
 
@@ -362,7 +362,13 @@ class LlamadaAutomaticaWorker(
 
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
             esPrimerContacto = false
-            procesarClienteLlamadaAutomatica(applicationContext, r, sem, config, logDao, plantillaDao, contactoExtraDao)
+            // Relee el registro justo antes de llamar (la lista `registros` es una foto de cuando
+            // arrancó el bloque, y entre la pausa y las llamadas anteriores pueden pasar minutos):
+            // si en ese tiempo se marcó Pagado (ticket, edición o sync), ya no se le llama.
+            val fresco = matrizDao.getById(r.id) ?: continue
+            if (esPagado(fresco.estado)) continue
+            if (!AutomatizacionPrefs.activa(applicationContext)) break
+            procesarClienteLlamadaAutomatica(applicationContext, fresco, sem, config, logDao, plantillaDao, contactoExtraDao)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = hoyMillis, bloqueIndex = bloqueActualIndex))
         }
         return Result.success()
@@ -408,7 +414,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
             // corta el catchup en curso en cuanto se apaga cualquiera de los 2 interruptores.
             if (!AutomatizacionPrefs.activa(applicationContext)) break
             if (!AutomatizacionPrefs.catchupActiva(applicationContext)) break
-            if (r.estado.equals("Pagado", ignoreCase = true)) continue
+            if (esPagado(r.estado)) continue
             val sem = r.semana.trim().toIntOrNull() ?: continue
             if (sem !in 1..5) continue
             if (sem !in semanasConCatchup) continue // catchup apagado para esta semana específica
@@ -429,7 +435,10 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
 
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
             esPrimerContacto = false
-            procesarClienteLlamadaAutomatica(applicationContext, r, sem, config, logDao, plantillaDao, contactoExtraDao)
+            val fresco = matrizDao.getById(r.id) ?: continue // relee: puede haberse marcado Pagado durante la pausa
+            if (esPagado(fresco.estado)) continue
+            if (!AutomatizacionPrefs.activa(applicationContext)) break
+            procesarClienteLlamadaAutomatica(applicationContext, fresco, sem, config, logDao, plantillaDao, contactoExtraDao)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = ayerMillis, bloqueIndex = -1))
         }
 

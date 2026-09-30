@@ -46,6 +46,9 @@ class CallRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Co
 
         for ((i, contactoId) in ids.withIndex()) {
             val registro = porId[contactoId] ?: continue
+            // La cola se armó al programar; si desde entonces se marcó Pagado (o en una repetición
+            // posterior del bloque), ya no se le llama.
+            if (esPagado(registro.estado)) continue
             val telefono = when (tipo) {
                 TipoLlamada.TT -> registro.numTT
                 TipoLlamada.REF1 -> registro.ref1

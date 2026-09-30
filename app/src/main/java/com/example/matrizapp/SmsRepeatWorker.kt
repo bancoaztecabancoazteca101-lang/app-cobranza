@@ -36,7 +36,7 @@ class SmsRepeatWorker(appContext: Context, workerParams: WorkerParameters) : Cor
         val container = (applicationContext as MainApplication).container
         // Vuelve a leer Matriz en el momento del envío (no datos guardados de cuando se
         // programó), así cada ronda usa el teléfono/monto más reciente si algo cambió.
-        val registros = container.database.matrizDao().getAllMatriz().first().filter { it.id in ids }
+        val registros = container.database.matrizDao().getAllMatriz().first().filter { it.id in ids && !esPagado(it.estado) }
 
         for ((i, r) in registros.withIndex()) {
             val telefono = when (fuente) {
