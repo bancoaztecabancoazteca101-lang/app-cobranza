@@ -259,7 +259,9 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     val variante = varianteFija ?: logDao.contarTotalContactos(r.id)
     val subIdLlamada = config.simSeleccionada
     val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
-    if (r.numTT.isNotBlank()) {
+    // Solo en corridas reales (yaContactados != null): el botón de prueba no pasa por el guard.
+    val ttLibre = yaContactados == null || r.numTT.isBlank() || NumeroContactadoGuard.reservar(context, r.numTT)
+    if (r.numTT.isNotBlank() && ttLibre) {
         resumen.appendLine("• Llamada + SMS normal a TT (${r.numTT})")
         yaContactados?.add(ultimos10Digitos(r.numTT))
         llamarSilenciadoYEsperar(context, subIdLlamada, r.numTT, config)
@@ -275,7 +277,7 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
             resumen.appendLine("• Oferta de descuento NO enviada -- descuentoPago='${r.descuentoPago}' / descuentoAhorro='${r.descuentoAhorro}' (falta uno o los dos)")
         }
     } else {
-        resumen.appendLine("• Sin NumTT -- no se llamó ni se mandó nada al titular")
+        resumen.appendLine(if (r.numTT.isBlank()) "• Sin NumTT -- no se llamó ni se mandó nada al titular" else "• TT contactado hace menos de 15 min -- se omite para no repetir")
     }
     // Referencias propias del cliente (Ref1 a Ref4 capturados en Matriz) + referencias extra
     // confirmadas a mano desde Filtrar (números de un "cercano" que probablemente conoce al
@@ -293,6 +295,7 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         // Una referencia compartida por varios clientes (o que ya es titular de otro) se contacta
         // UNA sola vez por corrida: antes recibía un SMS (y llamada) por cada cliente, todos juntos.
         .filter { yaContactados == null || ultimos10(it) !in yaContactados }
+        .filter { yaContactados == null || NumeroContactadoGuard.reservar(context, it) } // no repetir al mismo número en 15 min, por cualquier camino
     yaContactados?.addAll(telefonosReferencia.map { ultimos10(it) })
     telefonosReferencia.forEach { tel ->
         llamarSilenciadoYEsperar(context, subIdLlamada, tel, config)
