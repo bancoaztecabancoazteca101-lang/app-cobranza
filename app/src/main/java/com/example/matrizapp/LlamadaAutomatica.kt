@@ -273,7 +273,7 @@ private suspend fun llamarSilenciadoYEsperar(context: Context, subIdLlamada: Int
     // El finally cuelga y des-silencia igual, aunque la corrutina ya esté cancelándose.
     CallHelper.silenciarMicrofono(context, true)
     try {
-        CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = config.duracionMaximaLlamada * 1_000L)
+        CallHelper.esperarFinOForzarColgar(context, duracionMaximaMs = (config.duracionMaximaLlamada * 1_000L - 2_000L).coerceAtLeast(1_000L)) // ya pasaron 2 s desde que se marcó: la duración total cuenta desde la marcación
     } finally {
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
             if (CallHelper.llamadaActiva(context)) CallHelper.colgarLlamadaConFallback(context)
@@ -404,7 +404,7 @@ class LlamadaAutomaticaWorker(
         if (bloqueActualIndex == -1) return Result.success() // el bloque fue eliminado/desactivado desde entonces
 
         val registros = matrizDao.getAllMatriz().first()
-        val config = configDao.obtenerOSembrar()
+        var config = configDao.obtenerOSembrar()
         val reglas = reglaSemanaDao.obtenerMapaOSembrar()
         val hoyMillis = inicioDeDiaMillis(LocalDate.now())
         var esPrimerContacto = true
@@ -428,6 +428,7 @@ class LlamadaAutomaticaWorker(
             // Ya contactado en este bloque (Worker reiniciado por Android): no repetir ni esperar la pausa.
             if (logDao.contarContactosEnBloque(r.id, hoyMillis, bloqueActualIndex) > 0) continue
 
+            config = configDao.obtenerOSembrar() // relee: lo que se ajuste en Bloques de horario aplica desde el siguiente cliente, incluso a mitad de bloque
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
             esPrimerContacto = false
             // Relee el registro justo antes de llamar (la lista `registros` es una foto de cuando
@@ -471,7 +472,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
         val reglaSemanaDao = container.database.reglaSemanaDao()
         val contactoExtraDao = container.database.contactoExtraDao()
         val registros = matrizDao.getAllMatriz().first()
-        val config = configDao.obtenerOSembrar()
+        var config = configDao.obtenerOSembrar()
         val entidadesRegla = reglaSemanaDao.obtenerEntidadesOSembrar()
         val reglas = entidadesRegla.associate { it.semana to it.offsetsList() }
         val semanasConCatchup = entidadesRegla.filter { it.catchupActivo }.map { it.semana }.toSet()
@@ -504,6 +505,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
             val deficit = ReglaRepeticion.calcularDeficit(sem, contactosAyer, reglas)
             if (deficit <= 0) continue
 
+            config = configDao.obtenerOSembrar() // relee: lo que se ajuste en Bloques de horario aplica desde el siguiente cliente, incluso a mitad de bloque
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
             esPrimerContacto = false
             val fresco = matrizDao.getById(r.id) ?: continue // relee: puede haberse marcado Pagado durante la pausa
