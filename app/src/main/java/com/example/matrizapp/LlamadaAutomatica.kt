@@ -287,6 +287,10 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     // Bloques de horario) para mostrarle a Diego exactamente qué se mandó y qué no, sin tener
     // que esperar a que corra un bloque real ni adivinar por qué algo no llegó.
     val resumen = StringBuilder()
+    // La pausa configurada ("Segundos de pausa entre llamadas") debe respetarse entre CADA llamada,
+    // no solo entre un cliente y el siguiente: antes, tras llamar al titular las referencias se
+    // marcaban de inmediato, sin esperar nada.
+    var huboLlamada = false
     val variante = varianteFija ?: logDao.contarTotalContactos(r.id)
     val subIdLlamada = config.simSeleccionada
     val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
@@ -296,6 +300,7 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         resumen.appendLine("• Llamada + SMS normal a TT (${r.numTT})")
         yaContactados?.add(ultimos10Digitos(r.numTT))
         llamarSilenciadoYEsperar(context, subIdLlamada, r.numTT, config)
+        huboLlamada = true
         SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
         // Oferta de descuento del día: se agrega como línea extra después del SMS normal,
         // solo al titular -- nunca a Ref1/Ref2 (ver el forEach de telefonosReferencia abajo,
@@ -329,7 +334,9 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         .filter { yaContactados == null || NumeroContactadoGuard.reservar(context, it) } // no repetir al mismo número en 15 min, por cualquier camino
     yaContactados?.addAll(telefonosReferencia.map { ultimos10(it) })
     telefonosReferencia.forEach { tel ->
+        if (huboLlamada) delay(config.segundosPausaEntreLlamadas * 1_000L)
         llamarSilenciadoYEsperar(context, subIdLlamada, tel, config)
+        huboLlamada = true
         SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
     }
     if (telefonosReferencia.isNotEmpty()) resumen.appendLine("• Llamada + SMS de referencia a ${telefonosReferencia.size} número(s): ${telefonosReferencia.joinToString(", ")}")
