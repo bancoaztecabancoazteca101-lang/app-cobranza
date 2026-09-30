@@ -117,7 +117,7 @@ class FiltroFechaViewModel(
             _ticketPagoEnProgreso.value = true
             val datos = extraerDatosTicketDeImagen(context, uri)
             val cuTicket = datos.cu?.filter { it.isDigit() }.orEmpty()
-            if (datos.nombre.isNullOrBlank() && cuTicket.isBlank()) {
+            if (datos.nombre.isNullOrBlank() && cuTicket.isBlank() && datos.textoCompleto.isBlank()) {
                 _ticketPagoEnProgreso.value = false
                 _ticketPagoResultado.value = "No se pudo leer el nombre del cliente en el ticket"
                 return@launch
@@ -143,6 +143,25 @@ class FiltroFechaViewModel(
                 if (ganadores.size > 1) {
                     _ticketPagoEnProgreso.value = false
                     _ticketPagoResultado.value = "Varios clientes de hoy coinciden con \"${datos.nombre}\": ${ganadores.joinToString { it.nombre }}. Márcalo manualmente"
+                    return@launch
+                }
+                match = ganadores.firstOrNull()
+            }
+            // 3) Respaldo: si el renglón del nombre salió incompleto (nombre largo partido en varios
+            //    renglones o mal leído), se busca a qué cliente de hoy le aparecen TODAS las palabras
+            //    de su nombre en cualquier parte del texto del ticket. Gana el de más palabras.
+            if (match == null && datos.textoCompleto.isNotBlank()) {
+                val tokensTexto = tokensNombre(datos.textoCompleto)
+                val puntuados = candidatos.mapNotNull { c ->
+                    val tokensC = tokensNombre(c.nombre)
+                    if (tokensC.size < 2) return@mapNotNull null
+                    if (tokensC.all { t -> tokensTexto.any { l -> tokenParecido(t, l) } }) c to tokensC.size else null
+                }
+                val mejor = puntuados.maxOfOrNull { it.second }
+                val ganadores = puntuados.filter { it.second == mejor }.map { it.first }
+                if (ganadores.size > 1) {
+                    _ticketPagoEnProgreso.value = false
+                    _ticketPagoResultado.value = "Varios clientes de hoy aparecen en el ticket: ${ganadores.joinToString { it.nombre }}. Márcalo manualmente"
                     return@launch
                 }
                 match = ganadores.firstOrNull()

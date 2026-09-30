@@ -1431,10 +1431,13 @@ suspend fun extraerCuDeImagen(context: android.content.Context, uri: Uri): Strin
 
 /** Resultado del OCR del ticket de cobranza (foto): nombre, monto pagado y CU detectados
  * (los tres nullable de forma independiente). */
-data class DatosTicketOcr(val nombre: String?, val monto: Double?, val cu: String?)
+data class DatosTicketOcr(val nombre: String?, val monto: Double?, val cu: String?, val textoCompleto: String = "")
 
 private val patronUstedPago = Regex("(?i)Usted\\s+pag[oó]:?\\s*\\$?\\s*([0-9][0-9,]*(?:\\.[0-9]{1,2})?)")
 private val patronNoCliente = Regex("(?i)No\\.?\\s*de\\s*Cliente")
+private val patronEncabezadoTicket = Regex("(?i)(cliente|datos|resumen|expediente|ticket|recibo|fecha|hora|folio|sucursal|banco|azteca|pag[oó]|aprobad|referencia|autorizaci[oó]n|tel[eé]fono|operaci[oó]n|monto|total)")
+private fun esLineaDeNombreTicket(l: String): Boolean =
+    l.length >= 2 && l.none { it.isDigit() } && !l.contains(':') && !patronEncabezadoTicket.containsMatchIn(l)
 
 /** OCR local (ML Kit) para el escaneo de ticket de cobranza en Filtro Fecha (ver
  * FiltroFechaViewModel.registrarPagoDesdeTicket). Soporta varios formatos reales de ticket
@@ -1455,12 +1458,18 @@ suspend fun extraerDatosTicketDeImagen(context: android.content.Context, uri: Ur
                 val texto = java.text.Normalizer.normalize(visionText.text, java.text.Normalizer.Form.NFC)
                 val lineas = texto.split("\n").map { it.trim() }
                 val idxNoCliente = lineas.indexOfFirst { patronNoCliente.containsMatchIn(it) }
+                // Un nombre largo se parte en 2 o 3 renglones en el ticket (ej. "JOSE ROSARIO AVILA" /
+                // "ANGELES"): antes solo se leía el renglón pegado a "No. de Cliente" y se perdía el resto.
+                // Se sube desde ahí juntando renglones mientras parezcan nombre (sin dígitos, sin ":" ni
+                // encabezados como "DATOS DEL CLIENTE"), hasta 3.
                 val nombre = if (idxNoCliente > 0) {
-                    (idxNoCliente - 1 downTo 0).map { lineas[it] }.firstOrNull { it.isNotBlank() }?.uppercase()
+                    val previas = (idxNoCliente - 1 downTo 0).map { lineas[it] }.filter { it.isNotBlank() }
+                    val partes = previas.takeWhile { esLineaDeNombreTicket(it) }.take(3).reversed()
+                    (if (partes.isNotEmpty()) partes.joinToString(" ") else previas.firstOrNull())?.uppercase()
                 } else null
                 val monto = patronUstedPago.find(texto)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
                 val cu = patronCuOcr.find(texto)?.aCu()
-                if (cont.isActive) cont.resume(DatosTicketOcr(nombre, monto, cu)) {}
+                if (cont.isActive) cont.resume(DatosTicketOcr(nombre, monto, cu, texto)) {}
             }
             .addOnFailureListener { if (cont.isActive) cont.resume(DatosTicketOcr(null, null, null)) {} }
     } catch (e: Exception) {
