@@ -1025,14 +1025,17 @@ fun ImageDetailDialog(url: String, onDismiss: () -> Unit) {
 @Composable
 fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: androidx.compose.ui.unit.Dp = 56.dp) {
     val context = LocalContext.current
+    val imageStore = remember { (context.applicationContext as MainApplication).container.clientImageStore }
     var uriResuelta by remember(rawImageUrl) { mutableStateOf<String?>(null) }
     var fallo by remember(rawImageUrl) { mutableStateOf(false) }
     var mostrarGrande by remember(rawImageUrl) { mutableStateOf(false) }
 
     LaunchedEffect(rawImageUrl) {
-        if (!rawImageUrl.isNullOrBlank()) {
-            val uri = resolverArchivoComoUri(context, driveHelper, rawImageUrl, "portada_${rawImageUrl.hashCode()}.jpg")
-            if (uri != null) uriResuelta = uri.toString() else fallo = true
+        uriResuelta = imageStore.localUri(rawImageUrl)?.toString()
+        if (uriResuelta == null && !rawImageUrl.isNullOrBlank()) {
+            val file = imageStore.ensureLocal(rawImageUrl, driveHelper)
+            uriResuelta = file?.let { Uri.fromFile(it).toString() }
+            fallo = uriResuelta == null
         }
     }
 
@@ -1041,14 +1044,22 @@ fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: andro
             .size(size)
             .clip(RoundedCornerShape(8.dp))
             .background(ClayNeutralContainer)
-            .then(
-                if (uriResuelta != null) Modifier.clickable { mostrarGrande = true } else Modifier
-            ),
+            .then(if (uriResuelta != null) Modifier.clickable { mostrarGrande = true } else Modifier),
         contentAlignment = Alignment.Center
     ) {
         when {
-            uriResuelta != null -> AsyncImage(model = uriResuelta, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            rawImageUrl.isNullOrBlank() || fallo -> Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(24.dp))
+            uriResuelta != null -> AsyncImage(
+                model = uriResuelta,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            rawImageUrl.isNullOrBlank() || fallo -> Icon(
+                Icons.Default.Image,
+                contentDescription = null,
+                tint = Color.Gray,
+                modifier = Modifier.size(24.dp)
+            )
             else -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         }
     }
