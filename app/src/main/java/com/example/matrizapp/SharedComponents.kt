@@ -1257,46 +1257,72 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
         )
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
-                var mejorLinea: String? = null
-                var mejorAltura = 0
-                fun evaluarCandidato(textoCrudo: String, box: android.graphics.Rect?, alturaComparable: Int) {
-                    // NFC: compone letra+acento suelto (p.ej. "e" + ´) en un solo carácter ("é")
-                    // antes de validar "solo letras". Sin esto, el acento queda como una marca
-                    // Unicode aparte que Char.isLetter() no cuenta como letra y rechaza la línea
-                    // completa (por eso los nombres con acentos no se detectaban).
-                    val texto = java.text.Normalizer.normalize(textoCrudo, java.text.Normalizer.Form.NFC).trim()
-                    val enZonaEncabezado = box != null && alturaImagen > 0 && box.top < alturaImagen * 0.25
-                    val esPalabraUi = palabrasUi.any { texto.contains(it, ignoreCase = true) }
-                    val soloLetras = texto.replace(" ", "").isNotEmpty() &&
-                        texto.replace(" ", "").all { it.isLetter() }
-                    val palabras = texto.split(" ").filter { it.isNotBlank() }
-                    if (soloLetras && !esPalabraUi && !enZonaEncabezado && palabras.size in 2..5 && texto.length in 5..40) {
-                        if (alturaComparable > mejorAltura) { mejorAltura = alturaComparable; mejorLinea = texto }
-                    }
-                }
-                for (block in visionText.textBlocks) {
-                    // Candidato a nivel de línea (nombre corto que cabe en una sola línea visual).
-                    for (line in block.lines) {
-                        evaluarCandidato(line.text.trim(), line.boundingBox, line.boundingBox?.height() ?: 0)
-                    }
-                    // Candidato a nivel de bloque: junta todas las líneas del mismo bloque/párrafo,
-                    // para reconstruir nombres largos que la pantalla corta a una segunda línea
-                    // visual (p.ej. un apellido que no cupo junto al resto del nombre). La altura
-                    // se compara por línea promedio (no la del bloque completo) para que un bloque
-                    // de 2 líneas no gane solo por ser más alto, sino solo si el texto en sí es
-                    // del tamaño de letra correcto.
-                    if (block.lines.size > 1) {
-                        val textoBloque = block.lines.joinToString(" ") { it.text.trim() }
-                        val alturaPromedio = block.lines.sumOf { it.boundingBox?.height() ?: 0 } / block.lines.size
-                        evaluarCandidato(textoBloque, block.boundingBox, alturaPromedio)
-                    }
-                }
+                val mejorLinea: String? = detectarNombreEnTexto(visionText, alturaImagen)
                 if (cont.isActive) cont.resume(mejorLinea?.uppercase()) {}
             }
             .addOnFailureListener { if (cont.isActive) cont.resume(null) {} }
     } catch (e: Exception) {
         if (cont.isActive) cont.resume(null) {}
     }
+}
+
+/** Palabras de encabezados/botones de la app de Banco Azteca y de AppSheet que NO son el nombre. */
+private val PALABRAS_UI_NOMBRE = listOf(
+    "resumen del cliente", "expediente del cliente", "ver expediente", "ver otros lugares",
+    "prepárate", "preparate", "en ruta", "localiza", "contacta", "cobra",
+    "monto solicitado", "folio de solicitud", "torre de control", "temporizador",
+    "espera en el lugar", "seguimiento a esta solicitud", "continuar con tu ruta",
+    "originación", "originacion", "días de atraso", "dias de atraso", "último pago", "ultimo pago"
+)
+
+/** Detecta el nombre completo del cliente en la foto. El nombre largo se parte en 2 renglones
+ * visuales (ej. "MONTSERRAT VEGA SIERRA" / "PENICHE"), y ML Kit suele meter el CU y el "Último
+ * pago" en el MISMO bloque que el nombre, así que reconstruirlo por bloque falla (el bloque trae
+ * números). Por eso se trabaja por LÍNEA: se toman solo las líneas de puras letras, se agrupan las
+ * que están pegadas verticalmente, con letra del mismo tamaño y alineadas a la izquierda, y se
+ * elige el grupo con la letra más grande (2 a 6 palabras). */
+internal fun detectarNombreEnTexto(visionText: com.google.mlkit.vision.text.Text, alturaImagen: Int): String? {
+    class Linea(val texto: String, val box: android.graphics.Rect)
+    val candidatas = ArrayList<Linea>()
+    for (block in visionText.textBlocks) for (line in block.lines) {
+        val box = line.boundingBox ?: continue
+        // NFC: compone letra + acento suelto en un solo carácter; trim de símbolos sueltos en los
+        // extremos (ej. "PENICHE." o "| PENICHE") sin tocar lo de en medio.
+        val texto = java.text.Normalizer.normalize(line.text, java.text.Normalizer.Form.NFC)
+            .trim { !it.isLetter() }
+        val sinEspacios = texto.replace(" ", "")
+        if (sinEspacios.isEmpty() || !sinEspacios.all { it.isLetter() }) continue
+        if (PALABRAS_UI_NOMBRE.any { texto.contains(it, ignoreCase = true) }) continue
+        if (alturaImagen > 0 && box.top < alturaImagen * 0.25) continue
+        candidatas.add(Linea(texto, box))
+    }
+    candidatas.sortBy { it.box.top }
+    val grupos = ArrayList<MutableList<Linea>>()
+    for (l in candidatas) {
+        val actual = grupos.lastOrNull()
+        val previa = actual?.last()
+        var sigue = false
+        if (actual != null && previa != null) {
+            val h = l.box.height().coerceAtLeast(1)
+            val hPrevia = previa.box.height().coerceAtLeast(1)
+            val ratio = h.toFloat() / hPrevia
+            val hueco = l.box.top - previa.box.bottom
+            sigue = ratio in 0.7f..1.4f &&
+                hueco in (-h / 2)..(h * 13 / 10) &&
+                kotlin.math.abs(l.box.left - previa.box.left) <= h * 3 / 2
+        }
+        if (sigue) actual!!.add(l) else grupos.add(mutableListOf(l))
+    }
+    var mejor: String? = null
+    var mejorAltura = 0.0
+    for (g in grupos) {
+        val texto = g.joinToString(" ") { it.texto }
+        val palabras = texto.split(" ").filter { it.isNotBlank() }
+        if (palabras.size !in 2..6 || texto.length !in 5..60) continue
+        val altura = g.sumOf { it.box.height() }.toDouble() / g.size
+        if (altura > mejorAltura) { mejorAltura = altura; mejor = texto }
+    }
+    return mejor
 }
 
 /** Resultado del OCR usado en el diálogo de Editar/Nuevo registro: nombre, monto "Requerido",
@@ -1354,29 +1380,7 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
         )
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
-                var mejorLinea: String? = null
-                var mejorAltura = 0
-                fun evaluarCandidato(textoCrudo: String, box: android.graphics.Rect?, alturaComparable: Int) {
-                    val texto = java.text.Normalizer.normalize(textoCrudo, java.text.Normalizer.Form.NFC).trim()
-                    val enZonaEncabezado = box != null && alturaImagen > 0 && box.top < alturaImagen * 0.25
-                    val esPalabraUi = palabrasUi.any { texto.contains(it, ignoreCase = true) }
-                    val soloLetras = texto.replace(" ", "").isNotEmpty() &&
-                        texto.replace(" ", "").all { it.isLetter() }
-                    val palabras = texto.split(" ").filter { it.isNotBlank() }
-                    if (soloLetras && !esPalabraUi && !enZonaEncabezado && palabras.size in 2..5 && texto.length in 5..40) {
-                        if (alturaComparable > mejorAltura) { mejorAltura = alturaComparable; mejorLinea = texto }
-                    }
-                }
-                for (block in visionText.textBlocks) {
-                    for (line in block.lines) {
-                        evaluarCandidato(line.text.trim(), line.boundingBox, line.boundingBox?.height() ?: 0)
-                    }
-                    if (block.lines.size > 1) {
-                        val textoBloque = block.lines.joinToString(" ") { it.text.trim() }
-                        val alturaPromedio = block.lines.sumOf { it.boundingBox?.height() ?: 0 } / block.lines.size
-                        evaluarCandidato(textoBloque, block.boundingBox, alturaPromedio)
-                    }
-                }
+                val mejorLinea: String? = detectarNombreEnTexto(visionText, alturaImagen)
                 // Monto "Requerido" y "días de atraso": se buscan sobre el texto completo (no
                 // línea por línea) porque el OCR a veces separa la etiqueta y el número en
                 // bloques distintos que igual quedan consecutivos en visionText.text.
