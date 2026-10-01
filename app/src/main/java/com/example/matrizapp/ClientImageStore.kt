@@ -5,7 +5,7 @@ import android.net.Uri
 import java.io.File
 import java.security.MessageDigest
 
-class ClientImageStore(context: Context) {
+class ClientImageStore(private val context: Context) {
     private val root = File(context.filesDir, "matriz_clientes").apply { mkdirs() }
 
     fun localFile(raw: String?): File? {
@@ -27,6 +27,8 @@ class ClientImageStore(context: Context) {
         return try {
             temporal.delete()
             val ok = when {
+                source.startsWith("content://") -> copyContentUri(Uri.parse(source), temporal)
+                source.startsWith("file://") -> copyFile(File(Uri.parse(source).path ?: return null), temporal)
                 source.startsWith("http://") || source.startsWith("https://") -> driveHelper.downloadFile(source, temporal)
                 source.contains("/") -> driveHelper.downloadByRelativePath(source, temporal)
                 else -> false
@@ -54,6 +56,22 @@ class ClientImageStore(context: Context) {
     }
 
     fun count(): Int = root.listFiles()?.count { it.isFile && it.length() > 0L && !it.name.endsWith(".part") } ?: 0
+
+    private fun copyContentUri(uri: Uri, destination: File): Boolean {
+        return try {
+            val input = context.contentResolver.openInputStream(uri) ?: return false
+            input.use { source -> destination.outputStream().use { output -> source.copyTo(output) } }
+            destination.exists() && destination.length() > 0L
+        } catch (_: Exception) { false }
+    }
+
+    private fun copyFile(source: File, destination: File): Boolean {
+        return try {
+            if (!source.exists() || source.length() == 0L) return false
+            source.inputStream().use { input -> destination.outputStream().use { output -> input.copyTo(output) } }
+            destination.exists() && destination.length() > 0L
+        } catch (_: Exception) { false }
+    }
 
     private fun sha256(value: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
