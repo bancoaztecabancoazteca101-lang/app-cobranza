@@ -181,11 +181,11 @@ class FiltroFechaViewModel(
 }
 
 /** Palabras del nombre en mayúsculas y sin acentos, sin puntuación ni partículas sueltas. */
-private fun tokensNombre(nombre: String): List<String> =
+internal fun tokensNombre(nombre: String): List<String> =
     quitarAcentos(nombre).uppercase().split(Regex("[^A-Z]+")).filter { it.length >= 2 }
 
 /** Igual, o a 1 letra de diferencia (error típico de OCR) si la palabra tiene 5+ letras. */
-private fun tokenParecido(a: String, b: String): Boolean {
+internal fun tokenParecido(a: String, b: String): Boolean {
     if (a == b) return true
     if (a.length < 5 || b.length < 5 || kotlin.math.abs(a.length - b.length) > 1) return false
     var i = 0; var j = 0; var difs = 0

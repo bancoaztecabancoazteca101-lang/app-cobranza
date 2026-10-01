@@ -132,6 +132,43 @@ class Sem6ViewModel(
         }
     }
 
+    private val _leyendoFotoCapital = MutableStateFlow(false)
+    val leyendoFotoCapital: StateFlow<Boolean> = _leyendoFotoCapital
+    private val _aplicandoCapital = MutableStateFlow(false)
+    val aplicandoCapital: StateFlow<Boolean> = _aplicandoCapital
+
+    /** Lee la foto y propone el capital de cada registro de la semana. No escribe nada todavía. */
+    fun analizarFotoCapital(context: android.content.Context, uri: android.net.Uri, onResult: (cambios: List<CambioCapital>, filasLeidas: Int) -> Unit) {
+        _leyendoFotoCapital.value = true
+        viewModelScope.launch {
+            try {
+                val filas = leerCapitalesDeFoto(context, uri)
+                onResult(emparejarCapitales(_itemsRaw.value, filas), filas.size)
+            } finally {
+                _leyendoFotoCapital.value = false
+            }
+        }
+    }
+
+    /** Escribe el capital (solo la columna P) de los registros indicados y actualiza la lista local. */
+    fun aplicarCapitales(cambios: List<CambioCapital>, onDone: (ok: Int, fallidos: Int) -> Unit) {
+        _aplicandoCapital.value = true
+        viewModelScope.launch {
+            var ok = 0; var fallidos = 0
+            for (c in cambios) {
+                try {
+                    if (repository.updateSem6Capital(c.item.id, c.nuevoCapital, sheetName = _semanaSeleccionada.value)) {
+                        _itemsRaw.value = _itemsRaw.value.map { if (it.id == c.item.id) it.copy(capital = c.nuevoCapital) else it }
+                        ok++
+                    } else fallidos++
+                } catch (e: Exception) { fallidos++ }
+            }
+            cacheStore.save(_itemsRaw.value)
+            _aplicandoCapital.value = false
+            onDone(ok, fallidos)
+        }
+    }
+
     /** Agrega un registro nuevo a la hoja de la semana que se está viendo (antes esta hoja era
      * de solo lectura; Diego pidió poder agregar registros desde la app). */
     fun agregarRegistro(nombre: String, sem: String, req: String, cu: String, colonia: String, ubicacion: String, numTT: String, onDone: (Boolean) -> Unit = {}) {

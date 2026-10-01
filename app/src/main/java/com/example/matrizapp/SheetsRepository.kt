@@ -184,6 +184,15 @@ class SheetsRepository(
         true
     }
 
+    /** Cambia SOLO la columna Capital (P) de un registro de la hoja de la semana, sin tocar Se Contiene/Susceptible/Obs. */
+    suspend fun updateSem6Capital(id: String, capital: String, sheetName: String = currentSem6SheetName()): Boolean = withContext(Dispatchers.IO) {
+        val realName = resolveSheetName(sheetName)
+        val idx = findRowIndexById(realName, id, "D")
+        if (idx == -1) return@withContext false
+        updateSheetCell(realName, "P", idx, capital)
+        true
+    }
+
     /** Agrega un registro nuevo a la hoja "Cont-Sem-NN" de la semana indicada (antes esta hoja
      * era de solo lectura, poblada solo por el script de Apps Script; Diego pidió poder agregar
      * registros desde la app también). Genera un ID nuevo y regresa el Sem6Item creado. */

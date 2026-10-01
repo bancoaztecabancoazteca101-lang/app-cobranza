@@ -1,4 +1,6 @@
 package com.example.matrizapp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
@@ -44,6 +47,13 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     var mostrarBuscarMatriz by remember { mutableStateOf(false) }
     var prefillMatriz by remember { mutableStateOf<MatrizEntity?>(null) }
     val matrizList by viewModel.matrizList.collectAsState()
+    val contextFoto = androidx.compose.ui.platform.LocalContext.current
+    val leyendoFoto by viewModel.leyendoFotoCapital.collectAsState()
+    val aplicandoCapital by viewModel.aplicandoCapital.collectAsState()
+    var propuestaCapital by remember { mutableStateOf<Pair<List<CambioCapital>, Int>?>(null) }
+    val fotoCapitalLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) viewModel.analizarFotoCapital(contextFoto, uri) { cambios, filas -> propuestaCapital = cambios to filas }
+    }
 
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
@@ -123,6 +133,13 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
                         )
                     }
                 }
+                IconButton(onClick = { fotoCapitalLauncher.launch("image/*") }, enabled = !leyendoFoto && !aplicandoCapital) {
+                    if (leyendoFoto) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.AddAPhoto, contentDescription = "Actualizar capital con foto", tint = ClayPrimary)
+                    }
+                }
                 IconButton(onClick = { viewModel.cargar() }, enabled = !isLoading) {
                     if (isLoading) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -163,6 +180,49 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     FloatingActionButton(onClick = { mostrarBuscarMatriz = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
         Icon(Icons.Default.Add, contentDescription = "Nuevo registro")
     }
+    }
+
+    propuestaCapital?.let { (cambios, filasLeidas) ->
+        val aCambiar = cambios.filter { it.cambia }
+        AlertDialog(
+            onDismissRequest = { if (!aplicandoCapital) propuestaCapital = null },
+            title = { Text("Capital desde la foto") },
+            text = {
+                Column(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Renglones leídos: $filasLeidas · Coinciden: ${cambios.size} de ${allItems.size} registros · Cambian: ${aCambiar.size}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (filasLeidas == 0) Text("No se pudo leer la tabla. Prueba con una foto más nítida y de frente.", color = ClayRedText, style = MaterialTheme.typography.bodySmall)
+                    aCambiar.forEach { c ->
+                        Text(
+                            "${c.item.nombre}${if (c.porCu) "" else " (por nombre)"}\n${if (c.capitalActual.isBlank()) "sin capital" else formatearReq(c.capitalActual)} → ${formatearReq(c.nuevoCapital)}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    if (cambios.isNotEmpty() && aCambiar.isEmpty()) Text("Todos los capitales ya coinciden con la foto.", style = MaterialTheme.typography.bodySmall)
+                    val sinCoincidencia = allItems.filter { i -> cambios.none { it.item.id == i.id } }
+                    if (sinCoincidencia.isNotEmpty()) {
+                        Text("Sin coincidencia en la foto (no se tocan): ${sinCoincidencia.joinToString { it.nombre }}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.aplicarCapitales(aCambiar) { ok, fallidos ->
+                            propuestaCapital = null
+                            android.widget.Toast.makeText(contextFoto, if (fallidos == 0) "Capital actualizado en $ok registros" else "Actualizados $ok, fallaron $fallidos", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    enabled = aCambiar.isNotEmpty() && !aplicandoCapital
+                ) {
+                    if (aplicandoCapital) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                    else Text("Aplicar (${aCambiar.size})")
+                }
+            },
+            dismissButton = { TextButton(onClick = { propuestaCapital = null }, enabled = !aplicandoCapital) { Text("Cancelar") } }
+        )
     }
 
     itemToView?.let { item ->
