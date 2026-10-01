@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -604,6 +605,7 @@ fun MatrizFullFormDialog(
                         }
                     )
                 }
+                AvisoMismaUbicacion(rememberCoincidenciasUbicacion(ubicacion, item?.id))
                 if (mostrarCamposExtra) {
                     OutlinedTextField(
                         value = domicilioLaboral, onValueChange = { domicilioLaboral = filtrarCoordenadas(it) }, label = { Text("Domicilio Laboral") },
@@ -1474,5 +1476,79 @@ suspend fun extraerDatosTicketDeImagen(context: android.content.Context, uri: Ur
             .addOnFailureListener { if (cont.isActive) cont.resume(DatosTicketOcr(null, null, null)) {} }
     } catch (e: Exception) {
         if (cont.isActive) cont.resume(DatosTicketOcr(null, null, null)) {}
+    }
+}
+
+
+// ───────── Aviso: otros registros en la misma ubicación (coordenadas) ─────────
+// Radio fijo de 10 m (el mismo que usa Filtrar para "cercanos por GPS"). Compara contra TODOS los
+// registros de Matriz (Room, offline); no depende de Sheets.
+const val RADIO_MISMA_UBICACION_M = 10.0
+
+data class CoincidenciaUbicacion(val id: String, val nombre: String, val distanciaM: Int)
+
+fun buscarCoincidenciasUbicacion(
+    coordenadas: String?,
+    registros: List<MatrizEntity>,
+    excluirId: String? = null,
+    radioMetros: Double = RADIO_MISMA_UBICACION_M
+): List<CoincidenciaUbicacion> {
+    val origen = parseLatLngOrden(coordenadas) ?: return emptyList()
+    return registros.asSequence()
+        .filter { it.id != excluirId }
+        .mapNotNull { r ->
+            val p = parseLatLngOrden(r.ubicacion) ?: return@mapNotNull null
+            val d = distanciaKm(origen, p) * 1000.0
+            if (d <= radioMetros) CoincidenciaUbicacion(r.id, r.nombre, d.toInt()) else null
+        }
+        .sortedBy { it.distanciaM }
+        .toList()
+}
+
+/** Lee todos los registros de Matriz desde Room (Flow) sin cambiar la firma de los diálogos. */
+@Composable
+fun rememberTodosMatriz(): List<MatrizEntity> {
+    val context = LocalContext.current
+    val flow = remember {
+        (context.applicationContext as MainApplication).container.database.matrizDao().getAllMatriz()
+    }
+    return flow.collectAsState(initial = emptyList()).value
+}
+
+/** Calcula fuera del hilo principal para no trabar la escritura (cada tecla en el formulario). */
+@Composable
+fun rememberCoincidenciasUbicacion(coordenadas: String?, excluirId: String?): List<CoincidenciaUbicacion> {
+    val todos = rememberTodosMatriz()
+    return produceState(emptyList<CoincidenciaUbicacion>(), coordenadas, excluirId, todos) {
+        value = withContext(Dispatchers.Default) { buscarCoincidenciasUbicacion(coordenadas, todos, excluirId) }
+    }.value
+}
+
+@Composable
+fun AvisoMismaUbicacion(coincidencias: List<CoincidenciaUbicacion>) {
+    if (coincidencias.isEmpty()) return
+    var abierto by remember(coincidencias) { mutableStateOf(false) }
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().clickable { abierto = !abierto }
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                Spacer(Modifier.width(8.dp))
+                val n = coincidencias.size
+                Text(
+                    if (n == 1) "Hay 1 registro más en esta ubicación" else "Hay $n registros más en esta ubicación",
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+            if (abierto) {
+                Spacer(Modifier.height(6.dp))
+                coincidencias.forEach {
+                    Text("• ${it.nombre} (${it.distanciaM} m)", color = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+        }
     }
 }

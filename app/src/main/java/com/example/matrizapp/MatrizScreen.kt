@@ -153,6 +153,7 @@ fun MatrizDetailDialog(
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 160.dp) }
+                AvisoMismaUbicacion(rememberCoincidenciasUbicacion(item.ubicacion, item.id))
                 Text("ID: ${item.id}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 StatusBadge(item.estado)
                 Spacer(Modifier.height(2.dp))
