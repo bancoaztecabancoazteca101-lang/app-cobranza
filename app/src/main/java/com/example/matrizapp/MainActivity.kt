@@ -136,6 +136,9 @@ class MainActivity : ComponentActivity() {
                     isRefreshing = true
                     coroutineScope.launch {
                         try { container.repository.refreshAll() } catch (e: Exception) { agregarNotificacion("Error de sincronización: " + (e.message ?: "revisa tu conexión")) }
+                        // Después de actualizar Room, deja programado el backfill de fotos. Si no hay red,
+                        // WorkManager espera automáticamente hasta que vuelva la conectividad.
+                        ClientImageSyncWorker.enqueue(this@MainActivity)
                         SmsStatusWorker.programarAhora(this@MainActivity)
                         try { container.repository.reportarDispositivo(DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId) } catch (e: Exception) { }
                         isRefreshing = false
