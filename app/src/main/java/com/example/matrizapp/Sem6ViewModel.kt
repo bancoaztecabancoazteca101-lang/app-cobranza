@@ -11,8 +11,13 @@ import kotlinx.coroutines.launch
 class Sem6ViewModel(
     private val repository: SheetsRepository,
     private val cacheStore: Sem6CacheStore,
-    val driveHelper: DriveHelper
+    val driveHelper: DriveHelper,
+    private val matrizDao: MatrizDao
 ) : ViewModel() {
+    /** Cartera de Matriz (local) para buscar al cliente al agregar un registro a Semana 6. */
+    val matrizList: StateFlow<List<MatrizEntity>> = matrizDao.getAllMatriz()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _itemsRaw = MutableStateFlow<List<Sem6Item>>(emptyList())
 
     private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)

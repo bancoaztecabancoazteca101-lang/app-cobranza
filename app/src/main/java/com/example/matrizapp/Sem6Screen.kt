@@ -41,6 +41,9 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     var selectorSemanaExpanded by remember { mutableStateOf(false) }
     var itemToView by remember { mutableStateOf<Sem6Item?>(null) }
     var mostrarNuevoRegistro by remember { mutableStateOf(false) }
+    var mostrarBuscarMatriz by remember { mutableStateOf(false) }
+    var prefillMatriz by remember { mutableStateOf<MatrizEntity?>(null) }
+    val matrizList by viewModel.matrizList.collectAsState()
 
     val items = remember(allItems, searchQuery) {
         if (searchQuery.isBlank()) allItems else allItems.filter { item ->
@@ -157,7 +160,7 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
         }
     }
 
-    FloatingActionButton(onClick = { mostrarNuevoRegistro = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
+    FloatingActionButton(onClick = { mostrarBuscarMatriz = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
         Icon(Icons.Default.Add, contentDescription = "Nuevo registro")
     }
     }
@@ -165,10 +168,19 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
     itemToView?.let { item ->
         Sem6DetailDialog(item = item, driveHelper = viewModel.driveHelper, viewModel = viewModel, onDismiss = { itemToView = null })
     }
+    if (mostrarBuscarMatriz) {
+        SolicitudBuscarMatrizDialog(
+            matriz = matrizList,
+            onDismiss = { mostrarBuscarMatriz = false },
+            onElegir = { m -> prefillMatriz = m; mostrarBuscarMatriz = false; mostrarNuevoRegistro = true },
+            onDesdeCero = { prefillMatriz = null; mostrarBuscarMatriz = false; mostrarNuevoRegistro = true }
+        )
+    }
     if (mostrarNuevoRegistro) {
         Sem6NuevoRegistroDialog(
             viewModel = viewModel,
-            onDismiss = { mostrarNuevoRegistro = false },
+            prefill = prefillMatriz,
+            onDismiss = { mostrarNuevoRegistro = false; prefillMatriz = null },
             onCreado = { itemToView = it }
         )
     }
@@ -411,21 +423,29 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
 /** Diálogo para agregar un registro nuevo a la hoja de la semana que se está viendo (antes
  * esta hoja era de solo lectura, poblada solo por el script de Apps Script). */
 @Composable
-fun Sem6NuevoRegistroDialog(viewModel: Sem6ViewModel, onDismiss: () -> Unit, onCreado: (Sem6Item) -> Unit) {
+fun Sem6NuevoRegistroDialog(viewModel: Sem6ViewModel, onDismiss: () -> Unit, onCreado: (Sem6Item) -> Unit, prefill: MatrizEntity? = null) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    var nombre by remember { mutableStateOf("") }
+    var nombre by remember { mutableStateOf(prefill?.nombre ?: "") }
     var sem by remember { mutableStateOf("6") }
-    var req by remember { mutableStateOf("") }
-    var cu by remember { mutableStateOf("") }
+    var req by remember { mutableStateOf(prefill?.requisito?.filter { c -> c.isDigit() || c == '.' } ?: "") }
+    var cu by remember { mutableStateOf(prefill?.folioP ?: "") }
     var colonia by remember { mutableStateOf("") }
-    var numTT by remember { mutableStateOf("") }
-    var ubicacion by remember { mutableStateOf("") }
+    var numTT by remember { mutableStateOf(prefill?.numTT ?: "") }
+    var ubicacion by remember { mutableStateOf(prefill?.ubicacion?.takeIf { it != "N/A" } ?: "") }
     var buscandoUbicacion by remember { mutableStateOf(false) }
     var mostrarBuscarDireccion by remember { mutableStateOf(false) }
     var buscandoDireccionTexto by remember { mutableStateOf(false) }
     val isGuardando by viewModel.isGuardandoRegistro.collectAsState()
     val errorRegistro by viewModel.errorRegistro.collectAsState()
+
+    // Colonia: se deduce de la ubicación que ya trae el cliente de Matriz (mismo resolvedor que las tarjetas).
+    LaunchedEffect(prefill?.id) {
+        if (prefill != null && colonia.isBlank()) {
+            val (c, _) = resolverColoniaYCalle(context, prefill.ubicacion)
+            if (!c.isNullOrBlank()) colonia = c
+        }
+    }
 
     LaunchedEffect(buscandoUbicacion) {
         if (buscandoUbicacion) {
