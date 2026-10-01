@@ -28,4 +28,25 @@ object NumeroContactadoGuard {
         ed.putLong(clave, ahora).apply()
         return true
     }
+
+    private const val PREFS_SMS = "numero_sms_guard"
+    const val VENTANA_SMS_MS = 30 * 60 * 1000L
+
+    /** Candado EN EL ENVÍO del SMS automático (distinto de `reservar`, que se toma antes de llamar):
+     * un mismo número no recibe un segundo SMS automático dentro de 30 min, venga de donde venga
+     * (dos corridas seguidas en la cola, bloque + catchup, cliente duplicado en Matriz...). El
+     * `reservar` de 15 min no alcanzaba cuando la segunda corrida arrancaba pasada esa ventana. */
+    @Synchronized
+    fun reservarSms(context: Context, numero: String, ventanaMs: Long = VENTANA_SMS_MS): Boolean {
+        val clave = ultimos10Digitos(numero)
+        if (clave.isEmpty()) return true
+        val prefs = context.getSharedPreferences(PREFS_SMS, Context.MODE_PRIVATE)
+        val ahora = System.currentTimeMillis()
+        val ultimo = prefs.getLong(clave, 0L)
+        if (ultimo != 0L && ahora - ultimo < ventanaMs) return false
+        val ed = prefs.edit()
+        prefs.all.forEach { (k, v) -> if (v is Long && ahora - v > PODA_MS) ed.remove(k) }
+        ed.putLong(clave, ahora).commit() // commit: queda guardado antes de enviar, aunque el proceso muera
+        return true
+    }
 }
