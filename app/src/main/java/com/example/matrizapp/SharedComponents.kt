@@ -1284,14 +1284,17 @@ private val PALABRAS_UI_NOMBRE = listOf(
 internal fun detectarNombreEnTexto(visionText: com.google.mlkit.vision.text.Text, alturaImagen: Int): String? {
     class Linea(val texto: String, val box: android.graphics.Rect)
     val candidatas = ArrayList<Linea>()
+    val cuBoxes = ArrayList<android.graphics.Rect>()
     for (block in visionText.textBlocks) for (line in block.lines) {
         val box = line.boundingBox ?: continue
+        if (patronCuOcr.containsMatchIn(line.text)) cuBoxes.add(box)
         // NFC: compone letra + acento suelto en un solo carácter; trim de símbolos sueltos en los
         // extremos (ej. "PENICHE." o "| PENICHE") sin tocar lo de en medio.
         val texto = java.text.Normalizer.normalize(line.text, java.text.Normalizer.Form.NFC)
             .trim { !it.isLetter() }
         val sinEspacios = texto.replace(" ", "")
-        if (sinEspacios.isEmpty() || !sinEspacios.all { it.isLetter() }) continue
+        // >= 3 letras por línea: descarta íconos de la barra de estado que el OCR lee como letras sueltas ("A", "G", "G")
+        if (sinEspacios.length < 3 || !sinEspacios.all { it.isLetter() }) continue
         if (PALABRAS_UI_NOMBRE.any { texto.contains(it, ignoreCase = true) }) continue
         if (alturaImagen > 0 && box.top < alturaImagen * 0.25) continue
         candidatas.add(Linea(texto, box))
@@ -1313,16 +1316,25 @@ internal fun detectarNombreEnTexto(visionText: com.google.mlkit.vision.text.Text
         }
         if (sigue) actual!!.add(l) else grupos.add(mutableListOf(l))
     }
-    var mejor: String? = null
-    var mejorAltura = 0.0
-    for (g in grupos) {
+    fun valido(g: List<Linea>): Boolean {
         val texto = g.joinToString(" ") { it.texto }
         val palabras = texto.split(" ").filter { it.isNotBlank() }
-        if (palabras.size !in 2..6 || texto.length !in 5..60) continue
-        val altura = g.sumOf { it.box.height() }.toDouble() / g.size
-        if (altura > mejorAltura) { mejorAltura = altura; mejor = texto }
+        return palabras.size in 2..6 && texto.length in 5..60
     }
-    return mejor
+    // El nombre siempre va justo arriba del CU (01-09-00201-11134): si hay CU en la foto, se prefiere
+    // el grupo anclado ahí. Evita agarrar textos de la barra de estado o encabezados.
+    fun anclado(g: List<Linea>): Boolean {
+        val ult = g.last()
+        val h = ult.box.height().coerceAtLeast(1)
+        return cuBoxes.any { cu ->
+            (cu.top - ult.box.bottom) in (-h / 2)..(h * 3) &&
+                kotlin.math.abs(cu.left - g.first().box.left) <= h * 3
+        }
+    }
+    val validos = grupos.filter { valido(it) }
+    val pool = validos.filter { anclado(it) }.ifEmpty { validos }
+    val elegido = pool.maxByOrNull { g -> g.sumOf { it.box.height() }.toDouble() / g.size }
+    return elegido?.joinToString(" ") { it.texto }
 }
 
 /** Resultado del OCR usado en el diálogo de Editar/Nuevo registro: nombre, monto "Requerido",
