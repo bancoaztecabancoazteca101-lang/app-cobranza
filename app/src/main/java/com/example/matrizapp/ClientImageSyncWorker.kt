@@ -20,7 +20,7 @@ class ClientImageSyncWorker(appContext: Context, workerParams: WorkerParameters)
             val items = container.database.matrizDao().getAllMatriz().first()
             for (item in items) {
                 listOf(item.imagenUrl, item.imagenUrl2).filter { !it.isNullOrBlank() }.distinct().forEach { fuente ->
-                    runCatching { container.clientImageStore.ensureLocal(fuente, container.driveHelper) }
+                    try { container.clientImageStore.ensureLocal(fuente, container.driveHelper) } catch (_: Exception) { /* continúa con la siguiente foto */ }
                 }
             }
             Result.success()
