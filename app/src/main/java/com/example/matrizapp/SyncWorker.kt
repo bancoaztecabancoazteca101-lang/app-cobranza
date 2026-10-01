@@ -19,6 +19,9 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
             syncRutaIA()
             syncSolicitud()
             syncFiltroFecha()
+            // Con red disponible, aprovecha este ciclo para completar las fotos que todavía
+            // no estén guardadas de forma persistente en el teléfono.
+            ClientImageSyncWorker.enqueue(applicationContext)
             Result.success()
         } catch (e: Exception) { Result.retry() }
     }
