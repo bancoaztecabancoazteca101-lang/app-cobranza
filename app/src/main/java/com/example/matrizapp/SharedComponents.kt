@@ -1568,3 +1568,37 @@ fun AvisoMismaUbicacion(coincidencias: List<CoincidenciaUbicacion>) {
         }
     }
 }
+
+
+/** Comparte por WhatsApp el registro de Matriz (mismo estilo que la Solicitud): cliente, CU,
+ * requerido, estado, hora de retorno (si hay), dirección con nombre de calle/colonia y URL de Maps.
+ * Solo texto; si WhatsApp no está instalado cae al selector de apps. */
+suspend fun compartirMatrizPorWhatsApp(context: android.content.Context, item: MatrizEntity) {
+    try {
+        val (colonia, calle) = resolverColoniaYCalle(context, item.ubicacion)
+        val direccion = listOfNotNull(calle, colonia).joinToString(", ")
+        val sb = StringBuilder()
+        sb.append("*Cliente:* ${item.nombre}\n")
+        if (!item.folioP.isNullOrBlank()) sb.append("*CU:* ${item.folioP}\n")
+        sb.append("*Requerido:* ${formatearMontoMatriz(item.requisito)}\n")
+        if (item.estado.isNotBlank()) sb.append("*Estado:* ${item.estado}\n")
+        if (!item.hora.isNullOrBlank()) sb.append("*Hora de retorno:* ${item.hora}\n")
+        if (direccion.isNotBlank()) sb.append("*Dirección:* $direccion\n")
+        if (!item.ubicacion.isNullOrBlank() && item.ubicacion != "N/A") {
+            sb.append("*Ubicación:* https://maps.google.com/?q=${item.ubicacion.replace(" ", "")}\n")
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, sb.toString().trimEnd())
+        }
+        try {
+            intent.setPackage("com.whatsapp")
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            intent.setPackage(null)
+            context.startActivity(Intent.createChooser(intent, "Compartir vía"))
+        }
+    } catch (e: Exception) {
+        Toast.makeText(context, "No se pudo compartir: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}

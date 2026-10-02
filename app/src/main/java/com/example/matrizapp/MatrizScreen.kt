@@ -138,6 +138,7 @@ fun MatrizDetailDialog(
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = LocalContext.current
     var showPaymentChannels by remember(item.id) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -175,6 +176,15 @@ fun MatrizDetailDialog(
                 if (!item.ubicacion.isNullOrBlank() && item.ubicacion != "N/A") {
                     Spacer(Modifier.height(4.dp))
                     ContactActionsRow(numTT = null, ubicacion = item.ubicacion)
+                }
+                Spacer(Modifier.height(4.dp))
+                OutlinedButton(
+                    onClick = { scope.launch { compartirMatrizPorWhatsApp(context, item) } },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Compartir por WhatsApp")
                 }
             }
         },
