@@ -98,10 +98,14 @@ class MainActivity : ComponentActivity() {
                         previousCrash?.let { add(NotificacionApp("La app tuvo un cierre inesperado. Revisa Notificaciones si necesitas más información.", horaNotifFormato.format(Date()))) }
                     }
                 }
-                var bannerNotifVisible by remember { mutableStateOf(notificacionesApp.isNotEmpty()) }
+                // El banner arriba SOLO se usa para el cierre inesperado de la app. Los errores de
+                // sincronización (sin internet, etc.) van directo al área de Notificaciones (el contador
+                // del menú) sin interrumpir la pantalla.
+                var bannerMensaje by remember { mutableStateOf<String?>(notificacionesApp.firstOrNull()?.mensaje) }
                 fun agregarNotificacion(mensaje: String) {
+                    if (notificacionesApp.firstOrNull()?.mensaje == mensaje) return // sin repetidas seguidas (auto-sync cada pocos minutos)
                     notificacionesApp.add(0, NotificacionApp(mensaje, horaNotifFormato.format(Date())))
-                    bannerNotifVisible = true
+                    while (notificacionesApp.size > 50) notificacionesApp.removeAt(notificacionesApp.lastIndex)
                 }
                 var signedIn by remember { mutableStateOf(hasSignedInAccount(this)) }
                 if (!signedIn) { LoginScreen(onSignedIn = { signedIn = true }); return@MaterialTheme }
@@ -135,7 +139,15 @@ class MainActivity : ComponentActivity() {
                     if (isRefreshing) return
                     isRefreshing = true
                     coroutineScope.launch {
-                        try { container.repository.refreshAll() } catch (e: Exception) { agregarNotificacion("Error de sincronización: " + (e.message ?: "revisa tu conexión")) }
+                        try { container.repository.refreshAll() } catch (e: Exception) {
+                            val detalle = e.message.orEmpty()
+                            val sinRed = listOf("Unable to resolve host", "No address associated", "timeout", "timed out", "Failed to connect", "Network is unreachable", "UnknownHost")
+                                .any { detalle.contains(it, ignoreCase = true) }
+                            agregarNotificacion(
+                                if (sinRed || detalle.isBlank()) "Sin conexión: se muestran los datos guardados en el teléfono."
+                                else "Error de sincronización: $detalle"
+                            )
+                        }
                         // Después de actualizar Room, deja programado el backfill de fotos. Si no hay red,
                         // WorkManager espera automáticamente hasta que vuelva la conectividad.
                         ClientImageSyncWorker.enqueue(this@MainActivity)
@@ -270,8 +282,7 @@ class MainActivity : ComponentActivity() {
                         })
                     }) { innerPadding ->
                         Column(modifier = Modifier.fillMaxSize()) {
-                            if (bannerNotifVisible && notificacionesApp.isNotEmpty()) {
-                                val message = notificacionesApp.first().mensaje
+                            bannerMensaje?.let { message ->
                                 Surface(
                                     tonalElevation = 2.dp,
                                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -284,7 +295,7 @@ class MainActivity : ComponentActivity() {
                                         Icon(Icons.Default.Notifications, contentDescription = "Notificación de la app", modifier = Modifier.size(20.dp))
                                         Spacer(Modifier.width(8.dp))
                                         Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                                        IconButton(onClick = { bannerNotifVisible = false }, modifier = Modifier.size(32.dp)) {
+                                        IconButton(onClick = { bannerMensaje = null }, modifier = Modifier.size(32.dp)) {
                                             Icon(Icons.Default.Close, contentDescription = "Cerrar notificación", modifier = Modifier.size(18.dp))
                                         }
                                     }
