@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -333,12 +334,15 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
     var susceptible by remember(item.id) { mutableStateOf(item.susceptible) }
     var observaciones by remember(item.id) { mutableStateOf(item.observaciones) }
     var capital by remember(item.id) { mutableStateOf(item.capital) }
+    var abono by remember(item.id) { mutableStateOf(item.abono) }
     var susceptibleMenuExpanded by remember { mutableStateOf(false) }
     var mostrarConfirmarEliminar by remember { mutableStateOf(false) }
     val isSaving by viewModel.isSavingNotas.collectAsState()
     val errorNotas by viewModel.errorNotas.collectAsState()
     val isGuardandoRegistro by viewModel.isGuardandoRegistro.collectAsState()
     val errorRegistro by viewModel.errorRegistro.collectAsState()
+    val scopeCompartir = rememberCoroutineScope()
+    val contextCompartir = androidx.compose.ui.platform.LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -400,6 +404,16 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                OutlinedTextField(
+                    value = abono,
+                    onValueChange = { input -> abono = input.filter { it.isDigit() || it == '.' } },
+                    label = { Text("Abono") },
+                    leadingIcon = { Text("$") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 ExposedDropdownMenuBox(expanded = susceptibleMenuExpanded, onExpandedChange = { susceptibleMenuExpanded = it }) {
                     OutlinedTextField(
                         value = susceptible, onValueChange = {}, label = { Text("Status") },
@@ -424,6 +438,15 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                OutlinedButton(
+                    onClick = { scopeCompartir.launch { compartirSem6PorWhatsApp(contextCompartir, item, capital, seContiene, abono, susceptible, observaciones) } },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Compartir por WhatsApp")
+                }
+
                 errorNotas?.let { msg ->
                     Text(msg, color = ClayRedText, style = MaterialTheme.typography.bodySmall)
                 }
@@ -432,7 +455,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
         confirmButton = {
             Button(
                 onClick = {
-                    viewModel.guardarNotas(item.id, seContiene, susceptible, observaciones, capital) { ok ->
+                    viewModel.guardarNotas(item.id, seContiene, susceptible, observaciones, capital, abono) { ok ->
                         if (ok) onDismiss()
                     }
                 },

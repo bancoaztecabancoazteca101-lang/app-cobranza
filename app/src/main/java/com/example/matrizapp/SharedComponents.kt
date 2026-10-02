@@ -1268,46 +1268,84 @@ suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): S
         )
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
-                var mejorLinea: String? = null
-                var mejorAltura = 0
-                fun evaluarCandidato(textoCrudo: String, box: android.graphics.Rect?, alturaComparable: Int) {
-                    // NFC: compone letra+acento suelto (p.ej. "e" + ´) en un solo carácter ("é")
-                    // antes de validar "solo letras". Sin esto, el acento queda como una marca
-                    // Unicode aparte que Char.isLetter() no cuenta como letra y rechaza la línea
-                    // completa (por eso los nombres con acentos no se detectaban).
-                    val texto = java.text.Normalizer.normalize(textoCrudo, java.text.Normalizer.Form.NFC).trim()
-                    val enZonaEncabezado = box != null && alturaImagen > 0 && box.top < alturaImagen * 0.25
-                    val esPalabraUi = palabrasUi.any { texto.contains(it, ignoreCase = true) }
-                    val soloLetras = texto.replace(" ", "").isNotEmpty() &&
-                        texto.replace(" ", "").all { it.isLetter() }
-                    val palabras = texto.split(" ").filter { it.isNotBlank() }
-                    if (soloLetras && !esPalabraUi && !enZonaEncabezado && palabras.size in 2..5 && texto.length in 5..40) {
-                        if (alturaComparable > mejorAltura) { mejorAltura = alturaComparable; mejorLinea = texto }
-                    }
-                }
-                for (block in visionText.textBlocks) {
-                    // Candidato a nivel de línea (nombre corto que cabe en una sola línea visual).
-                    for (line in block.lines) {
-                        evaluarCandidato(line.text.trim(), line.boundingBox, line.boundingBox?.height() ?: 0)
-                    }
-                    // Candidato a nivel de bloque: junta todas las líneas del mismo bloque/párrafo,
-                    // para reconstruir nombres largos que la pantalla corta a una segunda línea
-                    // visual (p.ej. un apellido que no cupo junto al resto del nombre). La altura
-                    // se compara por línea promedio (no la del bloque completo) para que un bloque
-                    // de 2 líneas no gane solo por ser más alto, sino solo si el texto en sí es
-                    // del tamaño de letra correcto.
-                    if (block.lines.size > 1) {
-                        val textoBloque = block.lines.joinToString(" ") { it.text.trim() }
-                        val alturaPromedio = block.lines.sumOf { it.boundingBox?.height() ?: 0 } / block.lines.size
-                        evaluarCandidato(textoBloque, block.boundingBox, alturaPromedio)
-                    }
-                }
+                val mejorLinea: String? = detectarNombreEnTexto(visionText, alturaImagen)
                 if (cont.isActive) cont.resume(mejorLinea?.uppercase()) {}
             }
             .addOnFailureListener { if (cont.isActive) cont.resume(null) {} }
     } catch (e: Exception) {
         if (cont.isActive) cont.resume(null) {}
     }
+}
+
+/** Palabras de encabezados/botones de la app de Banco Azteca y de AppSheet que NO son el nombre. */
+private val PALABRAS_UI_NOMBRE = listOf(
+    "resumen del cliente", "expediente del cliente", "ver expediente", "ver otros lugares",
+    "prepárate", "preparate", "en ruta", "localiza", "contacta", "cobra",
+    "monto solicitado", "folio de solicitud", "torre de control", "temporizador",
+    "espera en el lugar", "seguimiento a esta solicitud", "continuar con tu ruta",
+    "originación", "originacion", "días de atraso", "dias de atraso", "último pago", "ultimo pago"
+)
+
+/** Detecta el nombre completo del cliente en la foto. El nombre largo se parte en 2 renglones
+ * visuales (ej. "MONTSERRAT VEGA SIERRA" / "PENICHE"), y ML Kit suele meter el CU y el "Último
+ * pago" en el MISMO bloque que el nombre, así que reconstruirlo por bloque falla (el bloque trae
+ * números). Por eso se trabaja por LÍNEA: se toman solo las líneas de puras letras, se agrupan las
+ * que están pegadas verticalmente, con letra del mismo tamaño y alineadas a la izquierda, y se
+ * elige el grupo con la letra más grande (2 a 6 palabras). */
+internal fun detectarNombreEnTexto(visionText: com.google.mlkit.vision.text.Text, alturaImagen: Int): String? {
+    class Linea(val texto: String, val box: android.graphics.Rect)
+    val candidatas = ArrayList<Linea>()
+    val cuBoxes = ArrayList<android.graphics.Rect>()
+    for (block in visionText.textBlocks) for (line in block.lines) {
+        val box = line.boundingBox ?: continue
+        if (patronCuOcr.containsMatchIn(line.text)) cuBoxes.add(box)
+        // NFC: compone letra + acento suelto en un solo carácter; trim de símbolos sueltos en los
+        // extremos (ej. "PENICHE." o "| PENICHE") sin tocar lo de en medio.
+        val texto = java.text.Normalizer.normalize(line.text, java.text.Normalizer.Form.NFC)
+            .trim { !it.isLetter() }
+        val sinEspacios = texto.replace(" ", "")
+        // >= 3 letras por línea: descarta íconos de la barra de estado que el OCR lee como letras sueltas ("A", "G", "G")
+        if (sinEspacios.length < 3 || !sinEspacios.all { it.isLetter() }) continue
+        if (PALABRAS_UI_NOMBRE.any { texto.contains(it, ignoreCase = true) }) continue
+        if (alturaImagen > 0 && box.top < alturaImagen * 0.25) continue
+        candidatas.add(Linea(texto, box))
+    }
+    candidatas.sortBy { it.box.top }
+    val grupos = ArrayList<MutableList<Linea>>()
+    for (l in candidatas) {
+        val actual = grupos.lastOrNull()
+        val previa = actual?.last()
+        var sigue = false
+        if (actual != null && previa != null) {
+            val h = l.box.height().coerceAtLeast(1)
+            val hPrevia = previa.box.height().coerceAtLeast(1)
+            val ratio = h.toFloat() / hPrevia
+            val hueco = l.box.top - previa.box.bottom
+            sigue = ratio in 0.7f..1.4f &&
+                hueco in (-h / 2)..(h * 13 / 10) &&
+                kotlin.math.abs(l.box.left - previa.box.left) <= h * 3 / 2
+        }
+        if (sigue) actual!!.add(l) else grupos.add(mutableListOf(l))
+    }
+    fun valido(g: List<Linea>): Boolean {
+        val texto = g.joinToString(" ") { it.texto }
+        val palabras = texto.split(" ").filter { it.isNotBlank() }
+        return palabras.size in 2..6 && texto.length in 5..60
+    }
+    // El nombre siempre va justo arriba del CU (01-09-00201-11134): si hay CU en la foto, se prefiere
+    // el grupo anclado ahí. Evita agarrar textos de la barra de estado o encabezados.
+    fun anclado(g: List<Linea>): Boolean {
+        val ult = g.last()
+        val h = ult.box.height().coerceAtLeast(1)
+        return cuBoxes.any { cu ->
+            (cu.top - ult.box.bottom) in (-h / 2)..(h * 3) &&
+                kotlin.math.abs(cu.left - g.first().box.left) <= h * 3
+        }
+    }
+    val validos = grupos.filter { valido(it) }
+    val pool = validos.filter { anclado(it) }.ifEmpty { validos }
+    val elegido = pool.maxByOrNull { g -> g.sumOf { it.box.height() }.toDouble() / g.size }
+    return elegido?.joinToString(" ") { it.texto }
 }
 
 /** Resultado del OCR usado en el diálogo de Editar/Nuevo registro: nombre, monto "Requerido",
@@ -1365,29 +1403,7 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
         )
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
-                var mejorLinea: String? = null
-                var mejorAltura = 0
-                fun evaluarCandidato(textoCrudo: String, box: android.graphics.Rect?, alturaComparable: Int) {
-                    val texto = java.text.Normalizer.normalize(textoCrudo, java.text.Normalizer.Form.NFC).trim()
-                    val enZonaEncabezado = box != null && alturaImagen > 0 && box.top < alturaImagen * 0.25
-                    val esPalabraUi = palabrasUi.any { texto.contains(it, ignoreCase = true) }
-                    val soloLetras = texto.replace(" ", "").isNotEmpty() &&
-                        texto.replace(" ", "").all { it.isLetter() }
-                    val palabras = texto.split(" ").filter { it.isNotBlank() }
-                    if (soloLetras && !esPalabraUi && !enZonaEncabezado && palabras.size in 2..5 && texto.length in 5..40) {
-                        if (alturaComparable > mejorAltura) { mejorAltura = alturaComparable; mejorLinea = texto }
-                    }
-                }
-                for (block in visionText.textBlocks) {
-                    for (line in block.lines) {
-                        evaluarCandidato(line.text.trim(), line.boundingBox, line.boundingBox?.height() ?: 0)
-                    }
-                    if (block.lines.size > 1) {
-                        val textoBloque = block.lines.joinToString(" ") { it.text.trim() }
-                        val alturaPromedio = block.lines.sumOf { it.boundingBox?.height() ?: 0 } / block.lines.size
-                        evaluarCandidato(textoBloque, block.boundingBox, alturaPromedio)
-                    }
-                }
+                val mejorLinea: String? = detectarNombreEnTexto(visionText, alturaImagen)
                 // Monto "Requerido" y "días de atraso": se buscan sobre el texto completo (no
                 // línea por línea) porque el OCR a veces separa la etiqueta y el número en
                 // bloques distintos que igual quedan consecutivos en visionText.text.
@@ -1561,5 +1577,95 @@ fun AvisoMismaUbicacion(coincidencias: List<CoincidenciaUbicacion>) {
                 }
             }
         }
+    }
+}
+
+
+/** Abre WhatsApp con el texto listo para elegir contacto; si no está instalado, cae al selector. */
+fun enviarTextoPorWhatsApp(context: android.content.Context, texto: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, texto.trimEnd())
+    }
+    try {
+        intent.setPackage("com.whatsapp")
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        try {
+            intent.setPackage(null)
+            context.startActivity(Intent.createChooser(intent, "Compartir vía"))
+        } catch (e2: Exception) {
+            Toast.makeText(context, "No se pudo compartir: ${e2.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
+private fun urlMapsDeUbicacion(ubicacion: String?): String? =
+    if (ubicacion.isNullOrBlank() || ubicacion == "N/A") null
+    else "https://maps.google.com/?q=${ubicacion.replace(" ", "")}"
+
+private fun montoConSigno(texto: String): String {
+    val numero = texto.replace("[^0-9.]".toRegex(), "").toDoubleOrNull() ?: return texto
+    return "$" + java.text.NumberFormat.getNumberInstance(Locale("es", "MX")).apply { maximumFractionDigits = 0 }.format(numero)
+}
+
+/** Comparte por WhatsApp el registro de Matriz / Filtro Fecha (mismo estilo que la Solicitud):
+ * cliente, CU, requerido, estado, hora de retorno (si hay), dirección con nombre de calle/colonia
+ * y URL de Maps. [estado] y [hora] permiten mandar el valor que está en pantalla (editado y aún
+ * sin guardar) en vez del guardado. Solo texto. */
+suspend fun compartirMatrizPorWhatsApp(
+    context: android.content.Context,
+    item: MatrizEntity,
+    estado: String = item.estado,
+    hora: String? = item.hora
+) {
+    try {
+        val (colonia, calle) = resolverColoniaYCalle(context, item.ubicacion)
+        val direccion = listOfNotNull(calle, colonia).joinToString(", ")
+        val sb = StringBuilder()
+        sb.append("*Cliente:* ${item.nombre}\n")
+        if (!item.folioP.isNullOrBlank()) sb.append("*CU:* ${item.folioP}\n")
+        sb.append("*Requerido:* ${formatearMontoMatriz(item.requisito)}\n")
+        if (estado.isNotBlank()) sb.append("*Estado:* $estado\n")
+        if (!hora.isNullOrBlank()) sb.append("*Hora de retorno:* $hora\n")
+        if (direccion.isNotBlank()) sb.append("*Dirección:* $direccion\n")
+        urlMapsDeUbicacion(item.ubicacion)?.let { sb.append("*Ubicación:* $it\n") }
+        enviarTextoPorWhatsApp(context, sb.toString())
+    } catch (e: Exception) {
+        Toast.makeText(context, "No se pudo compartir: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+/** Comparte por WhatsApp lo que se ve en el detalle de Semana 6, con los valores actuales de los
+ * campos editables (aunque no se hayan guardado todavía). */
+suspend fun compartirSem6PorWhatsApp(
+    context: android.content.Context,
+    item: Sem6Item,
+    capital: String,
+    seContiene: String,
+    abono: String,
+    status: String,
+    observaciones: String
+) {
+    try {
+        val (coloniaGeo, calle) = resolverColoniaYCalle(context, item.ubicacion)
+        val colonia = item.colonia.ifBlank { coloniaGeo ?: "" }
+        val sb = StringBuilder()
+        sb.append("*Cliente:* ${item.nombre}\n")
+        sb.append("*Sem:* ${item.sem}  ·  *Req:* ${montoConSigno(item.req)}\n")
+        if (capital.isNotBlank()) sb.append("*Capital:* ${montoConSigno(capital)}\n")
+        if (item.cu.isNotBlank()) sb.append("*CU:* ${item.cu}\n")
+        if (colonia.isNotBlank()) sb.append("*Colonia:* $colonia\n")
+        if (!calle.isNullOrBlank()) sb.append("*Calle:* $calle\n")
+        if (item.ultimaFechaVisita.isNotBlank()) sb.append("*Última vez:* ${item.ultimaFechaVisita}\n")
+        sb.append("*Visitas:* ${item.visitas}\n")
+        if (seContiene.isNotBlank()) sb.append("*Se Contiene:* ${montoConSigno(seContiene)}\n")
+        if (abono.isNotBlank()) sb.append("*Abono:* ${montoConSigno(abono)}\n")
+        if (status.isNotBlank()) sb.append("*Status:* $status\n")
+        if (observaciones.isNotBlank()) sb.append("*Observaciones:* $observaciones\n")
+        urlMapsDeUbicacion(item.ubicacion)?.let { sb.append("*Ubicación:* $it\n") }
+        enviarTextoPorWhatsApp(context, sb.toString())
+    } catch (e: Exception) {
+        Toast.makeText(context, "No se pudo compartir: ${e.message}", Toast.LENGTH_LONG).show()
     }
 }

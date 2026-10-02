@@ -234,7 +234,7 @@ class MainActivity : ComponentActivity() {
                     backfillCuEnProgreso = backfillCuEnProgreso,
                     onBackfillCuClick = { matrizVm.backfillCuFaltantes(this@MainActivity) },
                     ticketPagoEnProgreso = ticketPagoEnProgreso,
-                    onTicketFotoSeleccionada = { uri -> filtroVm.registrarPagoDesdeTicket(this@MainActivity, uri) },
+                    onTicketFotoSeleccionada = { uri -> filtroVm.registrarPagoDesdeTicket(this@MainActivity, uri) { sem6Vm.cargar() } },
                     notificacionesAppCount = notificacionesApp.size) {
                     Scaffold(topBar = {
                         TopAppBar(title = {

@@ -151,7 +151,7 @@ class SheetsRepository(
 
     suspend fun fetchSem6Data(sheetName: String = currentSem6SheetName()): List<Sem6Item> = withContext(Dispatchers.IO) {
         val realName = resolveSheetName(sheetName)
-        val range = "'$realName'!A2:P"
+        val range = "'$realName'!A2:Q"
         val rows = try { sheetsService.spreadsheets().values().get(Constants.SPREADSHEET_ID, range).execute().getValues() } catch (e: Exception) { null } ?: emptyList()
         rows.mapNotNull { row ->
             val nombre = row.getOrNull(0)?.toString()?.trim()
@@ -163,7 +163,8 @@ class SheetsRepository(
                 colonia = row.getOrNull(8)?.toString()?.trim() ?: "", visitas = row.getOrNull(9)?.toString()?.trim()?.toIntOrNull() ?: 0,
                 ultimaFechaVisita = row.getOrNull(10)?.toString()?.trim() ?: "", numTT = row.getOrNull(11)?.toString()?.trim() ?: "",
                 seContiene = row.getOrNull(12)?.toString()?.trim() ?: "", susceptible = row.getOrNull(13)?.toString()?.trim() ?: "",
-                observaciones = row.getOrNull(14)?.toString()?.trim() ?: "", capital = row.getOrNull(15)?.toString()?.trim() ?: ""
+                observaciones = row.getOrNull(14)?.toString()?.trim() ?: "", capital = row.getOrNull(15)?.toString()?.trim() ?: "",
+                abono = row.getOrNull(16)?.toString()?.trim() ?: ""
             )
         }
     }
@@ -173,7 +174,7 @@ class SheetsRepository(
             .sortedByDescending { it.substringAfterLast("-").trim().toIntOrNull() ?: -1 }
     }
 
-    suspend fun updateSem6Notas(id: String, seContiene: String, susceptible: String, observaciones: String, capital: String, sheetName: String = currentSem6SheetName()): Boolean = withContext(Dispatchers.IO) {
+    suspend fun updateSem6Notas(id: String, seContiene: String, susceptible: String, observaciones: String, capital: String, abono: String, sheetName: String = currentSem6SheetName()): Boolean = withContext(Dispatchers.IO) {
         val realName = resolveSheetName(sheetName)
         val idx = findRowIndexById(realName, id, "D")
         if (idx == -1) return@withContext false
@@ -181,6 +182,16 @@ class SheetsRepository(
         updateSheetCell(realName, "N", idx, susceptible)
         updateSheetCell(realName, "O", idx, observaciones)
         updateSheetCell(realName, "P", idx, capital)
+        updateSheetCell(realName, "Q", idx, abono)
+        true
+    }
+
+    /** Cambia SOLO la columna Status/Susceptible (N) de un registro (lo usa el escaneo de ticket para marcar "Recuperado"). */
+    suspend fun updateSem6Susceptible(id: String, susceptible: String, sheetName: String = currentSem6SheetName()): Boolean = withContext(Dispatchers.IO) {
+        val realName = resolveSheetName(sheetName)
+        val idx = findRowIndexById(realName, id, "D")
+        if (idx == -1) return@withContext false
+        updateSheetCell(realName, "N", idx, susceptible)
         true
     }
 
@@ -204,8 +215,8 @@ class SheetsRepository(
         val fechaHora = java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX")).format(java.util.Date())
         // Orden de columnas A-P igual al que lee fetchSem6Data: nombre, sem, req, id, cu,
         // ubicacion, imagenUrl(vacío), (H sin usar), colonia, visitas(0), ultimaFechaVisita,
-        // numTT, seContiene, susceptible, observaciones, capital (estos últimos 4 vacíos).
-        appendRow(sheetName, listOf(nombre, sem, req, id, cu, ubicacion, "", "", colonia, 0, fechaHora, numTT, "", "", "", ""))
+        // numTT, seContiene, susceptible, observaciones, capital, abono (Q) (estos últimos 5 vacíos).
+        appendRow(sheetName, listOf(nombre, sem, req, id, cu, ubicacion, "", "", colonia, 0, fechaHora, numTT, "", "", "", "", ""))
         Sem6Item(
             nombre = nombre, sem = sem, req = req, id = id, cu = cu, imagenUrl = null, colonia = colonia,
             visitas = 0, ultimaFechaVisita = fechaHora, numTT = numTT, ubicacion = ubicacion

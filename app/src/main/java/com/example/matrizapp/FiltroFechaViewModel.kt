@@ -13,7 +13,9 @@ import kotlinx.coroutines.launch
  * aquí. */
 class FiltroFechaViewModel(
     private val matrizDao: MatrizDao,
-    val driveHelper: DriveHelper
+    val driveHelper: DriveHelper,
+    private val repository: SheetsRepository,
+    private val sem6CacheStore: Sem6CacheStore
 ) : ViewModel() {
 
     private fun inicioDeHoy(): Long = java.time.LocalDate.now()
@@ -108,11 +110,13 @@ class FiltroFechaViewModel(
     val ticketPagoResultado: StateFlow<String?> = _ticketPagoResultado
     fun limpiarTicketPagoResultado() { _ticketPagoResultado.value = null }
 
-    /** Lee la foto del ticket de cobranza (OCR), busca el registro del día cuyo nombre
-     * coincida (tolerante a acentos/mayúsculas, como el resto de la app) y lo marca "Pagado"
-     * con el monto leído. Si hay más de un match por nombre, toma el primero -- no debería
-     * haber nombres repetidos en Filtro Fecha. */
-    fun registrarPagoDesdeTicket(context: android.content.Context, uri: android.net.Uri) {
+    /** Lee la foto del ticket de cobranza (OCR) y busca al cliente en DOS lugares:
+     * 1) Filtro Fecha (registros de hoy): si lo encuentra lo marca "Pagado" con el monto leído.
+     * 2) Semana 6 (hoja de la semana actual): si lo encuentra lo marca "Recuperado" SOLO si el
+     *    monto del ticket es igual o mayor al campo Abono del registro.
+     * La búsqueda (CU, nombre tolerante, texto completo) es la misma en ambos. [onSem6Cambio] se
+     * llama cuando se escribió algo en Semana 6, para que la pantalla recargue. */
+    fun registrarPagoDesdeTicket(context: android.content.Context, uri: android.net.Uri, onSem6Cambio: () -> Unit = {}) {
         viewModelScope.launch {
             _ticketPagoEnProgreso.value = true
             val datos = extraerDatosTicketDeImagen(context, uri)
@@ -122,62 +126,109 @@ class FiltroFechaViewModel(
                 _ticketPagoResultado.value = "No se pudo leer el nombre del cliente en el ticket"
                 return@launch
             }
-            val candidatos = matrizDao.getMatrizEnRango(inicioDeHoy(), finDeHoy())
+            val mensajes = mutableListOf<String>()
+            val montoTxt = datos.monto?.let { "$" + "%.2f".format(java.util.Locale.US, it) }
+
+            // ── 1) Filtro Fecha (hoy) ──
+            val candidatosHoy = matrizDao.getMatrizEnRango(inicioDeHoy(), finDeHoy())
                 .filter { !it.estado.equals("PASE", ignoreCase = true) }
-            // 1) CU (número de cliente): es único, así que si coincide es el cliente.
-            var match = if (cuTicket.length >= 8) candidatos.firstOrNull { it.folioP?.filter { c -> c.isDigit() } == cuTicket } else null
-            // 2) Nombre tolerante: el ticket trae el nombre completo (con apellido materno) y en
-            //    Matriz a veces está abreviado, o con otro orden/un typo del OCR. Se compara por
-            //    palabras: todas las palabras del nombre más corto deben estar en el más largo.
-            if (match == null && !datos.nombre.isNullOrBlank()) {
-                val tokensTicket = tokensNombre(datos.nombre)
-                val puntuados = candidatos.mapNotNull { c ->
-                    val tokensC = tokensNombre(c.nombre)
-                    val (corto, largo) = if (tokensC.size <= tokensTicket.size) tokensC to tokensTicket else tokensTicket to tokensC
-                    if (corto.size < 2) return@mapNotNull null
-                    val enComun = corto.count { t -> largo.any { l -> tokenParecido(t, l) } }
-                    if (enComun == corto.size) c to enComun else null
-                }
-                val mejor = puntuados.maxOfOrNull { it.second }
-                val ganadores = puntuados.filter { it.second == mejor }.map { it.first }
-                if (ganadores.size > 1) {
-                    _ticketPagoEnProgreso.value = false
-                    _ticketPagoResultado.value = "Varios clientes de hoy coinciden con \"${datos.nombre}\": ${ganadores.joinToString { it.nombre }}. Márcalo manualmente"
-                    return@launch
-                }
-                match = ganadores.firstOrNull()
+            val busquedaFf = buscarClienteDeTicket(datos, candidatosHoy, { it.nombre }, { it.folioP })
+            val matchFf = busquedaFf.match
+            if (matchFf != null) {
+                val hora = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                matrizDao.marcarPagadoConMonto(matchFf.id, datos.monto ?: 0.0, hora)
+                mensajes += if (datos.monto != null) "Marcado como Pagado: ${matchFf.nombre} ($montoTxt)"
+                else "Marcado como Pagado: ${matchFf.nombre} (no se detectó el monto, revísalo manualmente)"
+            } else if (busquedaFf.ambiguos.isNotEmpty()) {
+                mensajes += if (busquedaFf.porTexto) "Varios clientes de hoy aparecen en el ticket: ${busquedaFf.ambiguos.joinToString()}. Márcalo manualmente"
+                else "Varios clientes de hoy coinciden con \"${datos.nombre}\": ${busquedaFf.ambiguos.joinToString()}. Márcalo manualmente"
             }
-            // 3) Respaldo: si el renglón del nombre salió incompleto (nombre largo partido en varios
-            //    renglones o mal leído), se busca a qué cliente de hoy le aparecen TODAS las palabras
-            //    de su nombre en cualquier parte del texto del ticket. Gana el de más palabras.
-            if (match == null && datos.textoCompleto.isNotBlank()) {
-                val tokensTexto = tokensNombre(datos.textoCompleto)
-                val puntuados = candidatos.mapNotNull { c ->
-                    val tokensC = tokensNombre(c.nombre)
-                    if (tokensC.size < 2) return@mapNotNull null
-                    if (tokensC.all { t -> tokensTexto.any { l -> tokenParecido(t, l) } }) c to tokensC.size else null
+
+            // ── 2) Semana 6 (hoja de la semana actual; si no hay red, la última copia guardada) ──
+            val itemsSem6 = try { repository.fetchSem6Data(currentSem6SheetName()) } catch (e: Exception) { emptyList() }
+                .ifEmpty { sem6CacheStore.load()?.first.orEmpty() }
+            val busquedaS6 = buscarClienteDeTicket(datos, itemsSem6, { it.nombre }, { it.cu })
+            val matchS6 = busquedaS6.match
+            if (matchS6 != null) {
+                val abono = matchS6.abono.replace("[^0-9.]".toRegex(), "").toDoubleOrNull()
+                val monto = datos.monto
+                when {
+                    monto == null -> mensajes += "Semana 6: encontré a ${matchS6.nombre} pero no se detectó el monto, no se marcó Recuperado"
+                    abono == null || abono <= 0.0 -> mensajes += "Semana 6: ${matchS6.nombre} no tiene Abono capturado, no se marcó Recuperado"
+                    monto + 0.005 < abono -> mensajes += "Semana 6: ${matchS6.nombre} pagó $montoTxt, menos del Abono ($${"%.2f".format(java.util.Locale.US, abono)}); no se marcó Recuperado"
+                    else -> {
+                        val ok = try {
+                            repository.updateSem6Susceptible(matchS6.id, "Recuperado", sheetName = currentSem6SheetName())
+                        } catch (e: Exception) { false }
+                        if (ok) {
+                            sem6CacheStore.load()?.first?.let { guardados ->
+                                sem6CacheStore.save(guardados.map { if (it.id == matchS6.id) it.copy(susceptible = "Recuperado") else it })
+                            }
+                            onSem6Cambio()
+                            mensajes += "Semana 6: ${matchS6.nombre} marcado Recuperado ($montoTxt ≥ Abono)"
+                        } else mensajes += "Semana 6: no se pudo marcar a ${matchS6.nombre} como Recuperado (revisa tu conexión)"
+                    }
                 }
-                val mejor = puntuados.maxOfOrNull { it.second }
-                val ganadores = puntuados.filter { it.second == mejor }.map { it.first }
-                if (ganadores.size > 1) {
-                    _ticketPagoEnProgreso.value = false
-                    _ticketPagoResultado.value = "Varios clientes de hoy aparecen en el ticket: ${ganadores.joinToString { it.nombre }}. Márcalo manualmente"
-                    return@launch
-                }
-                match = ganadores.firstOrNull()
+            } else if (busquedaS6.ambiguos.isNotEmpty()) {
+                mensajes += "Semana 6: varios clientes coinciden (${busquedaS6.ambiguos.joinToString()}). Márcalo manualmente"
             }
+
             _ticketPagoEnProgreso.value = false
-            if (match == null) {
-                _ticketPagoResultado.value = "No se encontró un registro de hoy con el nombre \"${datos.nombre.orEmpty()}\""
-                return@launch
-            }
-            val hora = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-            matrizDao.marcarPagadoConMonto(match.id, datos.monto ?: 0.0, hora)
-            _ticketPagoResultado.value = if (datos.monto != null)
-                "Marcado como Pagado: ${match.nombre} ($${"%.2f".format(java.util.Locale.US, datos.monto)})"
-            else "Marcado como Pagado: ${match.nombre} (no se detectó el monto, revísalo manualmente)"
+            _ticketPagoResultado.value = if (mensajes.isEmpty())
+                "No se encontró a \"${datos.nombre.orEmpty()}\" en Filtro Fecha (hoy) ni en Semana 6"
+            else mensajes.joinToString("\n")
         }
     }
+}
+
+/** Resultado de buscar al cliente del ticket: [match] si hubo uno solo; [ambiguos] (nombres) si
+ * varios empataron; [porTexto] indica que el empate fue por el respaldo de texto completo. */
+internal class BusquedaTicket<T>(val match: T?, val ambiguos: List<String> = emptyList(), val porTexto: Boolean = false)
+
+/** Busca al cliente del ticket entre [candidatos]: 1) CU exacto, 2) nombre tolerante (todas las
+ * palabras del nombre más corto dentro del más largo), 3) respaldo: todas las palabras del nombre
+ * del candidato en cualquier parte del texto del ticket. Misma lógica para Filtro Fecha y Semana 6. */
+internal fun <T> buscarClienteDeTicket(
+    datos: DatosTicketOcr,
+    candidatos: List<T>,
+    nombreDe: (T) -> String,
+    cuDe: (T) -> String?
+): BusquedaTicket<T> {
+    val cuTicket = datos.cu?.filter { it.isDigit() }.orEmpty()
+    // 1) CU (número de cliente): es único, así que si coincide es el cliente.
+    if (cuTicket.length >= 8) {
+        candidatos.firstOrNull { cuDe(it)?.filter { c -> c.isDigit() } == cuTicket }?.let { return BusquedaTicket(it) }
+    }
+    // 2) Nombre tolerante: el ticket trae el nombre completo (con apellido materno) y en la lista
+    //    a veces está abreviado, o con otro orden/un typo del OCR.
+    if (!datos.nombre.isNullOrBlank()) {
+        val tokensTicket = tokensNombre(datos.nombre)
+        val puntuados = candidatos.mapNotNull { c ->
+            val tokensC = tokensNombre(nombreDe(c))
+            val (corto, largo) = if (tokensC.size <= tokensTicket.size) tokensC to tokensTicket else tokensTicket to tokensC
+            if (corto.size < 2) return@mapNotNull null
+            val enComun = corto.count { t -> largo.any { l -> tokenParecido(t, l) } }
+            if (enComun == corto.size) c to enComun else null
+        }
+        val mejor = puntuados.maxOfOrNull { it.second }
+        val ganadores = puntuados.filter { it.second == mejor }.map { it.first }
+        if (ganadores.size > 1) return BusquedaTicket(null, ganadores.map(nombreDe))
+        ganadores.firstOrNull()?.let { return BusquedaTicket(it) }
+    }
+    // 3) Respaldo: nombre incompleto en el renglón (partido en varios renglones o mal leído).
+    if (datos.textoCompleto.isNotBlank()) {
+        val tokensTexto = tokensNombre(datos.textoCompleto)
+        val puntuados = candidatos.mapNotNull { c ->
+            val tokensC = tokensNombre(nombreDe(c))
+            if (tokensC.size < 2) return@mapNotNull null
+            if (tokensC.all { t -> tokensTexto.any { l -> tokenParecido(t, l) } }) c to tokensC.size else null
+        }
+        val mejor = puntuados.maxOfOrNull { it.second }
+        val ganadores = puntuados.filter { it.second == mejor }.map { it.first }
+        if (ganadores.size > 1) return BusquedaTicket(null, ganadores.map(nombreDe), porTexto = true)
+        ganadores.firstOrNull()?.let { return BusquedaTicket(it) }
+    }
+    return BusquedaTicket(null)
 }
 
 /** Palabras del nombre en mayúsculas y sin acentos, sin puntuación ni partículas sueltas. */
