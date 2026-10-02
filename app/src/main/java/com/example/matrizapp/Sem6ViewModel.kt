@@ -108,15 +108,15 @@ class Sem6ViewModel(
 
     /** Guarda Se Contiene/Susceptible/Observaciones para un registro y actualiza la lista en
      * memoria de inmediato (optimista) para que el usuario vea el cambio sin esperar el refresh. */
-    fun guardarNotas(id: String, seContiene: String, susceptible: String, observaciones: String, capital: String, onDone: (Boolean) -> Unit = {}) {
+    fun guardarNotas(id: String, seContiene: String, susceptible: String, observaciones: String, capital: String, abono: String, onDone: (Boolean) -> Unit = {}) {
         _isSavingNotas.value = true
         _errorNotas.value = null
         viewModelScope.launch {
             try {
-                val ok = repository.updateSem6Notas(id, seContiene, susceptible, observaciones, capital, sheetName = _semanaSeleccionada.value)
+                val ok = repository.updateSem6Notas(id, seContiene, susceptible, observaciones, capital, abono, sheetName = _semanaSeleccionada.value)
                 if (ok) {
                     _itemsRaw.value = _itemsRaw.value.map { item ->
-                        if (item.id == id) item.copy(seContiene = seContiene, susceptible = susceptible, observaciones = observaciones, capital = capital) else item
+                        if (item.id == id) item.copy(seContiene = seContiene, susceptible = susceptible, observaciones = observaciones, capital = capital, abono = abono) else item
                     }
                     cacheStore.save(_itemsRaw.value)
                 } else {

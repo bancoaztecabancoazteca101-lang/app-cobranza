@@ -334,6 +334,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
     var susceptible by remember(item.id) { mutableStateOf(item.susceptible) }
     var observaciones by remember(item.id) { mutableStateOf(item.observaciones) }
     var capital by remember(item.id) { mutableStateOf(item.capital) }
+    var abono by remember(item.id) { mutableStateOf(item.abono) }
     var susceptibleMenuExpanded by remember { mutableStateOf(false) }
     var mostrarConfirmarEliminar by remember { mutableStateOf(false) }
     val isSaving by viewModel.isSavingNotas.collectAsState()
@@ -403,6 +404,16 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                OutlinedTextField(
+                    value = abono,
+                    onValueChange = { input -> abono = input.filter { it.isDigit() || it == '.' } },
+                    label = { Text("Abono") },
+                    leadingIcon = { Text("$") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 ExposedDropdownMenuBox(expanded = susceptibleMenuExpanded, onExpandedChange = { susceptibleMenuExpanded = it }) {
                     OutlinedTextField(
                         value = susceptible, onValueChange = {}, label = { Text("Status") },
@@ -428,7 +439,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                 )
 
                 OutlinedButton(
-                    onClick = { scopeCompartir.launch { compartirSem6PorWhatsApp(contextCompartir, item, capital, seContiene, susceptible, observaciones) } },
+                    onClick = { scopeCompartir.launch { compartirSem6PorWhatsApp(contextCompartir, item, capital, seContiene, abono, susceptible, observaciones) } },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(18.dp))
@@ -444,7 +455,7 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
         confirmButton = {
             Button(
                 onClick = {
-                    viewModel.guardarNotas(item.id, seContiene, susceptible, observaciones, capital) { ok ->
+                    viewModel.guardarNotas(item.id, seContiene, susceptible, observaciones, capital, abono) { ok ->
                         if (ok) onDismiss()
                     }
                 },

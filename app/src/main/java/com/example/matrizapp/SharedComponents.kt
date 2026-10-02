@@ -1632,6 +1632,7 @@ suspend fun compartirSem6PorWhatsApp(
     item: Sem6Item,
     capital: String,
     seContiene: String,
+    abono: String,
     status: String,
     observaciones: String
 ) {
@@ -1648,6 +1649,7 @@ suspend fun compartirSem6PorWhatsApp(
         if (item.ultimaFechaVisita.isNotBlank()) sb.append("*Última vez:* ${item.ultimaFechaVisita}\n")
         sb.append("*Visitas:* ${item.visitas}\n")
         if (seContiene.isNotBlank()) sb.append("*Se Contiene:* ${montoConSigno(seContiene)}\n")
+        if (abono.isNotBlank()) sb.append("*Abono:* ${montoConSigno(abono)}\n")
         if (status.isNotBlank()) sb.append("*Status:* $status\n")
         if (observaciones.isNotBlank()) sb.append("*Observaciones:* $observaciones\n")
         urlMapsDeUbicacion(item.ubicacion)?.let { sb.append("*Ubicación:* $it\n") }
