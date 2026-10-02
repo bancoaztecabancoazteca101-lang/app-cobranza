@@ -164,6 +164,7 @@ private val zonaCafetales = listOf(
     LatLng(19.3772114, -99.1382665)
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapaScreen(visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
     var offset by remember { mutableStateOf(0) }
