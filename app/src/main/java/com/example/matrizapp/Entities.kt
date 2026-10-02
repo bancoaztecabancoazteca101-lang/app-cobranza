@@ -143,3 +143,13 @@ data class BolsaGerenciaEntity(
     val lastUpdate: Long = System.currentTimeMillis()
 )
 
+
+
+/** Registro local de una visita realizada durante la semana actual. Un cliente solo puede
+ * quedar registrado una vez por día. No se sincroniza con Google Sheets. */
+@Entity(tableName = "visita_mapa_table", primaryKeys = ["matrizId", "fechaDia"])
+data class VisitaMapaEntity(
+    val matrizId: String,
+    val fechaDia: Long,
+    val timestamp: Long = System.currentTimeMillis()
+)
