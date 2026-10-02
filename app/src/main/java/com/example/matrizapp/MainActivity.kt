@@ -111,6 +111,7 @@ class MainActivity : ComponentActivity() {
                 val bolsaGerenciaVm: BolsaGerenciaViewModel = viewModel(factory = factory)
                 var searchInput by remember { mutableStateOf("") }
                 var searchQuery by remember { mutableStateOf("") }
+                var mapaOpenId by remember { mutableStateOf<String?>(null) }
                 LaunchedEffect(searchInput) { delay(180); searchQuery = searchInput }
                 var buscandoPorFoto by remember { mutableStateOf(false) }
                 var mostrarSelectorFotoBusqueda by remember { mutableStateOf(false) }
@@ -264,7 +265,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             NavHost(navController, Screen.Matriz.route, Modifier.weight(1f).padding(innerPadding)) {
-                            composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery) }
+                            composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery, initialOpenId = mapaOpenId, onInitialOpenConsumed = { mapaOpenId = null }) }
                             composable(Screen.PaseCartera.route) { PaseCarteraScreen(paseVm, searchQuery) }
                             composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }
                             composable(Screen.FiltroFecha.route) { FiltroFechaScreen(filtroVm, container.notificacionesHelper, searchQuery) }
@@ -282,6 +283,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Avance.route) { AvanceScreen(controlVm) }
                             composable(Screen.BolsaGerencia.route) { BolsaGerenciaScreen(bolsaGerenciaVm) }
                             composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
+                            composable(Screen.Mapa.route) { MapaScreen(matrizVm, container.database.visitaMapaDao(), onOpenMatriz = { id -> mapaOpenId = id; navController.navigate(Screen.Matriz.route) { launchSingleTop = true } }) }
                             composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
                             composable(Screen.Sms.route) { SmsScreen(smsVm, onNavigateToStatus = { navController.navigate(Screen.SmsStatus.route) }) }
                             composable(Screen.SmsStatus.route) { SmsStatusScreen(onBack = { navController.popBackStack() }) }
@@ -307,6 +309,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Filtrar : Screen("filtrar", "Filtrar", Icons.Default.FilterAlt)
     object Control : Screen("control", "Control", Icons.Default.BarChart)
     object Ubi : Screen("ubi", "Ubi", Icons.Default.Map)
+    object Mapa : Screen("mapa", "Mapa", Icons.Default.Map)
     object Sem6 : Screen("sem6", "Semana 6", Icons.Default.Visibility)
     object Sms : Screen("sms", "SMS", Icons.Default.Send)
     object SmsStatus : Screen("sms_status", "SMS por Status APP", Icons.Default.Sms)
@@ -328,7 +331,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
  * en cuál hoja/pantalla estás (Matriz, Filtro Fecha, Pase, etc.), cosa que antes no se mostraba. */
 fun screenTitleFor(route: String): String = listOf(
     Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.Filtrar,
-    Screen.Control, Screen.Ubi, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada,
+    Screen.Control, Screen.Ubi, Screen.Mapa, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada,
     Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Penalizacion,
     Screen.Comision, Screen.Avance, Screen.BolsaGerencia
 ).find { it.route == route }?.title ?: ""
