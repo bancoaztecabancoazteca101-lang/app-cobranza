@@ -6,9 +6,10 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [MatrizEntity::class, PaseEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class, BloqueHorarioEntity::class, ContactoLogEntity::class, PlantillaSmsEntity::class, ConfiguracionAutomatizacionEntity::class, ReglaSemanaEntity::class, RutaIAEntity::class, RutaIAFiltroEntity::class, CanalPagoEntity::class, ContactoExtraEntity::class, VelocidadEntity::class, ComisionEntity::class, BolsaGerenciaEntity::class], version = 31, exportSchema = false)
+@Database(entities = [MatrizEntity::class, VisitaMapaEntity::class, PaseEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class, BloqueHorarioEntity::class, ContactoLogEntity::class, PlantillaSmsEntity::class, ConfiguracionAutomatizacionEntity::class, ReglaSemanaEntity::class, RutaIAEntity::class, RutaIAFiltroEntity::class, CanalPagoEntity::class, ContactoExtraEntity::class, VelocidadEntity::class, ComisionEntity::class, BolsaGerenciaEntity::class], version = 32, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun matrizDao(): MatrizDao
+    abstract fun visitaMapaDao(): VisitaMapaDao
     abstract fun paseDao(): PaseCarteraDao
     abstract fun solicitudDao(): SolicitudDao
     abstract fun filtroDao(): FiltroFechaDao
@@ -126,6 +127,11 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE matriz_table ADD COLUMN descuentoAhorro TEXT")
             }
         }
+        private val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS visita_mapa_table (matrizId TEXT NOT NULL, fechaDia INTEGER NOT NULL, timestamp INTEGER NOT NULL, PRIMARY KEY(matrizId, fechaDia))""")
+            }
+        }
         private val MIGRATION_30_31 = object : Migration(30, 31) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // Ref 3, Ref 4, Día de pago y Domicilio Laboral: campos 100% locales de Matriz
@@ -139,7 +145,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "matriz_database")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18, MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
