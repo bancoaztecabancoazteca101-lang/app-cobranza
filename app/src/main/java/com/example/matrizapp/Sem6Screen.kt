@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -339,6 +340,8 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
     val errorNotas by viewModel.errorNotas.collectAsState()
     val isGuardandoRegistro by viewModel.isGuardandoRegistro.collectAsState()
     val errorRegistro by viewModel.errorRegistro.collectAsState()
+    val scopeCompartir = rememberCoroutineScope()
+    val contextCompartir = androidx.compose.ui.platform.LocalContext.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -423,6 +426,15 @@ fun Sem6DetailDialog(item: Sem6Item, driveHelper: DriveHelper, viewModel: Sem6Vi
                     maxLines = 6,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                OutlinedButton(
+                    onClick = { scopeCompartir.launch { compartirSem6PorWhatsApp(contextCompartir, item, capital, seContiene, susceptible, observaciones) } },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF25D366), modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Compartir por WhatsApp")
+                }
 
                 errorNotas?.let { msg ->
                     Text(msg, color = ClayRedText, style = MaterialTheme.typography.bodySmall)

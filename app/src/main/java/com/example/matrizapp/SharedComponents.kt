@@ -1570,10 +1570,44 @@ fun AvisoMismaUbicacion(coincidencias: List<CoincidenciaUbicacion>) {
 }
 
 
-/** Comparte por WhatsApp el registro de Matriz (mismo estilo que la Solicitud): cliente, CU,
- * requerido, estado, hora de retorno (si hay), dirección con nombre de calle/colonia y URL de Maps.
- * Solo texto; si WhatsApp no está instalado cae al selector de apps. */
-suspend fun compartirMatrizPorWhatsApp(context: android.content.Context, item: MatrizEntity) {
+/** Abre WhatsApp con el texto listo para elegir contacto; si no está instalado, cae al selector. */
+fun enviarTextoPorWhatsApp(context: android.content.Context, texto: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, texto.trimEnd())
+    }
+    try {
+        intent.setPackage("com.whatsapp")
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        try {
+            intent.setPackage(null)
+            context.startActivity(Intent.createChooser(intent, "Compartir vía"))
+        } catch (e2: Exception) {
+            Toast.makeText(context, "No se pudo compartir: ${e2.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
+private fun urlMapsDeUbicacion(ubicacion: String?): String? =
+    if (ubicacion.isNullOrBlank() || ubicacion == "N/A") null
+    else "https://maps.google.com/?q=${ubicacion.replace(" ", "")}"
+
+private fun montoConSigno(texto: String): String {
+    val numero = texto.replace("[^0-9.]".toRegex(), "").toDoubleOrNull() ?: return texto
+    return "$" + java.text.NumberFormat.getNumberInstance(Locale("es", "MX")).apply { maximumFractionDigits = 0 }.format(numero)
+}
+
+/** Comparte por WhatsApp el registro de Matriz / Filtro Fecha (mismo estilo que la Solicitud):
+ * cliente, CU, requerido, estado, hora de retorno (si hay), dirección con nombre de calle/colonia
+ * y URL de Maps. [estado] y [hora] permiten mandar el valor que está en pantalla (editado y aún
+ * sin guardar) en vez del guardado. Solo texto. */
+suspend fun compartirMatrizPorWhatsApp(
+    context: android.content.Context,
+    item: MatrizEntity,
+    estado: String = item.estado,
+    hora: String? = item.hora
+) {
     try {
         val (colonia, calle) = resolverColoniaYCalle(context, item.ubicacion)
         val direccion = listOfNotNull(calle, colonia).joinToString(", ")
@@ -1581,23 +1615,43 @@ suspend fun compartirMatrizPorWhatsApp(context: android.content.Context, item: M
         sb.append("*Cliente:* ${item.nombre}\n")
         if (!item.folioP.isNullOrBlank()) sb.append("*CU:* ${item.folioP}\n")
         sb.append("*Requerido:* ${formatearMontoMatriz(item.requisito)}\n")
-        if (item.estado.isNotBlank()) sb.append("*Estado:* ${item.estado}\n")
-        if (!item.hora.isNullOrBlank()) sb.append("*Hora de retorno:* ${item.hora}\n")
+        if (estado.isNotBlank()) sb.append("*Estado:* $estado\n")
+        if (!hora.isNullOrBlank()) sb.append("*Hora de retorno:* $hora\n")
         if (direccion.isNotBlank()) sb.append("*Dirección:* $direccion\n")
-        if (!item.ubicacion.isNullOrBlank() && item.ubicacion != "N/A") {
-            sb.append("*Ubicación:* https://maps.google.com/?q=${item.ubicacion.replace(" ", "")}\n")
-        }
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, sb.toString().trimEnd())
-        }
-        try {
-            intent.setPackage("com.whatsapp")
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            intent.setPackage(null)
-            context.startActivity(Intent.createChooser(intent, "Compartir vía"))
-        }
+        urlMapsDeUbicacion(item.ubicacion)?.let { sb.append("*Ubicación:* $it\n") }
+        enviarTextoPorWhatsApp(context, sb.toString())
+    } catch (e: Exception) {
+        Toast.makeText(context, "No se pudo compartir: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+/** Comparte por WhatsApp lo que se ve en el detalle de Semana 6, con los valores actuales de los
+ * campos editables (aunque no se hayan guardado todavía). */
+suspend fun compartirSem6PorWhatsApp(
+    context: android.content.Context,
+    item: Sem6Item,
+    capital: String,
+    seContiene: String,
+    status: String,
+    observaciones: String
+) {
+    try {
+        val (coloniaGeo, calle) = resolverColoniaYCalle(context, item.ubicacion)
+        val colonia = item.colonia.ifBlank { coloniaGeo ?: "" }
+        val sb = StringBuilder()
+        sb.append("*Cliente:* ${item.nombre}\n")
+        sb.append("*Sem:* ${item.sem}  ·  *Req:* ${montoConSigno(item.req)}\n")
+        if (capital.isNotBlank()) sb.append("*Capital:* ${montoConSigno(capital)}\n")
+        if (item.cu.isNotBlank()) sb.append("*CU:* ${item.cu}\n")
+        if (colonia.isNotBlank()) sb.append("*Colonia:* $colonia\n")
+        if (!calle.isNullOrBlank()) sb.append("*Calle:* $calle\n")
+        if (item.ultimaFechaVisita.isNotBlank()) sb.append("*Última vez:* ${item.ultimaFechaVisita}\n")
+        sb.append("*Visitas:* ${item.visitas}\n")
+        if (seContiene.isNotBlank()) sb.append("*Se Contiene:* ${montoConSigno(seContiene)}\n")
+        if (status.isNotBlank()) sb.append("*Status:* $status\n")
+        if (observaciones.isNotBlank()) sb.append("*Observaciones:* $observaciones\n")
+        urlMapsDeUbicacion(item.ubicacion)?.let { sb.append("*Ubicación:* $it\n") }
+        enviarTextoPorWhatsApp(context, sb.toString())
     } catch (e: Exception) {
         Toast.makeText(context, "No se pudo compartir: ${e.message}", Toast.LENGTH_LONG).show()
     }
