@@ -3,6 +3,42 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+interface VisitaMapaDao {
+    // fin EXCLUSIVO (inicio del lunes siguiente): con BETWEEN las visitas de ese lunes entrarían en la semana anterior.
+    @Query("SELECT * FROM visita_mapa_table WHERE fechaDia >= :inicio AND fechaDia < :fin ORDER BY fechaDia ASC, timestamp ASC")
+    fun getVisitasSemana(inicio: Long, fin: Long): Flow<List<VisitaMapaEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun registrar(visita: VisitaMapaEntity)
+
+    @Query("DELETE FROM visita_mapa_table WHERE fechaDia < :limite")
+    suspend fun borrarAnteriores(limite: Long)
+}
+
+/** 00:00 del día de [millis] en hora local. Con Calendar (no java.time): la app soporta Android 7 (minSdk 24). */
+fun inicioDelDia(millis: Long = System.currentTimeMillis()): Long =
+    java.util.Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+/** ¿Cambió el status o las observaciones? (lo que cuenta como "visita" junto con el pago). */
+fun cambioDeGestion(estadoAntes: String?, obsAntes: String?, estadoNuevo: String?, obsNuevas: String?): Boolean =
+    (estadoAntes ?: "").trim() != (estadoNuevo ?: "").trim() || (obsAntes ?: "").trim() != (obsNuevas ?: "").trim()
+
+/** Registra la visita de HOY. Nunca debe romper el guardado que la dispara: cualquier fallo se ignora. */
+suspend fun VisitaMapaDao.registrarVisitaHoy(clave: String, nombre: String, ubicacion: String?, matrizId: String?) {
+    try {
+        val partes = ubicacion?.split(",")?.map { it.trim() } ?: return
+        if (partes.size != 2 || partes[0].toDoubleOrNull() == null || partes[1].toDoubleOrNull() == null) return
+        val hoy = inicioDelDia()
+        registrar(VisitaMapaEntity(clave, hoy, nombre, partes.joinToString(","), matrizId))
+        borrarAnteriores(hoy - 120L * 24 * 60 * 60 * 1000) // se conservan ~4 meses
+    } catch (_: Exception) { }
+}
+
+@Dao
 interface MatrizDao {
     @Query("SELECT * FROM matriz_table WHERE nombre NOT LIKE '%Pase semana%' AND nombre != '' ORDER BY id ASC")
     fun getAllMatriz(): Flow<List<MatrizEntity>>

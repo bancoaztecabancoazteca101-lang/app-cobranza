@@ -23,7 +23,7 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (MatrizEntity) -> Boolean = { true }) {
+fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (MatrizEntity) -> Boolean = { true }, initialOpenId: String? = null, onInitialOpenConsumed: () -> Unit = {}) {
     val context = LocalContext.current
     val allItems by viewModel.matrizList.collectAsState()
     val deleteInProgress by viewModel.deleteInProgress.collectAsState()
@@ -34,6 +34,12 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var items by remember { mutableStateOf(allItems) }
+    // Abrir directo un registro (desde el Mapa): espera a que la lista cargue y luego lo abre una sola vez.
+    LaunchedEffect(initialOpenId, allItems) {
+        val id = initialOpenId ?: return@LaunchedEffect
+        allItems.firstOrNull { it.id == id }?.let { itemToView = it }
+        onInitialOpenConsumed()
+    }
     LaunchedEffect(allItems, searchQuery, filtro) {
         items = withContext(Dispatchers.Default) {
             allItems.filter(filtro).filter { item ->

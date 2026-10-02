@@ -22,7 +22,8 @@ class MatrizViewModel(
     private val matrizDao: MatrizDao,
     private val workManager: WorkManager,
     val driveHelper: DriveHelper,
-    private val notificacionesHelper: NotificacionesHelper
+    private val notificacionesHelper: NotificacionesHelper,
+    private val visitaMapaDao: VisitaMapaDao
 ) : ViewModel() {
     init {
         // Igual que en Filtro Fecha: cada vez que cambian los datos de Matriz se revisan los
@@ -98,7 +99,11 @@ class MatrizViewModel(
 
     fun guardarGestion(id: String, nuevoEstado: String, observaciones: String) {
         viewModelScope.launch {
+            val anterior = matrizDao.getById(id)
             matrizDao.updateGestionLocal(id, nuevoEstado, observaciones)
+            // Mapa: cambiar status/observaciones cuenta como visita de hoy.
+            if (anterior != null && cambioDeGestion(anterior.estado, anterior.observaciones, nuevoEstado, observaciones))
+                visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
             triggerSync()
         }
     }
@@ -112,6 +117,7 @@ class MatrizViewModel(
         diasAtraso: String? = null, diasApertura: String? = null
     ) {
         viewModelScope.launch {
+            val anterior = matrizDao.getById(id)
             matrizDao.updateRegistroCompleto(
                 id, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
                 observaciones, estado, ubicacion, fecha, hora, ruta, folioP,
@@ -120,6 +126,8 @@ class MatrizViewModel(
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() },
                 diasAtraso?.takeIf { it.isNotBlank() }, diasApertura?.takeIf { it.isNotBlank() }
             )
+            if (anterior != null && cambioDeGestion(anterior.estado, anterior.observaciones, estado, observaciones))
+                visitaMapaDao.registrarVisitaHoy("M:$id", nombre.trim().uppercase(), ubicacion, id)
             triggerSync()
         }
     }
@@ -141,6 +149,7 @@ class MatrizViewModel(
     ) {
         viewModelScope.launch {
             val idFinal = idNuevo.trim().ifBlank { idAnterior }
+            val registroAnterior = matrizDao.getById(idAnterior)
             if (idFinal != idAnterior) {
                 try {
                     repository.renameRowId(Constants.SHEET_MATRIZ, idAnterior, idFinal, Constants.MatrizCols.COL_ID)
@@ -158,6 +167,8 @@ class MatrizViewModel(
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() },
                 diasAtraso?.takeIf { it.isNotBlank() }, diasApertura?.takeIf { it.isNotBlank() }
             )
+            if (registroAnterior != null && cambioDeGestion(registroAnterior.estado, registroAnterior.observaciones, estado, observaciones))
+                visitaMapaDao.registrarVisitaHoy("M:$idFinal", nombre.trim().uppercase(), ubicacion, idFinal)
             triggerSync()
             onResult(true, null)
         }

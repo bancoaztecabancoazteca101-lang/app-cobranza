@@ -7,13 +7,13 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
             modelClass.isAssignableFrom(MatrizViewModel::class.java) ->
-                MatrizViewModel(container.repository, container.database.matrizDao(), container.workManager, container.driveHelper, container.notificacionesHelper) as T
+                MatrizViewModel(container.repository, container.database.matrizDao(), container.workManager, container.driveHelper, container.notificacionesHelper, container.database.visitaMapaDao()) as T
             modelClass.isAssignableFrom(PaseCarteraViewModel::class.java) ->
                 PaseCarteraViewModel(container.database.paseDao(), container.database.matrizDao(), container.driveHelper) as T
             modelClass.isAssignableFrom(SolicitudViewModel::class.java) ->
                 SolicitudViewModel(container.repository, container.database.solicitudDao(), container.database.matrizDao(), container.audioHelper, container.workManager, container.driveHelper) as T
             modelClass.isAssignableFrom(FiltroFechaViewModel::class.java) ->
-                FiltroFechaViewModel(container.database.matrizDao(), container.driveHelper, container.repository, container.sem6CacheStore) as T
+                FiltroFechaViewModel(container.database.matrizDao(), container.driveHelper, container.repository, container.sem6CacheStore, container.database.visitaMapaDao()) as T
             modelClass.isAssignableFrom(FiltroSemanalViewModel::class.java) ->
                 FiltroSemanalViewModel(container.database.matrizDao(), container.driveHelper) as T
             modelClass.isAssignableFrom(FiltrarViewModel::class.java) ->
@@ -21,7 +21,7 @@ class ViewModelFactory(private val container: AppContainer) : ViewModelProvider.
             modelClass.isAssignableFrom(ControlViewModel::class.java) ->
                 ControlViewModel(container.database.controlDao(), container.database.matrizDao()) as T
             modelClass.isAssignableFrom(Sem6ViewModel::class.java) ->
-                Sem6ViewModel(container.repository, container.sem6CacheStore, container.driveHelper, container.database.matrizDao()) as T
+                Sem6ViewModel(container.repository, container.sem6CacheStore, container.driveHelper, container.database.matrizDao(), container.database.visitaMapaDao()) as T
             modelClass.isAssignableFrom(SmsViewModel::class.java) ->
                 SmsViewModel(container.database.matrizDao(), container.workManager) as T
             modelClass.isAssignableFrom(CallViewModel::class.java) ->
