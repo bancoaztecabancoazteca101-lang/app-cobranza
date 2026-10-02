@@ -52,6 +52,10 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
             } else {
                 repository.appendRow(Constants.SHEET_MATRIZ, listOf(item.nombre, item.semana, item.requisito, item.numTT, item.ref1, item.ref2, item.observaciones, item.estado, item.ubicacion, remoteImg, remoteImg2 ?: "", DateUtils.toSheetsSerial(item.fecha), item.id, item.hora, item.ruta, item.folioP))
             }
+            // La foto tomada sin red (content://) ya está guardada en el teléfono: se re-asocia a su
+            // dirección nueva de Drive para que siga viéndose sin internet sin volver a descargarla.
+            container.clientImageStore.adopt(item.imagenUrl, remoteImg, driveHelper)
+            container.clientImageStore.adopt(item.imagenUrl2, remoteImg2, driveHelper)
             repository.markMatrizAsClean(item.id, remoteImg, remoteImg2)
         }
     }
