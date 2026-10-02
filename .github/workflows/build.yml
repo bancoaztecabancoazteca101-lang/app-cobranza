@@ -40,7 +40,10 @@ jobs:
 
       # Disparo intencional de build para validar la corrección actual de Pase.
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace > build_output.log 2>&1 || (echo "BUILD_FAILED=true" >> $GITHUB_ENV; true)
+        run: |
+          TASKS="assembleDebug"
+          if [ "${{ github.ref_name }}" != "main" ]; then TASKS="assembleDebug assembleRelease"; fi
+          gradle $TASKS --stacktrace > build_output.log 2>&1 || (echo "BUILD_FAILED=true" >> $GITHUB_ENV; true)
         continue-on-error: false
 
       - name: Show log tail
@@ -73,7 +76,9 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: "Última build (debug) - ${{ github.ref_name }}"
           body: "APK generado automáticamente desde el commit ${{ github.sha }}."
-          files: app/build/outputs/apk/debug/*.apk
+          files: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
           make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

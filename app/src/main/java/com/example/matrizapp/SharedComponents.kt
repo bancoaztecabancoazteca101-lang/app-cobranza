@@ -1083,53 +1083,80 @@ suspend fun resolverColoniaYCalle(context: android.content.Context, ubicacion: S
     DireccionCache.obtener(context, ubicacion)
 
 /** Caché de direcciones (colonia/calle) por coordenadas. Antes CADA tarjeta consultaba el Geocoder
- * (internet) cada vez que aparecía al hacer scroll: decenas de consultas lentas simultáneas, texto que
- * aparecía tarde moviendo la lista y nada que mostrar sin internet. Ahora: 1) memoria + disco
- * (SharedPreferences) → la 2ª vez es instantánea y funciona sin internet; 2) máximo 2 consultas
- * al mismo tiempo, y las de tarjetas que ya salieron de pantalla se cancelan; 3) si una consulta
- * falla (sin red) no se reintenta por 5 minutos. */
+ * (internet) cada vez que aparecía al hacer scroll. Ahora: 1) memoria + archivo → la 2ª vez es instantánea
+ * y funciona sin internet; 2) máximo 3 consultas al mismo tiempo; 3) si una consulta falla (sin red) no se
+ * reintenta por 5 minutos. Nada de disco corre en el hilo principal: el archivo se lee UNA vez en segundo
+ * plano y las direcciones nuevas se AGREGAN al final (no se reescribe todo en cada dirección). */
 object DireccionCache {
     private val memoria = java.util.concurrent.ConcurrentHashMap<String, Pair<String?, String?>>()
     private val fallos = java.util.concurrent.ConcurrentHashMap<String, Long>()
-    private val limite = kotlinx.coroutines.sync.Semaphore(2)
-    private const val PREFS = "direccion_cache"
+    private val limite = kotlinx.coroutines.sync.Semaphore(3)
+    private val cargado = kotlinx.coroutines.CompletableDeferred<Unit>()
+    private val iniciando = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val escritura = Any()
+    @Volatile private var archivo: java.io.File? = null
     private const val REINTENTO_FALLO_MS = 5 * 60 * 1000L
 
-    private fun coords(ubicacion: String?): Pair<Double, Double>? {
-        if (ubicacion.isNullOrBlank()) return null
-        val partes = ubicacion.replace('−', '-').replace('–', '-').split(",").map { it.trim() }
-        if (partes.size < 2) return null
-        val lat = partes[0].toDoubleOrNull() ?: return null
-        val lng = partes[1].toDoubleOrNull() ?: return null
-        return lat to lng
+    /** Arranca la lectura del archivo en segundo plano (una sola vez). */
+    fun iniciar(context: android.content.Context) {
+        if (!iniciando.compareAndSet(false, true)) return
+        val f = java.io.File(context.applicationContext.filesDir, "direcciones.tsv")
+        archivo = f
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            try {
+                if (f.exists()) f.forEachLine { linea ->
+                    val p = linea.split('\t')
+                    if (p.size >= 3) memoria[p[0]] = p[1].ifBlank { null } to p[2].ifBlank { null }
+                }
+            } catch (_: Exception) { } finally { cargado.complete(Unit) }
+        }
     }
 
-    private fun clave(ubicacion: String?): String? =
-        coords(ubicacion)?.let { String.format(Locale.US, "%.5f,%.5f", it.first, it.second) }
+    private fun num(t: String): Double? = t.trim().replace('−', '-').replace('–', '-').toDoubleOrNull()
 
-    /** Lectura inmediata (memoria o disco), sin red. Null si aún no se conoce. */
+    private fun clave(ubicacion: String?): String? {
+        if (ubicacion.isNullOrBlank()) return null
+        val i = ubicacion.indexOf(',')
+        if (i <= 0) return null
+        val resto = ubicacion.substring(i + 1)
+        val j = resto.indexOf(',')
+        val lat = num(ubicacion.substring(0, i)) ?: return null
+        val lng = num(if (j >= 0) resto.substring(0, j) else resto) ?: return null
+        return "${Math.round(lat * 1e5) / 1e5},${Math.round(lng * 1e5) / 1e5}"
+    }
+
+    private fun coords(ubicacion: String?): Pair<Double, Double>? {
+        val k = clave(ubicacion) ?: return null
+        val i = k.indexOf(',')
+        return k.substring(0, i).toDouble() to k.substring(i + 1).toDouble()
+    }
+
+    /** Lectura inmediata desde memoria, sin disco ni red. Null si aún no se conoce. */
     fun peek(context: android.content.Context, ubicacion: String?): Pair<String?, String?>? {
+        iniciar(context)
         val key = clave(ubicacion) ?: return null to null
-        memoria[key]?.let { return it }
-        val guardado = context.applicationContext.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(key, null) ?: return null
-        val partes = guardado.split("\t")
-        val r = (partes.getOrNull(0)?.ifBlank { null }) to (partes.getOrNull(1)?.ifBlank { null })
-        memoria[key] = r
-        return r
+        return memoria[key]
     }
 
     suspend fun obtener(context: android.content.Context, ubicacion: String?): Pair<String?, String?> {
+        iniciar(context)
         val key = clave(ubicacion) ?: return null to null
-        peek(context, ubicacion)?.let { return it }
+        cargado.await()
+        memoria[key]?.let { return it }
         val falloEn = fallos[key]
         if (falloEn != null && System.currentTimeMillis() - falloEn < REINTENTO_FALLO_MS) return null to null
         return limite.withPermit {
-            peek(context, ubicacion) ?: run {
+            memoria[key] ?: run {
                 val r = consultarGeocoder(context, ubicacion)
                 if (r.first != null || r.second != null) {
                     memoria[key] = r
-                    context.applicationContext.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
-                        .putString(key, "${r.first.orEmpty()}\t${r.second.orEmpty()}").apply()
+                    withContext(Dispatchers.IO) {
+                        synchronized(escritura) {
+                            try {
+                                archivo?.appendText("$key\t${r.first.orEmpty().replace('\t', ' ').replace('\n', ' ')}\t${r.second.orEmpty().replace('\t', ' ').replace('\n', ' ')}\n")
+                            } catch (_: Exception) { }
+                        }
+                    }
                 } else fallos[key] = System.currentTimeMillis()
                 r
             }
