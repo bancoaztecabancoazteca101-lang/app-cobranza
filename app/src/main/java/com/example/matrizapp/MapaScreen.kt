@@ -158,7 +158,7 @@ fun MapaScreen(
 
     val visitasSemana by visitaMapaDao.getVisitasSemana(
         inicioDiaMapa(inicioSemana),
-        inicioDiaMapa(inicioSemana.plusDays(6))
+        inicioDiaMapa(inicioSemana.plusDays(7))
     ).collectAsState(initial = emptyList())
 
     val items by matrizViewModel.matrizList.collectAsState()
@@ -177,9 +177,13 @@ fun MapaScreen(
     }
     var mapaAjustado by remember { mutableStateOf(false) }
 
+    val formatoDia = remember { DateTimeFormatter.ofPattern("dd/MM") }
+    val semanaTexto = "Semana del ${inicioSemana.format(formatoDia)} al ${inicioSemana.plusDays(6).format(formatoDia)}"
+    val visitasTexto = "${puntos.size} " + if (puntos.size == 1) "visita realizada" else "visitas realizadas"
+
     Column(Modifier.fillMaxSize()) {
         Text(
-            text = "Semana del ${inicioSemana.format(DateTimeFormatter.ofPattern("dd/MM"))} al ${inicioSemana.plusDays(6).format(DateTimeFormatter.ofPattern("dd/MM"))}",
+            text = semanaTexto,
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
@@ -203,7 +207,7 @@ fun MapaScreen(
             }
         }
         Text(
-            text = "${puntos.size} visita${if (puntos.size == 1) "" else "s"} realizada${if (puntos.size == 1) "" else "s"}",
+            text = visitasTexto,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
