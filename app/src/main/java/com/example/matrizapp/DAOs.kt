@@ -3,6 +3,15 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+interface VisitaMapaDao {
+    @Query("SELECT * FROM visita_mapa_table WHERE fechaDia BETWEEN :inicio AND :fin ORDER BY fechaDia ASC, timestamp ASC")
+    fun getVisitasSemana(inicio: Long, fin: Long): Flow<List<VisitaMapaEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun registrar(visita: VisitaMapaEntity)
+}
+
+@Dao
 interface MatrizDao {
     @Query("SELECT * FROM matriz_table WHERE nombre NOT LIKE '%Pase semana%' AND nombre != '' ORDER BY id ASC")
     fun getAllMatriz(): Flow<List<MatrizEntity>>
