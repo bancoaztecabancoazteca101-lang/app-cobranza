@@ -179,7 +179,7 @@ fun MapaScreen(
 
     Column(Modifier.fillMaxSize()) {
         Text(
-            text = "Semana del \${inicioSemana.format(DateTimeFormatter.ofPattern("dd/MM"))} al \${inicioSemana.plusDays(6).format(DateTimeFormatter.ofPattern("dd/MM"))}",
+            text = "Semana del ${inicioSemana.format(DateTimeFormatter.ofPattern("dd/MM"))} al ${inicioSemana.plusDays(6).format(DateTimeFormatter.ofPattern("dd/MM"))}",
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
@@ -203,7 +203,7 @@ fun MapaScreen(
             }
         }
         Text(
-            text = "\${puntos.size} visita\${if (puntos.size == 1) "" else "s"} realizada\${if (puntos.size == 1) "" else "s"}",
+            text = "${puntos.size} visita${if (puntos.size == 1) "" else "s"} realizada${if (puntos.size == 1) "" else "s"}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
