@@ -22,7 +22,8 @@ class MatrizViewModel(
     private val matrizDao: MatrizDao,
     private val workManager: WorkManager,
     val driveHelper: DriveHelper,
-    private val notificacionesHelper: NotificacionesHelper
+    private val notificacionesHelper: NotificacionesHelper,
+    private val visitaMapaDao: VisitaMapaDao
 ) : ViewModel() {
     init {
         // Igual que en Filtro Fecha: cada vez que cambian los datos de Matriz se revisan los
@@ -103,6 +104,19 @@ class MatrizViewModel(
         }
     }
 
+    private fun esHoy(fechaMillis: Long?): Boolean {
+        if (fechaMillis == null) return false
+        val fecha = java.time.Instant.ofEpochMilli(fechaMillis).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        return fecha == java.time.LocalDate.now()
+    }
+
+    private fun inicioDiaActual(): Long = java.time.LocalDate.now()
+        .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    private suspend fun registrarVisitaHoy(id: String) {
+        visitaMapaDao.registrar(VisitaMapaEntity(matrizId = id, fechaDia = inicioDiaActual()))
+    }
+
     fun guardarRegistroCompleto(
         id: String, nombre: String, semana: String, requisito: String, numTT: String,
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
@@ -111,6 +125,7 @@ class MatrizViewModel(
         ref3: String? = null, ref4: String? = null, diaPago: String? = null, domicilioLaboral: String? = null
     ) {
         viewModelScope.launch {
+            val anterior = matrizDao.getById(id)
             matrizDao.updateRegistroCompleto(
                 id, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
                 observaciones, estado, ubicacion, fecha, hora, ruta, folioP,
@@ -118,6 +133,8 @@ class MatrizViewModel(
                 ref3?.takeIf { it.isNotBlank() }, ref4?.takeIf { it.isNotBlank() },
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() }
             )
+            // Editar un registro cuya fecha ya es HOY cuenta como visita de HOY.
+            if (esHoy(anterior?.fecha)) registrarVisitaHoy(id)
             triggerSync()
         }
     }
@@ -138,6 +155,7 @@ class MatrizViewModel(
     ) {
         viewModelScope.launch {
             val idFinal = idNuevo.trim().ifBlank { idAnterior }
+            val registroAnterior = matrizDao.getById(idAnterior)
             if (idFinal != idAnterior) {
                 try {
                     repository.renameRowId(Constants.SHEET_MATRIZ, idAnterior, idFinal, Constants.MatrizCols.COL_ID)
@@ -154,6 +172,7 @@ class MatrizViewModel(
                 ref3?.takeIf { it.isNotBlank() }, ref4?.takeIf { it.isNotBlank() },
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() }
             )
+            if (esHoy(registroAnterior?.fecha)) registrarVisitaHoy(idFinal)
             triggerSync()
             onResult(true, null)
         }
@@ -187,6 +206,8 @@ class MatrizViewModel(
         )
         viewModelScope.launch {
             matrizDao.insertOne(nuevo)
+            // Un alta nueva siempre representa una visita del día actual.
+            registrarVisitaHoy(idFinal)
             triggerSync()
             onCreado(nuevo)
         }
