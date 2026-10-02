@@ -42,7 +42,7 @@ jobs:
       - name: Build Debug APK
         run: |
           TASKS="assembleDebug"
-          if [ "${{ github.ref_name }}" != "main" ]; then TASKS="assembleDebug assembleRelease"; fi
+          if [ "${{ github.ref_name }}" != "main" ]; then TASKS="assembleDebug assembleRelease assembleOptimizado"; fi
           gradle $TASKS --stacktrace > build_output.log 2>&1 || (echo "BUILD_FAILED=true" >> $GITHUB_ENV; true)
         continue-on-error: false
 
@@ -79,6 +79,7 @@ jobs:
           files: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/optimizado/*.apk
           make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

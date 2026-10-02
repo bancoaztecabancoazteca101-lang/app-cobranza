@@ -1052,7 +1052,8 @@ fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: andro
     ) {
         when {
             uriResuelta != null -> AsyncImage(
-                model = uriResuelta,
+                // RGB565 en miniaturas: la mitad de memoria y decodificación más rápida (equipos modestos).
+                model = remember(uriResuelta) { coil.request.ImageRequest.Builder(context).data(uriResuelta).allowRgb565(true).build() },
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop

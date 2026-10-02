@@ -9,9 +9,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-class MainApplication : Application() {
+class MainApplication : Application(), coil.ImageLoaderFactory {
     lateinit var container: AppContainer
     private val notificationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Coil con tope de memoria para fotos (12 % de la RAM): en teléfonos modestos evita presión de memoria/GC. */
+    override fun newImageLoader(): coil.ImageLoader = coil.ImageLoader.Builder(this)
+        .memoryCache { coil.memory.MemoryCache.Builder(this).maxSizePercent(0.12).build() }
+        .crossfade(false)
+        .build()
 
     override fun onCreate() {
         super.onCreate()

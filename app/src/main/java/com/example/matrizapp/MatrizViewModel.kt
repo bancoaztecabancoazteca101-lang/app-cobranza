@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -33,7 +34,8 @@ class MatrizViewModel(
         // sincronizan datos: recorrer toda la lista y llamar repetidamente a AlarmManager es
         // trabajo que no debe bloquear la UI.
         viewModelScope.launch(Dispatchers.IO) {
-            matrizDao.getAllMatriz().collect { items ->
+            // distinctUntilChanged: si la sincronización trae los mismos datos no se reprograman alarmas.
+            matrizDao.getAllMatriz().distinctUntilChanged().collect { items ->
                 notificacionesHelper.sincronizarAlarmasRetornoMatriz(items)
             }
         }

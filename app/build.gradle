@@ -61,6 +61,16 @@ android {
             minifyEnabled false
             shrinkResources false
         }
+        // APK "optimizado": igual que release pero con R8 (reduce/optimiza librerías, ver proguard-rules.pro).
+        // Va aparte para poder comparar y volver a release si algo fallara.
+        optimizado {
+            initWith release
+            signingConfig signingConfigs.debug
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            matchingFallbacks = ['release']
+        }
     }
     lint {
         abortOnError false
