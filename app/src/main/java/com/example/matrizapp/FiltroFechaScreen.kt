@@ -26,7 +26,7 @@ import java.util.*
 fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, notificacionesHelper: NotificacionesHelper, searchQuery: String = "") {
     val allItems by viewModel.filteredList.collectAsState(); val df=remember{SimpleDateFormat("dd/MM/yyyy",Locale.getDefault())}; var itemToView by remember{mutableStateOf<MatrizEntity?>(null)}; val context=LocalContext.current
     val soloPagados by viewModel.soloPagados.collectAsState(); val totalCobrado by viewModel.totalCobradoRango.collectAsState()
-    val items=remember(allItems,searchQuery){if(searchQuery.isBlank())allItems else allItems.filter{val q=searchQuery.trim();coincideBusqueda(it.nombre,q)||coincideBusqueda(it.numTT,q)||coincideBusqueda(it.observaciones,q)||coincideBusqueda(it.estado,q)}}
+    val items=rememberItemsFiltrados(allItems,searchQuery){listOf(it.nombre,it.numTT,it.observaciones,it.estado)}
     Column(Modifier.fillMaxSize()){
         if(soloPagados)Surface(color=MaterialTheme.colorScheme.primaryContainer,modifier=Modifier.fillMaxWidth()){Text("Cobrado: $${"%.2f".format(Locale.US,totalCobrado)}",modifier=Modifier.padding(12.dp),fontWeight=FontWeight.Bold)}
         if(items.isEmpty())Box(Modifier.fillMaxSize(),Alignment.Center){Text(if(soloPagados)"Sin pagos hoy" else "Sin registros de hoy",color=Color.Gray)}else LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){items(items,key={it.id}){item->FiltroItemCard(item,df,viewModel.driveHelper){itemToView=item}}}}

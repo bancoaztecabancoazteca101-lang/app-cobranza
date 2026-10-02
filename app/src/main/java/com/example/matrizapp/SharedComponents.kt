@@ -33,6 +33,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
+import kotlinx.coroutines.sync.withPermit
 import java.util.Locale
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -1026,11 +1027,13 @@ fun ImageDetailDialog(url: String, onDismiss: () -> Unit) {
 fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: androidx.compose.ui.unit.Dp = 56.dp) {
     val context = LocalContext.current
     val imageStore = remember { (context.applicationContext as MainApplication).container.clientImageStore }
-    var uriResuelta by remember(rawImageUrl) { mutableStateOf<String?>(null) }
+    // Valor inicial desde memoria: al volver a pasar por la tarjeta la foto aparece al instante (sin spinner).
+    var uriResuelta by remember(rawImageUrl) { mutableStateOf<String?>(imageStore.localUriCached(rawImageUrl)) }
     var fallo by remember(rawImageUrl) { mutableStateOf(false) }
     var mostrarGrande by remember(rawImageUrl) { mutableStateOf(false) }
 
     LaunchedEffect(rawImageUrl) {
+        if (uriResuelta != null) return@LaunchedEffect
         uriResuelta = imageStore.localUri(rawImageUrl)?.toString()
         if (uriResuelta == null && !rawImageUrl.isNullOrBlank()) {
             val file = imageStore.ensureLocal(rawImageUrl, driveHelper)
@@ -1076,25 +1079,79 @@ fun PortadaThumbnail(rawImageUrl: String?, driveHelper: DriveHelper, size: andro
  * no está disponible en el dispositivo, o el texto no trae coordenadas válidas, regresa null
  * en silencio: la Colonia es un dato "de más", nunca debe tumbar la pantalla.
  */
-suspend fun resolverColoniaYCalle(context: android.content.Context, ubicacion: String?): Pair<String?, String?> = withContext(Dispatchers.IO) {
-    if (ubicacion.isNullOrBlank()) return@withContext null to null
-    try {
+suspend fun resolverColoniaYCalle(context: android.content.Context, ubicacion: String?): Pair<String?, String?> =
+    DireccionCache.obtener(context, ubicacion)
+
+/** Caché de direcciones (colonia/calle) por coordenadas. Antes CADA tarjeta consultaba el Geocoder
+ * (internet) cada vez que aparecía al hacer scroll: decenas de consultas lentas simultáneas, texto que
+ * aparecía tarde moviendo la lista y nada que mostrar sin internet. Ahora: 1) memoria + disco
+ * (SharedPreferences) → la 2ª vez es instantánea y funciona sin internet; 2) máximo 2 consultas
+ * al mismo tiempo, y las de tarjetas que ya salieron de pantalla se cancelan; 3) si una consulta
+ * falla (sin red) no se reintenta por 5 minutos. */
+object DireccionCache {
+    private val memoria = java.util.concurrent.ConcurrentHashMap<String, Pair<String?, String?>>()
+    private val fallos = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val limite = kotlinx.coroutines.sync.Semaphore(2)
+    private const val PREFS = "direccion_cache"
+    private const val REINTENTO_FALLO_MS = 5 * 60 * 1000L
+
+    private fun coords(ubicacion: String?): Pair<Double, Double>? {
+        if (ubicacion.isNullOrBlank()) return null
         val partes = ubicacion.replace('−', '-').replace('–', '-').split(",").map { it.trim() }
-        if (partes.size < 2) return@withContext null to null
-        val lat = partes[0].toDoubleOrNull() ?: return@withContext null to null
-        val lng = partes[1].toDoubleOrNull() ?: return@withContext null to null
-        if (!Geocoder.isPresent()) return@withContext null to null
-        val geocoder = Geocoder(context, Locale("es", "MX"))
-        @Suppress("DEPRECATION")
-        val resultados = geocoder.getFromLocation(lat, lng, 1)
-        val direccion = resultados?.firstOrNull() ?: return@withContext null to null
-        val colonia = direccion.subLocality ?: direccion.locality
-        val calle = direccion.thoroughfare?.let { calleBase ->
-            direccion.subThoroughfare?.let { numero -> "$calleBase $numero" } ?: calleBase
+        if (partes.size < 2) return null
+        val lat = partes[0].toDoubleOrNull() ?: return null
+        val lng = partes[1].toDoubleOrNull() ?: return null
+        return lat to lng
+    }
+
+    private fun clave(ubicacion: String?): String? =
+        coords(ubicacion)?.let { String.format(Locale.US, "%.5f,%.5f", it.first, it.second) }
+
+    /** Lectura inmediata (memoria o disco), sin red. Null si aún no se conoce. */
+    fun peek(context: android.content.Context, ubicacion: String?): Pair<String?, String?>? {
+        val key = clave(ubicacion) ?: return null to null
+        memoria[key]?.let { return it }
+        val guardado = context.applicationContext.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString(key, null) ?: return null
+        val partes = guardado.split("\t")
+        val r = (partes.getOrNull(0)?.ifBlank { null }) to (partes.getOrNull(1)?.ifBlank { null })
+        memoria[key] = r
+        return r
+    }
+
+    suspend fun obtener(context: android.content.Context, ubicacion: String?): Pair<String?, String?> {
+        val key = clave(ubicacion) ?: return null to null
+        peek(context, ubicacion)?.let { return it }
+        val falloEn = fallos[key]
+        if (falloEn != null && System.currentTimeMillis() - falloEn < REINTENTO_FALLO_MS) return null to null
+        return limite.withPermit {
+            peek(context, ubicacion) ?: run {
+                val r = consultarGeocoder(context, ubicacion)
+                if (r.first != null || r.second != null) {
+                    memoria[key] = r
+                    context.applicationContext.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+                        .putString(key, "${r.first.orEmpty()}\t${r.second.orEmpty()}").apply()
+                } else fallos[key] = System.currentTimeMillis()
+                r
+            }
         }
-        colonia to calle
-    } catch (e: Exception) {
-        null to null
+    }
+
+    private suspend fun consultarGeocoder(context: android.content.Context, ubicacion: String?): Pair<String?, String?> = withContext(Dispatchers.IO) {
+        val (lat, lng) = coords(ubicacion) ?: return@withContext null to null
+        try {
+            if (!Geocoder.isPresent()) return@withContext null to null
+            val geocoder = Geocoder(context.applicationContext, Locale("es", "MX"))
+            @Suppress("DEPRECATION")
+            val resultados = geocoder.getFromLocation(lat, lng, 1)
+            val direccion = resultados?.firstOrNull() ?: return@withContext null to null
+            val colonia = direccion.subLocality ?: direccion.locality
+            val calle = direccion.thoroughfare?.let { calleBase ->
+                direccion.subThoroughfare?.let { numero -> "$calleBase $numero" } ?: calleBase
+            }
+            colonia to calle
+        } catch (e: Exception) {
+            null to null
+        }
     }
 }
 
@@ -1108,15 +1165,11 @@ suspend fun resolverColonia(context: android.content.Context, ubicacion: String?
 @Composable
 fun ColoniaLabel(ubicacion: String?, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodySmall) {
     val context = LocalContext.current
-    var colonia by remember(ubicacion) { mutableStateOf<String?>(null) }
-    var calle by remember(ubicacion) { mutableStateOf<String?>(null) }
-    LaunchedEffect(ubicacion) {
-        val (c, cl) = resolverColoniaYCalle(context, ubicacion)
-        colonia = c
-        calle = cl
-    }
-    colonia?.let { Text("Colonia: $it", style = style, color = Color.Gray) }
-    calle?.let { Text("Calle: $it", style = style, color = Color.Gray) }
+    // Valor inicial desde la caché: al volver a pasar por la tarjeta aparece al instante, sin saltos.
+    var direccion by remember(ubicacion) { mutableStateOf<Pair<String?, String?>?>(DireccionCache.peek(context, ubicacion)) }
+    LaunchedEffect(ubicacion) { if (direccion == null) direccion = DireccionCache.obtener(context, ubicacion) }
+    direccion?.first?.let { Text("Colonia: $it", style = style, color = Color.Gray) }
+    direccion?.second?.let { Text("Calle: $it", style = style, color = Color.Gray) }
 }
 
 /** Muestra solo la Calle calculada por geocoding inverso, para pantallas como Semana 6
@@ -1124,13 +1177,30 @@ fun ColoniaLabel(ubicacion: String?, style: androidx.compose.ui.text.TextStyle =
 @Composable
 fun CalleLabel(ubicacion: String?, style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodySmall) {
     val context = LocalContext.current
-    var calle by remember(ubicacion) { mutableStateOf<String?>(null) }
-    LaunchedEffect(ubicacion) {
-        val (_, cl) = resolverColoniaYCalle(context, ubicacion)
-        calle = cl
-    }
-    calle?.let { Text("Calle: $it", style = style, color = Color.Gray) }
+    var direccion by remember(ubicacion) { mutableStateOf<Pair<String?, String?>?>(DireccionCache.peek(context, ubicacion)) }
+    LaunchedEffect(ubicacion) { if (direccion == null) direccion = DireccionCache.obtener(context, ubicacion) }
+    direccion?.second?.let { Text("Calle: $it", style = style, color = Color.Gray) }
 }
+
+/** Filtra [allItems] con la búsqueda usando un índice precalculado (ver IndiceBusqueda). El índice se
+ * arma en segundo plano cuando cambian los datos y cada tecla solo hace un `contains`; nada de esto
+ * corre en el hilo principal, así que escribir y hacer scroll no se traban. */
+@Composable
+fun <T> rememberItemsFiltrados(allItems: List<T>, searchQuery: String, textos: (T) -> List<String?>): List<T> {
+    val indice by produceState<IndiceBusqueda<T>?>(null, allItems) {
+        value = withContext(Dispatchers.Default) { IndiceBusqueda(allItems, textos) }
+    }
+    var filtrados by remember { mutableStateOf(allItems) }
+    LaunchedEffect(indice, allItems, searchQuery) {
+        if (searchQuery.isBlank()) return@LaunchedEffect
+        filtrados = withContext(Dispatchers.Default) {
+            indice?.filtrar(searchQuery)
+                ?: allItems.filter { item -> textos(item).any { coincideBusqueda(it, searchQuery.trim()) } }
+        }
+    }
+    return if (searchQuery.isBlank()) allItems else filtrados
+}
+
 /** Botón de ordenar reutilizable: icono que abre un menú con las opciones de OrdenLista.
  * Si la opción elegida es por ubicación, primero obtiene el GPS actual del dispositivo
  * (mostrando un pequeño loader) y luego se lo pasa al ViewModel para calcular distancias.

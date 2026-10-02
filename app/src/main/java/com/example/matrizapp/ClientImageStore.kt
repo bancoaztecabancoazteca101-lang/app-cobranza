@@ -22,6 +22,17 @@ class ClientImageStore(private val context: Context) {
         return File(root, sha256(raw.trim()) + ".jpg")
     }
 
+    private val uriCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Como [localUri] pero recordando el resultado en memoria (para listas con muchas tarjetas). */
+    fun localUriCached(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        uriCache[raw]?.let { return it }
+        val uri = localUri(raw)?.toString() ?: return null
+        uriCache[raw] = uri
+        return uri
+    }
+
     fun localUri(raw: String?): Uri? {
         val file = localFile(raw) ?: return null
         return if (file.exists() && file.length() > 0L) Uri.fromFile(file) else null
@@ -79,6 +90,7 @@ class ClientImageStore(private val context: Context) {
     fun limpiarHuerfanas(validos: Collection<String?>, forzar: Boolean = false): Int {
         val ahora = System.currentTimeMillis()
         if (!forzar && ahora - prefs.getLong("ultima_limpieza", 0L) < INTERVALO_LIMPIEZA_MS) return 0
+        uriCache.clear()
         val nombresValidos = validos.mapNotNull { localFile(it)?.name }.toSet()
         var borradas = 0
         root.listFiles()?.forEach { f ->

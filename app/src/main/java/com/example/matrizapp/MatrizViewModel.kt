@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -61,7 +62,7 @@ class MatrizViewModel(
 
     val matrizList: StateFlow<List<MatrizEntity>> = combine(matrizDao.getAllMatriz(), _orden, _miUbicacion) { list, o, loc ->
         ordenar(list, o, loc)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _pendingPhotoUri = MutableStateFlow<Uri?>(null)
     val pendingPhotoUri: StateFlow<Uri?> = _pendingPhotoUri

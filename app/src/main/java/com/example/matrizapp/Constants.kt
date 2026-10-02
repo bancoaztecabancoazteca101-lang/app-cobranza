@@ -96,8 +96,33 @@ fun distanciaKm(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
 private val ACENTOS_REGEX = Regex("\\p{Mn}+")
 
 fun quitarAcentos(texto: String): String {
+    // Vía rápida: texto solo ASCII (números, teléfonos, nombres sin acento) no necesita normalizar.
+    var soloAscii = true
+    for (c in texto) if (c.code > 127) { soloAscii = false; break }
+    if (soloAscii) return texto
     val normalizado = java.text.Normalizer.normalize(texto, java.text.Normalizer.Form.NFD)
-    return normalizado.replace(ACENTOS_REGEX, "")
+    val sb = StringBuilder(normalizado.length)
+    for (c in normalizado) if (Character.getType(c) != Character.NON_SPACING_MARK.toInt()) sb.append(c)
+    return sb.toString()
+}
+
+/** Texto listo para comparar en búsquedas: sin acentos y en minúsculas. */
+fun normalizarBusqueda(texto: String?): String = if (texto.isNullOrBlank()) "" else quitarAcentos(texto).lowercase()
+
+/** Índice de búsqueda: el texto de cada elemento se normaliza UNA sola vez cuando cambian los
+ * datos (no en cada tecla). Después, buscar es un simple `contains` sobre un texto ya limpio, sin
+ * regex ni Normalizer por campo y por registro. Mismo resultado que coincideBusqueda por campo. */
+class IndiceBusqueda<T>(private val items: List<T>, textos: (T) -> List<String?>) {
+    private val normalizados: Array<String> = Array(items.size) { i ->
+        textos(items[i]).joinToString("\u0001") { normalizarBusqueda(it) }
+    }
+    fun filtrar(query: String): List<T> {
+        val q = normalizarBusqueda(query.trim())
+        if (q.isEmpty()) return items
+        val resultado = ArrayList<T>()
+        for (i in items.indices) if (normalizados[i].contains(q)) resultado.add(items[i])
+        return resultado
+    }
 }
 
 fun coincideBusqueda(texto: String?, query: String): Boolean {

@@ -33,17 +33,8 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
     var itemToDelete by remember { mutableStateOf<MatrizEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var items by remember { mutableStateOf(allItems) }
-    LaunchedEffect(allItems, searchQuery, filtro) {
-        items = withContext(Dispatchers.Default) {
-            allItems.filter(filtro).filter { item ->
-                if (searchQuery.isBlank()) true else {
-                    val q = searchQuery.trim()
-                    coincideBusqueda(item.nombre, q) || coincideBusqueda(item.numTT, q) || coincideBusqueda(item.ref1, q) || coincideBusqueda(item.ref2, q) || coincideBusqueda(item.observaciones, q) || coincideBusqueda(item.estado, q)
-                }
-            }
-        }
-    }
+    val buscados = rememberItemsFiltrados(allItems, searchQuery) { listOf(it.nombre, it.numTT, it.ref1, it.ref2, it.observaciones, it.estado) }
+    val items = remember(buscados, filtro) { buscados.filter(filtro) }
     Box(Modifier.fillMaxSize()) {
         Column {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

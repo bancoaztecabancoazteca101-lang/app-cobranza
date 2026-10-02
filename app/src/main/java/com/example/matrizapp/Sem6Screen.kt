@@ -56,14 +56,7 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
         if (uri != null) viewModel.analizarFotoCapital(contextFoto, uri) { cambios, filas -> propuestaCapital = cambios to filas }
     }
 
-    val items = remember(allItems, searchQuery) {
-        if (searchQuery.isBlank()) allItems else allItems.filter { item ->
-            val q = searchQuery.trim()
-            coincideBusqueda(item.nombre, q) ||
-                coincideBusqueda(item.cu, q) ||
-                coincideBusqueda(item.id, q)
-        }
-    }
+    val items = rememberItemsFiltrados(allItems, searchQuery) { listOf(it.nombre, it.cu, it.id) }
 
     Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(ClayBackground)) {

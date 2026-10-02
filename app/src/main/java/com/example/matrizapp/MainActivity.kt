@@ -301,7 +301,14 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                            NavHost(navController, Screen.Matriz.route, Modifier.weight(1f).padding(innerPadding)) {
+                            NavHost(
+                                navController, Screen.Matriz.route, Modifier.weight(1f).padding(innerPadding),
+                                // Sin el fundido por defecto (700 ms): cambiar de hoja se siente inmediato.
+                                enterTransition = { androidx.compose.animation.EnterTransition.None },
+                                exitTransition = { androidx.compose.animation.ExitTransition.None },
+                                popEnterTransition = { androidx.compose.animation.EnterTransition.None },
+                                popExitTransition = { androidx.compose.animation.ExitTransition.None }
+                            ) {
                             composable(Screen.Matriz.route) { MatrizScreen(matrizVm, searchQuery) }
                             composable(Screen.PaseCartera.route) { PaseCarteraScreen(paseVm, searchQuery) }
                             composable(Screen.Solicitud.route) { SolicitudScreen(solicitudVm, searchQuery) }

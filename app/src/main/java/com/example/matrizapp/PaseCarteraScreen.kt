@@ -77,15 +77,7 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
 
     LaunchedEffect(allItems.size) { viewModel.procesarPendientes() }
 
-    val filtered = remember(allItems, searchQuery) {
-        if (searchQuery.isBlank()) allItems else allItems.filter { item ->
-            coincideBusqueda(item.nombre, searchQuery) || coincideBusqueda(item.numTT, searchQuery) ||
-                coincideBusqueda(item.ref1, searchQuery) || coincideBusqueda(item.ref2, searchQuery) ||
-                coincideBusqueda(item.observaciones, searchQuery) || coincideBusqueda(item.estado, searchQuery) ||
-                coincideBusqueda(item.folioP, searchQuery) || coincideBusqueda(item.contiene, searchQuery) ||
-                coincideBusqueda(item.capitales, searchQuery)
-        }
-    }
+    val filtered = rememberItemsFiltrados(allItems, searchQuery) { listOf(it.nombre, it.numTT, it.ref1, it.ref2, it.observaciones, it.estado, it.folioP, it.contiene, it.capitales) }
 
     Box(Modifier.fillMaxSize()) {
         if (filtered.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Sin registros en Pase") }
