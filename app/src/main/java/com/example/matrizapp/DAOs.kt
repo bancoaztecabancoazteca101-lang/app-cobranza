@@ -3,6 +3,59 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+interface VisitaMapaDao {
+    // fin EXCLUSIVO (inicio del lunes siguiente): con BETWEEN las visitas de ese lunes entrarían en la semana anterior.
+    @Query("SELECT * FROM visita_mapa_table WHERE fechaDia >= :inicio AND fechaDia < :fin ORDER BY fechaDia ASC, timestamp ASC")
+    fun getVisitasSemana(inicio: Long, fin: Long): Flow<List<VisitaMapaEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun registrar(visita: VisitaMapaEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun registrarVarias(visitas: List<VisitaMapaEntity>)
+
+    @Query("DELETE FROM visita_mapa_table WHERE fechaDia < :limite")
+    suspend fun borrarAnteriores(limite: Long)
+}
+
+/** 00:00 del día de [millis] en hora local. Con Calendar (no java.time): la app soporta Android 7 (minSdk 24). */
+fun inicioDelDia(millis: Long = System.currentTimeMillis()): Long =
+    java.util.Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+/** Registra la visita de HOY. Nunca debe romper el guardado que la dispara: cualquier fallo se ignora. */
+suspend fun VisitaMapaDao.registrarVisitaHoy(clave: String, nombre: String, ubicacion: String?, matrizId: String?) {
+    try {
+        val partes = ubicacion?.split(",")?.map { it.trim() } ?: return
+        if (partes.size != 2 || partes[0].toDoubleOrNull() == null || partes[1].toDoubleOrNull() == null) return
+        val hoy = inicioDelDia()
+        registrar(VisitaMapaEntity(clave, hoy, nombre, partes.joinToString(","), matrizId))
+        borrarAnteriores(hoy - 120L * 24 * 60 * 60 * 1000) // se conservan ~4 meses
+    } catch (_: Exception) { }
+}
+
+/** Guarda en el historial del Mapa TODOS los registros de hoy (los mismos que muestra Filtro Fecha:
+ * fecha = hoy y status distinto de PASE). Así, si después cambian su fecha, el punto de hoy se conserva.
+ * IGNORE: lo ya guardado no se duplica. */
+suspend fun VisitaMapaDao.registrarRegistrosDeHoy(items: List<MatrizEntity>) {
+    try {
+        val hoy = inicioDelDia()
+        val finHoy = hoy + 24L * 60 * 60 * 1000
+        val nuevos = items.mapNotNull { m ->
+            val f = m.fecha ?: return@mapNotNull null
+            if (f < hoy || f >= finHoy || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
+            val p = m.ubicacion?.split(",")?.map { it.trim() } ?: return@mapNotNull null
+            if (p.size != 2 || p[0].toDoubleOrNull() == null || p[1].toDoubleOrNull() == null) return@mapNotNull null
+            VisitaMapaEntity("M:${m.id}", hoy, m.nombre, p.joinToString(","), m.id)
+        }
+        if (nuevos.isNotEmpty()) registrarVarias(nuevos)
+    } catch (_: Exception) { }
+}
+
+@Dao
 interface MatrizDao {
     @Query("SELECT * FROM matriz_table WHERE nombre NOT LIKE '%Pase semana%' AND nombre != '' ORDER BY id ASC")
     fun getAllMatriz(): Flow<List<MatrizEntity>>
@@ -28,6 +81,10 @@ interface MatrizDao {
     // los registros del día -- ver FiltroFechaViewModel.registrarPagoDesdeTicket.
     @Query("SELECT * FROM matriz_table WHERE fecha BETWEEN :desde AND :hasta")
     suspend fun getMatrizEnRango(desde: Long, hasta: Long): List<MatrizEntity>
+
+    // Mapa: solo los registros de la semana (fin EXCLUSIVO) que tienen coordenadas y no son PASE (igual que Filtro Fecha).
+    @Query("SELECT * FROM matriz_table WHERE fecha >= :desde AND fecha < :hasta AND ubicacion IS NOT NULL AND UPPER(estado) != 'PASE'")
+    fun observarMatrizEnRango(desde: Long, hasta: Long): Flow<List<MatrizEntity>>
     @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
         ubicacion = :ubicacion, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP,

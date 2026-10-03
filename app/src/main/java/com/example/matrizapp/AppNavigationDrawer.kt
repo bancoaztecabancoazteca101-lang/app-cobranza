@@ -142,6 +142,7 @@ fun AppNavigationDrawer(
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Tune, contentDescription = null) }, label = { Text("Filtrar") }, selected = currentRoute == "filtrar", onClick = { onNavigate("filtrar"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
                     NavigationDrawerItem(icon = { Icon(Icons.Default.BarChart, contentDescription = null) }, label = { Text("Control") }, selected = currentRoute == "control", onClick = { onNavigate("control"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
                     NavigationDrawerItem(icon = { Icon(Icons.Default.Map, contentDescription = null) }, label = { Text("Ubi") }, selected = currentRoute == "ubi", onClick = { onNavigate("ubi"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
+                    NavigationDrawerItem(icon = { Icon(Icons.Default.Map, contentDescription = null) }, label = { Text("Mapa") }, selected = currentRoute == "mapa", onClick = { onNavigate("mapa"); scope.launch { drawerState.close() } }, modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding), colors = itemColors)
                     NavigationDrawerItem(
                         icon = { Icon(Icons.Default.Devices, contentDescription = null) },
                         label = { Text("Dispositivos") },

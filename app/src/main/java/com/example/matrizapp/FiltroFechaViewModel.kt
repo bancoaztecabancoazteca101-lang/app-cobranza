@@ -15,7 +15,8 @@ class FiltroFechaViewModel(
     private val matrizDao: MatrizDao,
     val driveHelper: DriveHelper,
     private val repository: SheetsRepository,
-    private val sem6CacheStore: Sem6CacheStore
+    private val sem6CacheStore: Sem6CacheStore,
+    private val visitaMapaDao: VisitaMapaDao
 ) : ViewModel() {
 
     private fun inicioDeHoy(): Long = java.time.LocalDate.now()
@@ -97,7 +98,10 @@ class FiltroFechaViewModel(
      * Matriz en el próximo sync -- ya no hay una hoja "Filtro Fecha" aparte que actualizar. */
     fun guardarEstadoYHora(id: String, nuevoEstado: String, nuevaHora: String, notificacionesHelper: NotificacionesHelper, onResult: (String?) -> Unit = {}) {
         viewModelScope.launch {
+            val anterior = matrizDao.getById(id)
             matrizDao.updateEstadoYHora(id, nuevoEstado, nuevaHora)
+            // Mapa: editar un registro cuenta como visita de hoy.
+            if (anterior != null) visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
             onResult(notificacionesHelper.evaluarProgramacion(nuevoEstado, nuevaHora))
         }
     }
@@ -137,6 +141,7 @@ class FiltroFechaViewModel(
             if (matchFf != null) {
                 val hora = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
                 matrizDao.marcarPagadoConMonto(matchFf.id, datos.monto ?: 0.0, hora)
+                visitaMapaDao.registrarVisitaHoy("M:${matchFf.id}", matchFf.nombre, matchFf.ubicacion, matchFf.id)
                 mensajes += if (datos.monto != null) "Marcado como Pagado: ${matchFf.nombre} ($montoTxt)"
                 else "Marcado como Pagado: ${matchFf.nombre} (no se detectó el monto, revísalo manualmente)"
             } else if (busquedaFf.ambiguos.isNotEmpty()) {

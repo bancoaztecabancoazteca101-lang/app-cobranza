@@ -147,3 +147,16 @@ data class BolsaGerenciaEntity(
     val lastUpdate: Long = System.currentTimeMillis()
 )
 
+/** Visita registrada en el día para el Mapa. Una visita = el colaborador cambió el status u observaciones
+ * de un cliente, o se registró su pago (ticket). Un cliente cuenta UNA vez por día. Guarda nombre y
+ * coordenadas en la propia fila (no depende de que el registro siga existiendo). 100% local: no se sincroniza
+ * con Google Sheets. [clave] = "M:<id>" (Matriz) o "S6:<id>" (Semana 6). */
+@Entity(tableName = "visita_mapa_table", primaryKeys = ["clave", "fechaDia"])
+data class VisitaMapaEntity(
+    val clave: String,
+    val fechaDia: Long,
+    val nombre: String,
+    val ubicacion: String,
+    val matrizId: String?,
+    val timestamp: Long = System.currentTimeMillis()
+)
