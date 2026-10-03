@@ -41,10 +41,21 @@ jobs:
       # Disparo intencional de build para validar la corrección actual de Pase.
       - name: Build Debug APK
         run: |
-          # TEMPORAL: se publican las tres variantes también en main para aislar por qué no abre la app.
-          TASKS="assembleDebug assembleRelease assembleOptimizado"
+          # main publica la build OPTIMIZADA (R8) como app-debug.apk (el enlace de siempre) y la build
+          # release (sin R8) como app-release.apk de respaldo. Las ramas publican las tres para comparar.
+          TASKS="assembleRelease assembleOptimizado"
+          if [ "${{ github.ref_name }}" != "main" ]; then TASKS="assembleDebug assembleRelease assembleOptimizado"; fi
           gradle $TASKS --stacktrace > build_output.log 2>&1 || (echo "BUILD_FAILED=true" >> $GITHUB_ENV; true)
         continue-on-error: false
+
+      # En main: el APK optimizado se publica con el nombre de siempre (app-debug.apk) para que el enlace
+      # permanente latest-debug siga funcionando; app-release.apk queda como respaldo.
+      - name: APK optimizado con el nombre de siempre (solo main)
+        if: env.BUILD_FAILED != 'true' && github.ref_name == 'main'
+        run: |
+          mkdir -p app/build/outputs/apk/debug
+          cp app/build/outputs/apk/optimizado/app-optimizado.apk app/build/outputs/apk/debug/app-debug.apk
+          rm -f app/build/outputs/apk/optimizado/app-optimizado.apk
 
       - name: Show log tail
         if: always()
