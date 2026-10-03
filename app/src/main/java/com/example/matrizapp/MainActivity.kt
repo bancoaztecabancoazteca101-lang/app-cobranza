@@ -95,13 +95,14 @@ class MainActivity : ComponentActivity() {
                 val horaNotifFormato = remember { SimpleDateFormat("dd/MM HH:mm", Locale("es", "MX")) }
                 val notificacionesApp = remember {
                     mutableStateListOf<NotificacionApp>().apply {
-                        previousCrash?.let { add(NotificacionApp("La app tuvo un cierre inesperado. Revisa Notificaciones si necesitas más información.", horaNotifFormato.format(Date()))) }
+                        // Detalle del cierre (para diagnosticar): modelo/Android + el error. El banner de arriba solo dice que hubo un cierre.
+                        previousCrash?.let { add(NotificacionApp("La app tuvo un cierre inesperado.\nAndroid ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}) · ${android.os.Build.MODEL}\n\n" + it.take(3000), horaNotifFormato.format(Date()))) }
                     }
                 }
                 // El banner arriba SOLO se usa para el cierre inesperado de la app. Los errores de
                 // sincronización (sin internet, etc.) van directo al área de Notificaciones (el contador
                 // del menú) sin interrumpir la pantalla.
-                var bannerMensaje by remember { mutableStateOf<String?>(notificacionesApp.firstOrNull()?.mensaje) }
+                var bannerMensaje by remember { mutableStateOf<String?>(if (previousCrash != null) "La app tuvo un cierre inesperado. Abre Notificaciones para ver el detalle." else null) }
                 fun agregarNotificacion(mensaje: String) {
                     if (notificacionesApp.firstOrNull()?.mensaje == mensaje) return // sin repetidas seguidas (auto-sync cada pocos minutos)
                     notificacionesApp.add(0, NotificacionApp(mensaje, horaNotifFormato.format(Date())))
