@@ -100,9 +100,8 @@ class FiltroFechaViewModel(
         viewModelScope.launch {
             val anterior = matrizDao.getById(id)
             matrizDao.updateEstadoYHora(id, nuevoEstado, nuevaHora)
-            // Mapa: cambiar el status cuenta como visita de hoy.
-            if (anterior != null && anterior.estado.trim() != nuevoEstado.trim())
-                visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
+            // Mapa: editar un registro cuenta como visita de hoy.
+            if (anterior != null) visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
             onResult(notificacionesHelper.evaluarProgramacion(nuevoEstado, nuevaHora))
         }
     }
@@ -167,7 +166,6 @@ class FiltroFechaViewModel(
                             repository.updateSem6Susceptible(matchS6.id, "Recuperado", sheetName = currentSem6SheetName())
                         } catch (e: Exception) { false }
                         if (ok) {
-                            visitaMapaDao.registrarVisitaHoy("S6:${matchS6.id}", matchS6.nombre, matchS6.ubicacion, null)
                             sem6CacheStore.load()?.first?.let { guardados ->
                                 sem6CacheStore.save(guardados.map { if (it.id == matchS6.id) it.copy(susceptible = "Recuperado") else it })
                             }

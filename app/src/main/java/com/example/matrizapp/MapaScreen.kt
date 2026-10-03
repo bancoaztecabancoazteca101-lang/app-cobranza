@@ -5,9 +5,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -166,14 +163,27 @@ private val zonaCafetales = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapaScreen(visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
-    var offset by remember { mutableStateOf(0) }
-    val inicio = remember(offset) { inicioSemanaMapa(offset) }
+fun MapaScreen(matrizViewModel: MatrizViewModel, visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
+    // Solo interesa la SEMANA ACTUAL (lunes a domingo).
+    val inicio = remember { inicioSemanaMapa(0) }
     val dias = remember(inicio) { (0..6).map { sumarDiasMapa(inicio, it) } }
     val fin = remember(inicio) { sumarDiasMapa(inicio, 7) }
-    val visitasFlow = remember(inicio) { visitaDao.getVisitasSemana(inicio, fin) }
-    val visitas by visitasFlow.collectAsState(initial = emptyList())
-    var diaSel by remember(inicio) { mutableStateOf<Int?>(null) } // null = toda la semana
+    val historial by remember(inicio) { visitaDao.getVisitasSemana(inicio, fin) }.collectAsState(initial = emptyList())
+    val registros by matrizViewModel.matrizList.collectAsState()
+    // Visitas de la semana = 1) los registros de cada día tal como los muestra Filtro Fecha (fecha del registro
+    // dentro de ese día, status distinto de PASE) + 2) las ya guardadas (ediciones/altas y el historial de días
+    // anteriores, aunque el registro cambie de fecha después).
+    val visitas = remember(registros, historial, inicio) {
+        val delDia = registros.mapNotNull { m ->
+            val f = m.fecha ?: return@mapNotNull null
+            if (f < inicio || f >= fin || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
+            val u = m.ubicacion ?: return@mapNotNull null
+            VisitaMapaEntity("M:${m.id}", inicioDelDia(f), m.nombre, u, m.id, f)
+        }
+        (delDia + historial).distinctBy { it.clave to it.fechaDia }
+    }
+    // Por defecto se ve el DÍA DE HOY; "Toda la semana" junta todos los días con su color.
+    var diaSel by remember(inicio) { mutableStateOf<Int?>(dias.indexOf(inicioDelDia()).takeIf { it >= 0 }) }
     var seleccionada by remember(inicio, diaSel) { mutableStateOf<VisitaMapaEntity?>(null) }
 
     // Un cliente cuenta una vez por día; si dos registros caen en el mismo punto el mismo día, un solo punto.
@@ -190,22 +200,15 @@ fun MapaScreen(visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
     var mapaAjustado by remember { mutableStateOf(false) }
     val fmtDia = remember { SimpleDateFormat("dd/MM", Locale("es", "MX")) }
     val fmtNombre = remember { SimpleDateFormat("EEE", Locale("es", "MX")) }
-    val etiquetaSemana = if (offset == 0) "Esta semana" else "Semana del ${fmtDia.format(Date(inicio))} al ${fmtDia.format(Date(sumarDiasMapa(inicio, 6)))}"
+    val etiquetaSemana = "Esta semana: ${fmtDia.format(Date(inicio))} al ${fmtDia.format(Date(sumarDiasMapa(inicio, 6)))}"
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { offset-- }) { Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Semana anterior") }
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(etiquetaSemana, style = MaterialTheme.typography.titleMedium)
-                if (offset == 0) Text("${fmtDia.format(Date(inicio))} al ${fmtDia.format(Date(sumarDiasMapa(inicio, 6)))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            IconButton(onClick = { if (offset < 0) offset++ }, enabled = offset < 0) { Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Semana siguiente") }
-        }
+        Text(etiquetaSemana, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            FilterChip(selected = diaSel == null, onClick = { diaSel = null }, label = { Text("Todos · ${puntos.size}") })
+            FilterChip(selected = diaSel == null, onClick = { diaSel = null }, label = { Text("Toda la semana · ${puntos.size}") })
             dias.forEachIndexed { i, d ->
                 FilterChip(
                     selected = diaSel == i,
@@ -217,7 +220,7 @@ fun MapaScreen(visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
         }
         if (puntos.isEmpty()) {
             Text(
-                "Sin visitas esta semana. Una visita se registra al cambiar el status u observaciones de un cliente, o al registrar su pago.",
+                "Sin visitas en este día. Aparecen los registros de Filtro Fecha de ese día, y los que se crean o editan.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)

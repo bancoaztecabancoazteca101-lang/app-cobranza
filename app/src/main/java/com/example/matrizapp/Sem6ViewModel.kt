@@ -12,8 +12,7 @@ class Sem6ViewModel(
     private val repository: SheetsRepository,
     private val cacheStore: Sem6CacheStore,
     val driveHelper: DriveHelper,
-    private val matrizDao: MatrizDao,
-    private val visitaMapaDao: VisitaMapaDao
+    private val matrizDao: MatrizDao
 ) : ViewModel() {
     /** Cartera de Matriz (local) para buscar al cliente al agregar un registro a Semana 6. */
     val matrizList: StateFlow<List<MatrizEntity>> = matrizDao.getAllMatriz()
@@ -114,12 +113,8 @@ class Sem6ViewModel(
         _errorNotas.value = null
         viewModelScope.launch {
             try {
-                val anterior = _itemsRaw.value.firstOrNull { it.id == id }
                 val ok = repository.updateSem6Notas(id, seContiene, susceptible, observaciones, capital, abono, sheetName = _semanaSeleccionada.value)
                 if (ok) {
-                    // Mapa: cambiar status/observaciones cuenta como visita de hoy.
-                    if (anterior != null && cambioDeGestion(anterior.susceptible, anterior.observaciones, susceptible, observaciones))
-                        visitaMapaDao.registrarVisitaHoy("S6:$id", anterior.nombre, anterior.ubicacion, null)
                     _itemsRaw.value = _itemsRaw.value.map { item ->
                         if (item.id == id) item.copy(seContiene = seContiene, susceptible = susceptible, observaciones = observaciones, capital = capital, abono = abono) else item
                     }
