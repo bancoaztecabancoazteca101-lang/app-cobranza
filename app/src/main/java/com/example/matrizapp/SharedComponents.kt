@@ -1348,11 +1348,9 @@ fun FiltroFechaOrdenButton(
  * Devuelve null si no encuentra nada que parezca un nombre. */
 suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): String? = suspendCancellableCoroutine { cont ->
     try {
-        val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+        val image = OcrImagen.cargar(context, uri)
         val alturaImagen = image.height
-        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
-            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
-        )
+        val recognizer = OcrImagen.reconocedor
         // Palabras/frases típicas de encabezados, pasos (stepper) y botones de apps como
         // AppSheet/CONTENCION que NO son el nombre del cliente. Se descartan aunque cumplan
         // el resto de criterios (2-5 palabras, solo letras), porque si no ganan por ser más
@@ -1487,11 +1485,9 @@ fun diasAtrasoASemana(dias: Int): Int = (dias / 7) + 1
  * nombre (buscador con foto, Solicitud, exportar Matriz). */
 suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: Uri): DatosClienteOcr = suspendCancellableCoroutine { cont ->
     try {
-        val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+        val image = OcrImagen.cargar(context, uri)
         val alturaImagen = image.height
-        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
-            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
-        )
+        val recognizer = OcrImagen.reconocedor
         val palabrasUi = listOf(
             "resumen del cliente", "expediente del cliente", "ver expediente", "ver otros lugares",
             "prepárate", "preparate", "en ruta", "localiza", "contacta", "cobra",
@@ -1541,10 +1537,8 @@ suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: U
  * subidas a Drive, no se necesita nombre/monto/semana de esos registros existentes). */
 suspend fun extraerCuDeImagen(context: android.content.Context, uri: Uri): String? = suspendCancellableCoroutine { cont ->
     try {
-        val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
-        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
-            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
-        )
+        val image = OcrImagen.cargar(context, uri)
+        val recognizer = OcrImagen.reconocedor
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
                 val cu = patronCuOcr.find(visionText.text)?.aCu()
@@ -1576,10 +1570,8 @@ private fun esLineaDeNombreTicket(l: String): Boolean =
  * simplemente no encuentra match y queda null -- el match en el ViewModel se hace por nombre. */
 suspend fun extraerDatosTicketDeImagen(context: android.content.Context, uri: Uri): DatosTicketOcr = suspendCancellableCoroutine { cont ->
     try {
-        val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
-        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
-            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS
-        )
+        val image = OcrImagen.cargar(context, uri)
+        val recognizer = OcrImagen.reconocedor
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
                 val texto = java.text.Normalizer.normalize(visionText.text, java.text.Normalizer.Form.NFC)

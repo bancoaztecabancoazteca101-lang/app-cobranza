@@ -154,8 +154,14 @@ class RutaIAViewModel(
 
     /** Trae la ruta vigente de la hoja "Ruta IA" (la que generó otro dispositivo). Ver
      * SheetsRepository.refreshRutaIA para las reglas de qué gana si hay cambios locales. */
+    private var ultimaSyncHoja = 0L
+
+    /** Al ENTRAR a la hoja (sin [onResult]) solo se sincroniza si pasaron más de 2 minutos; el botón
+     *  manual (con [onResult]) siempre sincroniza. Antes cada visita a la hoja iba a Sheets. */
     fun sincronizarDesdeHoja(onResult: ((Result<Int>) -> Unit)? = null) {
         if (_procesando.value) return
+        if (onResult == null && System.currentTimeMillis() - ultimaSyncHoja < 2 * 60 * 1000L) return
+        ultimaSyncHoja = System.currentTimeMillis()
         viewModelScope.launch {
             val resultado = runCatching { repository.refreshRutaIA() }
             onResult?.invoke(resultado)

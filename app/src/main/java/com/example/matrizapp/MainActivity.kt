@@ -43,6 +43,7 @@ import androidx.navigation.compose.*
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -132,14 +133,22 @@ class MainActivity : ComponentActivity() {
                 var searchInput by remember { mutableStateOf("") }
                 var searchQuery by remember { mutableStateOf("") }
                 var mapaOpenId by remember { mutableStateOf<String?>(null) }
-                LaunchedEffect(searchInput) { delay(180); searchQuery = searchInput }
+                // snapshotFlow: lee searchInput fuera de la composición. Antes cada tecla recomponía TODA la
+                // pantalla (NavHost incluido) solo para reiniciar el temporizador.
+                LaunchedEffect(Unit) { snapshotFlow { searchInput }.collectLatest { delay(180); searchQuery = it } }
                 var buscandoPorFoto by remember { mutableStateOf(false) }
                 var mostrarSelectorFotoBusqueda by remember { mutableStateOf(false) }
                 var fotoBusquedaUri by remember { mutableStateOf<Uri?>(null) }
                 var isRefreshing by remember { mutableStateOf(false) }
-                fun refreshData() {
+                // Última sincronización y último reporte de dispositivo (ms). Evitan repetir trabajo pesado
+                // (red + Room + workers) cada vez que se cambia de app o se vuelve a abrir.
+                var ultimaSync by remember { mutableStateOf(0L) }
+                var ultimoReporte by remember { mutableStateOf(0L) }
+                fun refreshData(minIntervaloMs: Long = 0L) {
                     if (isRefreshing) return
+                    if (minIntervaloMs > 0 && System.currentTimeMillis() - ultimaSync < minIntervaloMs) return
                     isRefreshing = true
+                    ultimaSync = System.currentTimeMillis()
                     coroutineScope.launch {
                         try { container.repository.refreshAll() } catch (e: Exception) {
                             val detalle = e.message.orEmpty()
@@ -154,11 +163,17 @@ class MainActivity : ComponentActivity() {
                         // WorkManager espera automáticamente hasta que vuelva la conectividad.
                         ClientImageSyncWorker.enqueue(this@MainActivity)
                         SmsStatusWorker.programarAhora(this@MainActivity)
-                        try { container.repository.reportarDispositivo(DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId) } catch (e: Exception) { }
+                        // El reporte del dispositivo son ~5 llamadas a Sheets: una vez por hora basta.
+                        if (System.currentTimeMillis() - ultimoReporte > 60 * 60 * 1000L) {
+                            ultimoReporte = System.currentTimeMillis()
+                            try { container.repository.reportarDispositivo(DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId) } catch (e: Exception) { }
+                        }
                         isRefreshing = false
                     }
                 }
-                LaunchedEffect(signedIn) { refreshData() }
+                // Primera sincronización con un respiro: la app pinta y responde primero con los datos locales
+                // (Room) y la red arranca después, sin competir con la primera pantalla.
+                LaunchedEffect(signedIn) { delay(1200); refreshData() }
                 val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
                 // Antes el auto-sync cada 3 minutos vivía en un LaunchedEffect(signedIn) suelto,
                 // que sigue corriendo mientras el proceso de la Activity esté vivo -- incluye con
@@ -172,7 +187,7 @@ class MainActivity : ComponentActivity() {
                     var pollingJob: kotlinx.coroutines.Job? = null
                     val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                         when (event) {
-                            androidx.lifecycle.Lifecycle.Event.ON_RESUME -> if (signedIn) refreshData()
+                            androidx.lifecycle.Lifecycle.Event.ON_RESUME -> if (signedIn) refreshData(minIntervaloMs = 60_000L)
                             androidx.lifecycle.Lifecycle.Event.ON_START -> {
                                 if (signedIn && pollingJob == null) {
                                     pollingJob = coroutineScope.launch {

@@ -269,7 +269,7 @@ suspend fun extraerPaseDeFoto(context: Context, uri: Uri): List<PaseFotoFila> =
     suspendCancellableCoroutine { cont ->
         var recognizer: TextRecognizer? = null
         try {
-            val image = InputImage.fromFilePath(context, uri)
+            val image = OcrImagen.cargar(context, uri)
             recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             recognizer.process(image)
                 .addOnSuccessListener { visionText: Text ->
@@ -290,7 +290,7 @@ suspend fun extraerTodasLasFilasDeFoto(context: Context, uri: Uri): List<PaseFot
     suspendCancellableCoroutine { cont ->
         var recognizer: TextRecognizer? = null
         try {
-            val image = InputImage.fromFilePath(context, uri)
+            val image = OcrImagen.cargar(context, uri)
             recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
             recognizer.process(image)
                 .addOnSuccessListener { visionText: Text ->
