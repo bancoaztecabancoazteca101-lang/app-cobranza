@@ -33,8 +33,11 @@ import java.util.Locale
 // semana, para ver qué zonas se trabajaron cada día. Una "visita" = cambio de status/observaciones o pago
 // (ver VisitaMapaDao.registrarVisitaHoy). Usa Calendar y no java.time: la app soporta Android 7 (minSdk 24).
 
-private val HUES_DIA = floatArrayOf(210f, 120f, 60f, 30f, 0f, 270f, 300f) // lun..dom (tonos de pin de Google Maps)
+private val HUES_DIA = floatArrayOf(210f, 120f, 60f, 30f, 0f, 270f, 300f) // lun..dom
+private val HUES_CARTUCHO = floatArrayOf(285f, 120f, 30f, 200f, 60f, 330f)
 private fun colorDia(i: Int) = Color(android.graphics.Color.HSVToColor(floatArrayOf(HUES_DIA[i], 0.9f, 0.85f)))
+private fun hueCartucho(cartucho: Int) = HUES_CARTUCHO[(cartucho - 1).coerceAtLeast(0) % HUES_CARTUCHO.size]
+private fun colorCartucho(cartucho: Int) = Color(android.graphics.Color.HSVToColor(floatArrayOf(hueCartucho(cartucho), 0.9f, 0.85f)))
 
 private fun inicioSemanaMapa(offsetSemanas: Int): Long {
     val c = Calendar.getInstance()
@@ -169,6 +172,7 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
     val dias = remember(inicio) { (0..6).map { sumarDiasMapa(inicio, it) } }
     val fin = remember(inicio) { sumarDiasMapa(inicio, 7) }
     val historial by remember(inicio) { visitaDao.getVisitasSemana(inicio, fin) }.collectAsState(initial = emptyList())
+    val cartuchosDia by remember(inicio) { visitaDao.observarCartuchosSemana(inicio, fin) }.collectAsState(initial = emptyList())
     // Consulta liviana (solo los registros de esta semana con coordenadas), no la lista completa de Matriz:
     // el mapa no se recompone cuando cambia el orden/ubicación de la lista general.
     val registros by remember(inicio) { matrizDao.observarMatrizEnRango(inicio, fin) }.collectAsState(initial = emptyList())
@@ -180,7 +184,8 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
             val f = m.fecha ?: return@mapNotNull null
             if (f < inicio || f >= fin || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
             val u = m.ubicacion ?: return@mapNotNull null
-            VisitaMapaEntity("M:${m.id}", inicioDelDia(f), m.nombre, u, m.id, f)
+            val existente = historial.firstOrNull { it.clave == "M:${m.id}" && it.fechaDia == inicioDelDia(f) }
+            VisitaMapaEntity("M:${m.id}", inicioDelDia(f), m.nombre, u, m.id, existente?.cartucho ?: 1, f)
         }
         (delDia + historial).distinctBy { it.clave to it.fechaDia }
     }
@@ -195,6 +200,14 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
             .distinctBy { (v, ll) -> Triple(v.fechaDia, Math.round(ll.latitude * 1e5), Math.round(ll.longitude * 1e5)) }
     }
     val cuentaPorDia = remember(puntos, dias) { dias.map { d -> puntos.count { it.first.fechaDia == d } } }
+    val diaSeleccionado = diaSel?.let { dias[it] }
+    val cartuchoActivo = diaSeleccionado?.let { d -> cartuchosDia.firstOrNull { it.fechaDia == d }?.cartuchoActivo } ?: 1
+    val conteoCartuchos = remember(puntos, diaSeleccionado) {
+        if (diaSeleccionado == null) emptyMap()
+        else puntos.filter { it.first.fechaDia == diaSeleccionado }.groupingBy { it.first.cartucho }.eachCount()
+    }
+    val scope = rememberCoroutineScope()
+    var confirmarCambioCartucho by remember { mutableStateOf(false) }
     val visibles = remember(puntos, diaSel, dias) { if (diaSel == null) puntos else puntos.filter { it.first.fechaDia == dias[diaSel!!] } }
 
     val cameraPositionState = rememberCameraPositionState {
@@ -226,13 +239,40 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
                 )
             }
         }
-        if (puntos.isEmpty()) {
+        if (diaSeleccionado != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                conteoCartuchos.toSortedMap().forEach { (cartucho, cantidad) ->
+                    AssistChip(
+                        onClick = {},
+                        leadingIcon = { Box(Modifier.size(12.dp).clip(CircleShape).background(colorCartucho(cartucho))) },
+                        label = { Text("Cartucho $cartucho · $cantidad") }
+                    )
+                }
+                val esHoy = diaSeleccionado == inicioDelDia()
+                Button(onClick = { confirmarCambioCartucho = true }, enabled = esHoy) {
+                    Text("Cambiar a ${cartuchoActivo + 1}")
+                }
+            }
             Text(
-                "Sin visitas en este día. Aparecen los registros de Filtro Fecha de ese día, y los que se crean o editan.",
+                "Cartucho activo: $cartuchoActivo · El cambio es manual; normalmente ocurre entre 21 y 27 visitas.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
             )
+        } else {
+            Text(
+                "Selecciona un día para ver sus cartuchos. El número de cartucho se reinicia cada día.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
+        if (puntos.isEmpty()) {
+            Text("Sin visitas en este día.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
         }
         Box(Modifier.fillMaxSize()) {
             GoogleMap(
@@ -262,7 +302,7 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
                     key(v.clave, v.fechaDia) {
                         Marker(
                             state = rememberMarkerState(position = ll),
-                            icon = iconos[diaIdx],
+                            icon = BitmapDescriptorFactory.defaultMarker(hueCartucho(v.cartucho)),
                             onClick = { seleccionadaState.value = v; true }
                         )
                     }
@@ -270,6 +310,28 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
             }
             TarjetaVisitaMapa(seleccionadaState, dias, onOpenMatriz, Modifier.align(Alignment.BottomCenter))
         }
+    }
+
+    if (confirmarCambioCartucho && diaSeleccionado != null) {
+        AlertDialog(
+            onDismissRequest = { confirmarCambioCartucho = false },
+            title = { Text("Cambiar de cartucho") },
+            text = {
+                Text("Cartucho $cartuchoActivo lleva ${conteoCartuchos[cartuchoActivo] ?: 0} visitas. ¿Confirmas que ya cambiaste al cartucho ${cartuchoActivo + 1}? El nuevo cartucho empezará a contar desde la siguiente visita.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        visitaDao.asegurarCartuchoDia(diaSeleccionado)
+                        visitaDao.setCartuchoActivo(diaSeleccionado, cartuchoActivo + 1)
+                    }
+                    confirmarCambioCartucho = false
+                }) { Text("Sí, cambiar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmarCambioCartucho = false }) { Text("Cancelar") }
+            }
+        )
     }
 }
 
