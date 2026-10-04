@@ -24,10 +24,7 @@ class BackupManager(private val context: Context, private val database: AppDatab
 
         fun backupBeforeDatabaseOpenIfVersionChanged(context: Context): File? {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val current = try {
-                val pi = context.packageManager.getPackageInfo(context.packageName, 0)
-                pi.versionName ?: pi.longVersionCode.toString()
-            } catch (_: Exception) { "desconocida" }
+            val current = BuildConfig.BUILD_SHA
             val previous = prefs.getString(LAST_APP_VERSION, null)
             if (previous == null) {
                 prefs.edit().putString(LAST_APP_VERSION, current).apply()
@@ -136,10 +133,7 @@ class BackupManager(private val context: Context, private val database: AppDatab
     fun lastLocalTime(): Long = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(LAST_LOCAL, 0L)
     fun lastDriveTime(): Long = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(LAST_DRIVE, 0L)
 
-    fun currentAppVersion(): String = try {
-        val pi = context.packageManager.getPackageInfo(context.packageName, 0)
-        pi.versionName ?: pi.longVersionCode.toString()
-    } catch (_: Exception) { "desconocida" }
+    fun currentAppVersion(): String = BuildConfig.BUILD_SHA
 
     private fun checkpointDatabase() { runCatching { database.openHelper.writableDatabase.execSQL("PRAGMA wal_checkpoint(FULL)") } }
 
