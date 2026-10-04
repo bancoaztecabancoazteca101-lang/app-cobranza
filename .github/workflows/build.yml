@@ -58,9 +58,14 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/debug/app-debug.apk
           rm -f app/build/outputs/apk/release/app-release.apk
 
-      - name: Show log tail
+      - name: Show compiler errors
         if: always()
-        run: tail -n 400 build_output.log || true
+        run: |
+          echo "===== ERRORES DEL COMPILADOR ====="
+          grep -n -E '(^| )e: |error:|Unresolved reference|Type mismatch|Expecting|Cannot access|Compilation error' build_output.log | tail -n 120 || true
+          echo "===== FIN ERRORES ====="
+          echo "===== COLA DEL LOG ====="
+          tail -n 250 build_output.log || true
 
       - name: Report failure as Issue
         if: env.BUILD_FAILED == 'true'
