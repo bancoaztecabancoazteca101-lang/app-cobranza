@@ -14,6 +14,18 @@ interface VisitaMapaDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun registrarVarias(visitas: List<VisitaMapaEntity>)
 
+    @Query("SELECT cartuchoActivo FROM cartucho_dia_table WHERE fechaDia = :fechaDia LIMIT 1")
+    suspend fun getCartuchoActivo(fechaDia: Long): Int?
+
+    @Query("INSERT OR IGNORE INTO cartucho_dia_table (fechaDia, cartuchoActivo) VALUES (:fechaDia, 1)")
+    suspend fun asegurarCartuchoDia(fechaDia: Long)
+
+    @Query("UPDATE cartucho_dia_table SET cartuchoActivo = :cartucho WHERE fechaDia = :fechaDia")
+    suspend fun setCartuchoActivo(fechaDia: Long, cartucho: Int)
+
+    @Query("SELECT fechaDia, cartuchoActivo FROM cartucho_dia_table WHERE fechaDia >= :inicio AND fechaDia < :fin ORDER BY fechaDia ASC")
+    suspend fun getCartuchosSemana(inicio: Long, fin: Long): List<CartuchoDiaEntity>
+
     @Query("DELETE FROM visita_mapa_table WHERE fechaDia < :limite")
     suspend fun borrarAnteriores(limite: Long)
 }
@@ -32,7 +44,9 @@ suspend fun VisitaMapaDao.registrarVisitaHoy(clave: String, nombre: String, ubic
         val partes = ubicacion?.split(",")?.map { it.trim() } ?: return
         if (partes.size != 2 || partes[0].toDoubleOrNull() == null || partes[1].toDoubleOrNull() == null) return
         val hoy = inicioDelDia()
-        registrar(VisitaMapaEntity(clave, hoy, nombre, partes.joinToString(","), matrizId))
+        asegurarCartuchoDia(hoy)
+        val cartucho = getCartuchoActivo(hoy) ?: 1
+        registrar(VisitaMapaEntity(clave, hoy, nombre, partes.joinToString(","), matrizId, cartucho))
         borrarAnteriores(hoy - 120L * 24 * 60 * 60 * 1000) // se conservan ~4 meses
     } catch (_: Exception) { }
 }
