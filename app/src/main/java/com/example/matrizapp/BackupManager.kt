@@ -90,6 +90,16 @@ class BackupManager(private val context: Context, private val database: AppDatab
     suspend fun createAutomaticBackup(reason: String = "automatico"): BackupInfo = createBackup(reason, true)
     suspend fun createManualBackup(): BackupInfo = createBackup("manual", true)
 
+    suspend fun uploadPendingPreUpdateBackup() = withContext(Dispatchers.IO) {
+        val pending = backupDir.listFiles { f -> f.isFile && f.name.contains("_antes_actualizacion.") }
+            ?.maxByOrNull { it.lastModified() } ?: return@withContext
+        runCatching {
+            driveHelper.uploadLocalFile(pending, FOLDER_NAME, "application/zip")
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putLong(LAST_DRIVE, pending.lastModified()).apply()
+        }
+    }
+
     fun listLocalBackups(): List<BackupInfo> =
         backupDir.listFiles { f -> f.isFile && f.extension.equals("zip", true) }
             ?.sortedByDescending { it.lastModified() }
