@@ -14,6 +14,7 @@ class AppContainer(val context: Context) {
     val driveService: Drive by lazy { GoogleSheetsServiceProvider.getDriveService(context) }
 
     val driveHelper: DriveHelper by lazy { DriveHelper(driveService, context) }
+    val backupManager: BackupManager by lazy { BackupManager(context, database, driveHelper) }
     val clientImageStore: ClientImageStore by lazy { ClientImageStore(context) }
     val audioHelper: AudioHelper by lazy { AudioHelper(context) }
     val sem6CacheStore: Sem6CacheStore by lazy { Sem6CacheStore(context) }
