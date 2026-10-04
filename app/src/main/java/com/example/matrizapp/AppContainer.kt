@@ -56,5 +56,8 @@ class AppContainer(val context: Context) {
         programarLimpiezaRutaIA(context)
         // Limpieza diaria de la oferta de descuento (medianoche) -- mismo motivo que arriba.
         programarLimpiezaDescuento(context)
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            runCatching { backupManager.uploadPendingPreUpdateBackup() }
+        }
     }
 }
