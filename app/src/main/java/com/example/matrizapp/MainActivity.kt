@@ -150,7 +150,12 @@ class MainActivity : ComponentActivity() {
                     isRefreshing = true
                     ultimaSync = System.currentTimeMillis()
                     coroutineScope.launch {
-                        try { container.repository.refreshAll() } catch (e: Exception) {
+                        try {
+                            if (System.currentTimeMillis() - container.backupManager.lastLocalTime() > 6 * 60 * 60 * 1000L) {
+                                runCatching { container.backupManager.createAutomaticBackup("antes_sync") }
+                            }
+                            container.repository.refreshAll()
+                        } catch (e: Exception) {
                             val detalle = e.message.orEmpty()
                             val sinRed = listOf("Unable to resolve host", "No address associated", "timeout", "timed out", "Failed to connect", "Network is unreachable", "UnknownHost")
                                 .any { detalle.contains(it, ignoreCase = true) }
@@ -359,6 +364,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
                             composable(Screen.Notificaciones.route) { NotificacionesAppScreen(notificacionesApp, onLimpiar = { notificacionesApp.clear() }) }
                             composable(Screen.ExportarMatriz.route) { ExportarMatrizScreen(matrizVm) }
+                            composable(Screen.Backup.route) { BackupScreen(container.backupManager) }
                         }
                         }
                     }
@@ -387,6 +393,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Diagnostico : Screen("diagnostico", "Diagnóstico", Icons.Default.BugReport)
     object Notificaciones : Screen("notificaciones_app", "Notificaciones", Icons.Default.Notifications)
     object ExportarMatriz : Screen("exportar_matriz", "Exportar Matriz", Icons.Default.FileDownload)
+    object Backup : Screen("backup", "Backup", Icons.Default.Backup)
     // Submenú de Control (no tienen entrada propia en el drawer -- solo se llega desde las
     // tarjetas dentro de ControlScreen: Penalización, Comisión, Avance, Bolsa Gerencia).
     object Penalizacion : Screen("penalizacion", "Tabla de Velocidades", Icons.Default.BarChart)
@@ -400,6 +407,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
 fun screenTitleFor(route: String): String = listOf(
     Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.FiltroSemanal, Screen.Filtrar,
     Screen.Control, Screen.Ubi, Screen.Mapa, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada,
-    Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Penalizacion,
+    Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Backup, Screen.Penalizacion,
     Screen.Comision, Screen.Avance, Screen.BolsaGerencia
 ).find { it.route == route }?.title ?: ""
