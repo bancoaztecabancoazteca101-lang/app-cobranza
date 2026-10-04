@@ -6,7 +6,10 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [MatrizEntity::class, VisitaMapaEntity::class, PaseEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class, BloqueHorarioEntity::class, ContactoLogEntity::class, PlantillaSmsEntity::class, ConfiguracionAutomatizacionEntity::class, ReglaSemanaEntity::class, RutaIAEntity::class, RutaIAFiltroEntity::class, CanalPagoEntity::class, ContactoExtraEntity::class, VelocidadEntity::class, ComisionEntity::class, BolsaGerenciaEntity::class, CartuchoDiaEntity::class], version = 35, exportSchema = false)
+/** Versión del esquema de Room. ÚNICO lugar donde se cambia: la usa @Database y el respaldo previo a abrir la base. */
+const val DB_VERSION = 35
+
+@Database(entities = [MatrizEntity::class, VisitaMapaEntity::class, PaseEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class, BloqueHorarioEntity::class, ContactoLogEntity::class, PlantillaSmsEntity::class, ConfiguracionAutomatizacionEntity::class, ReglaSemanaEntity::class, RutaIAEntity::class, RutaIAFiltroEntity::class, CanalPagoEntity::class, ContactoExtraEntity::class, VelocidadEntity::class, ComisionEntity::class, BolsaGerenciaEntity::class, CartuchoDiaEntity::class], version = DB_VERSION, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun matrizDao(): MatrizDao
     abstract fun visitaMapaDao(): VisitaMapaDao

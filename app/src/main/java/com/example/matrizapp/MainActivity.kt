@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
         val factory = ViewModelFactory(container)
         val crashFile = java.io.File(filesDir, "crash_log.txt")
         val previousCrash = if (crashFile.exists()) crashFile.readText().also { crashFile.delete() } else null
+        val avisoBajada = BackupManager.consumirAvisoBajada(this)
         setContent {
             val colorSchemeAzul = lightColorScheme(
                 primary = Color(0xFF1565C0), onPrimary = Color.White,
@@ -98,6 +99,7 @@ class MainActivity : ComponentActivity() {
                     mutableStateListOf<NotificacionApp>().apply {
                         // Detalle del cierre (para diagnosticar): modelo/Android + el error. El banner de arriba solo dice que hubo un cierre.
                         previousCrash?.let { add(NotificacionApp("La app tuvo un cierre inesperado.\nAndroid ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}) · ${android.os.Build.MODEL}\n\n" + it.take(3000), horaNotifFormato.format(Date()))) }
+                        avisoBajada?.let { add(NotificacionApp(it, horaNotifFormato.format(Date()))) }
                     }
                 }
                 // El banner arriba SOLO se usa para el cierre inesperado de la app. Los errores de

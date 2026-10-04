@@ -22,35 +22,84 @@ class BackupManager(private val context: Context, private val database: AppDatab
         private const val MAX_LOCAL_BACKUPS = 7
         const val FOLDER_NAME = "MATRIZ_BACKUPS"
 
+        private const val AVISO_BAJADA = "aviso_bajada"
+
+        /** Versión del esquema de la base guardada en el teléfono (PRAGMA user_version), o null si no se pudo leer.
+         *  Se abre en solo lectura (así incluye lo que aún está en el WAL). */
+        private fun leerVersionBase(dbFile: File): Int? = try {
+            android.database.sqlite.SQLiteDatabase.openDatabase(dbFile.path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use { it.version }
+        } catch (_: Exception) {
+            try {
+                java.io.RandomAccessFile(dbFile, "r").use { raf -> if (raf.length() < 100) null else { raf.seek(60); raf.readInt() } }
+            } catch (_: Exception) { null }
+        }
+
+        private fun zipRapido(backup: File, dbFile: File, manifest: String) {
+            ZipOutputStream(FileOutputStream(backup)).use { zip ->
+                zip.setLevel(java.util.zip.Deflater.BEST_SPEED) // más rápido: esto corre antes de abrir la app
+                addStaticFile(zip, dbFile, DB_NAME)
+                addStaticIfExists(zip, File(dbFile.parentFile, DB_NAME + "-wal"), DB_NAME + "-wal")
+                addStaticIfExists(zip, File(dbFile.parentFile, DB_NAME + "-shm"), DB_NAME + "-shm")
+                zip.putNextEntry(ZipEntry("manifest.txt"))
+                zip.write(manifest.toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
+        }
+
+        /** Se ejecuta ANTES de abrir Room. Solo frena el arranque cuando de verdad hace falta:
+         *  - MIGRACIÓN pendiente (la base del teléfono es más vieja que la app): copia de seguridad antes de migrar.
+         *  - BAJADA de versión (la base es más NUEVA que la app, p. ej. se instaló un APK anterior): Room no puede
+         *    abrirla y la app se cerraría siempre. Se guarda un respaldo y se empieza con una base vacía que se
+         *    vuelve a llenar desde Sheets; el respaldo se puede restaurar desde una versión nueva de la app.
+         *  - Actualización SIN cambio de esquema (la mayoría): no se hace nada, el arranque no se retrasa. */
         fun backupBeforeDatabaseOpenIfVersionChanged(context: Context): File? {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val current = BuildConfig.BUILD_SHA
             val previous = prefs.getString(LAST_APP_VERSION, null)
-            if (previous == null) {
-                prefs.edit().putString(LAST_APP_VERSION, current).apply()
-                return null
-            }
-            if (previous == current) return null
             val dbFile = context.getDatabasePath(DB_NAME)
             if (!dbFile.exists() || dbFile.length() == 0L) {
                 prefs.edit().putString(LAST_APP_VERSION, current).apply()
                 return null
             }
+            val versionDb = leerVersionBase(dbFile)
             val backupDir = File(context.filesDir, "backups").apply { mkdirs() }
             val stamp = System.currentTimeMillis()
+
+            if (versionDb != null && versionDb > DB_VERSION) {
+                val backup = File(backupDir, "matriz_" + stamp + "_antes_bajar_version_v" + versionDb + ".zip")
+                val ok = runCatching {
+                    zipRapido(backup, dbFile, "reason=antes_bajar_version\ndbVersion=" + versionDb + "\nappDbVersion=" + DB_VERSION + "\nappVersion=" + current)
+                    backup.length() > 0L
+                }.getOrDefault(false)
+                if (!ok) { backup.delete(); return null } // sin respaldo no se toca nada
+                dbFile.delete()
+                File(dbFile.parentFile, DB_NAME + "-wal").delete()
+                File(dbFile.parentFile, DB_NAME + "-shm").delete()
+                prefs.edit().putString(LAST_APP_VERSION, current).putLong(LAST_LOCAL, stamp)
+                    .putString(AVISO_BAJADA, "Se instaló una versión anterior de la app: la base local era más nueva (v" + versionDb + ", esta app usa v" + DB_VERSION + "). Se guardó un respaldo en Backup y los datos se descargan de nuevo desde Sheets. Para recuperar lo que solo estaba en el teléfono, restaura ese respaldo desde la versión nueva.")
+                    .apply()
+                return backup
+            }
+
+            val necesitaRespaldo = (versionDb != null && versionDb < DB_VERSION) || (versionDb == null && previous != current)
+            if (!necesitaRespaldo) {
+                prefs.edit().putString(LAST_APP_VERSION, current).apply()
+                return null
+            }
             val backup = File(backupDir, "matriz_" + stamp + "_antes_actualizacion.zip")
             return runCatching {
-                ZipOutputStream(FileOutputStream(backup)).use { zip ->
-                    addStaticFile(zip, dbFile, DB_NAME)
-                    addStaticIfExists(zip, File(dbFile.parentFile, DB_NAME + "-wal"), DB_NAME + "-wal")
-                    addStaticIfExists(zip, File(dbFile.parentFile, DB_NAME + "-shm"), DB_NAME + "-shm")
-                    zip.putNextEntry(ZipEntry("manifest.txt"))
-                    zip.write(("reason=antes_actualizacion_" + previous + "\nappVersion=" + current).toByteArray(Charsets.UTF_8))
-                    zip.closeEntry()
-                }
+                zipRapido(backup, dbFile, "reason=antes_actualizacion_" + previous + "\nfromDbVersion=" + versionDb + "\nappVersion=" + current)
                 prefs.edit().putString(LAST_APP_VERSION, current).putLong(LAST_LOCAL, stamp).apply()
                 backup
             }.getOrNull()
+        }
+
+        /** Aviso pendiente de una bajada de versión (se muestra una sola vez en Notificaciones). */
+        fun consumirAvisoBajada(context: Context): String? {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val aviso = prefs.getString(AVISO_BAJADA, null) ?: return null
+            prefs.edit().remove(AVISO_BAJADA).apply()
+            return aviso
         }
 
         private fun addStaticFile(zip: ZipOutputStream, file: File, entryName: String) {
@@ -149,6 +198,7 @@ class BackupManager(private val context: Context, private val database: AppDatab
 
     private fun zipRawDatabase(target: File, dbFile: File, reason: String, now: Long = System.currentTimeMillis()) {
         ZipOutputStream(FileOutputStream(target)).use { zip ->
+            zip.setLevel(java.util.zip.Deflater.BEST_SPEED)
             addFile(zip, dbFile, DB_NAME)
             addIfExists(zip, File(dbFile.parentFile, DB_NAME + "-wal"), DB_NAME + "-wal")
             addIfExists(zip, File(dbFile.parentFile, DB_NAME + "-shm"), DB_NAME + "-shm")
@@ -171,9 +221,9 @@ class BackupManager(private val context: Context, private val database: AppDatab
     }
 
     private fun pruneLocalBackups() {
-        backupDir.listFiles { f -> f.isFile && f.extension.equals("zip", true) }
-            ?.sortedByDescending { it.lastModified() }
-            ?.drop(MAX_LOCAL_BACKUPS)
-            ?.forEach { it.delete() }
+        val todos = backupDir.listFiles { f -> f.isFile && f.extension.equals("zip", true) } ?: return
+        val (bajada, normales) = todos.partition { it.name.contains("_antes_bajar_version") }
+        normales.sortedByDescending { it.lastModified() }.drop(MAX_LOCAL_BACKUPS).forEach { it.delete() }
+        bajada.sortedByDescending { it.lastModified() }.drop(3).forEach { it.delete() }
     }
 }
