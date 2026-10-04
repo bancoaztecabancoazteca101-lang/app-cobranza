@@ -90,10 +90,11 @@ class BackupManager(private val context: Context, private val database: AppDatab
     suspend fun uploadPendingPreUpdateBackup() = withContext(Dispatchers.IO) {
         val pending = backupDir.listFiles { f -> f.isFile && f.name.contains("_antes_actualizacion.") }
             ?.maxByOrNull { it.lastModified() } ?: return@withContext
-        runCatching {
+        try {
             driveHelper.uploadLocalFile(pending, FOLDER_NAME, "application/zip")
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putLong(LAST_DRIVE, pending.lastModified()).apply()
+        } catch (_: Exception) {
         }
     }
 
