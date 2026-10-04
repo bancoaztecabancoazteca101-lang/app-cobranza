@@ -128,6 +128,7 @@ class BackupManager(private val context: Context, private val database: AppDatab
                 if (src.exists()) FileInputStream(src).use { input -> FileOutputStream(File(dbFile.parentFile, name)).use { input.copyTo(it) } }
             }
             tempDir.deleteRecursively()
+            Unit
         }
     }
 
