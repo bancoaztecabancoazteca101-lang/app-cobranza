@@ -87,18 +87,6 @@ jobs:
             echo "RELEASE_TAG=latest-debug-${{ github.ref_name }}" >> $GITHUB_ENV
           fi
 
-      - name: Publish APK as workflow artifact
-        if: env.BUILD_FAILED != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-cobranza-backup-${{ github.run_number }}
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/apk/optimizado/*.apk
-          if-no-files-found: error
-          retention-days: 14
-
       - name: Publish stable release with APK
         if: env.BUILD_FAILED != 'true' && github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2

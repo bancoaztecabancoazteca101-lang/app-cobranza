@@ -152,7 +152,7 @@ class MainActivity : ComponentActivity() {
                     coroutineScope.launch {
                         try {
                             if (System.currentTimeMillis() - container.backupManager.lastLocalTime() > 6 * 60 * 60 * 1000L) {
-                                runCatching { container.backupManager.createAutomaticBackup("antes_sync") }
+                                runCatching { container.backupManager.createBackup("antes_sync", uploadDrive = false) } // a Drive lo sube el respaldo periódico
                             }
                             container.repository.refreshAll()
                         } catch (e: Exception) {
@@ -353,7 +353,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Avance.route) { AvanceScreen(controlVm) }
                             composable(Screen.BolsaGerencia.route) { BolsaGerenciaScreen(bolsaGerenciaVm) }
                             composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
-                            composable(Screen.Mapa.route) { MapaScreen(container.database.visitaMapaDao(), onOpenMatriz = { id -> mapaOpenId = id; navController.navigate(Screen.Matriz.route) { launchSingleTop = true } }) }
+                            composable(Screen.Mapa.route) { MapaScreen(container.database.matrizDao(), container.database.visitaMapaDao(), onOpenMatriz = { id -> mapaOpenId = id; navController.navigate(Screen.Matriz.route) { launchSingleTop = true } }) }
                             composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
                             composable(Screen.Sms.route) { SmsScreen(smsVm, onNavigateToStatus = { navController.navigate(Screen.SmsStatus.route) }) }
                             composable(Screen.SmsStatus.route) { SmsStatusScreen(onBack = { navController.popBackStack() }) }

@@ -21,6 +21,7 @@ import java.util.Locale
 @Composable
 fun BackupScreen(backupManager: BackupManager) {
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var backups by remember { mutableStateOf(backupManager.listLocalBackups()) }
     var working by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -73,9 +74,17 @@ fun BackupScreen(backupManager: BackupManager) {
                             scope.launch {
                                 val result = backupManager.restoreLocalBackup(item.file)
                                 message = result.fold(
-                                    { "Backup restaurado. Cierra y vuelve a abrir Matriz para cargarlo." },
+                                    { "Backup restaurado. Reiniciando Matriz…" },
                                     { "No se pudo restaurar: " + it.message }
                                 )
+                                if (result.isSuccess) {
+                                    // La base se reemplazó con la app abierta: se reinicia el proceso para cargarla limpia.
+                                    kotlinx.coroutines.delay(800)
+                                    val reinicio = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                                    reinicio?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                                    if (reinicio != null) context.startActivity(reinicio)
+                                    android.os.Process.killProcess(android.os.Process.myPid())
+                                }
                                 working = false
                             }
                         }, enabled = !working) { Icon(Icons.Default.Restore, "Restaurar") }

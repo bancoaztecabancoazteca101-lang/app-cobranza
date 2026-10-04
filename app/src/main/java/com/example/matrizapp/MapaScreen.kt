@@ -167,16 +167,27 @@ private val zonaCafetales = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapaScreen(visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
+fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
     // Solo interesa la SEMANA ACTUAL (lunes a domingo).
     val inicio = remember { inicioSemanaMapa(0) }
     val dias = remember(inicio) { (0..6).map { sumarDiasMapa(inicio, it) } }
     val fin = remember(inicio) { sumarDiasMapa(inicio, 7) }
     val historial by remember(inicio) { visitaDao.getVisitasSemana(inicio, fin) }.collectAsState(initial = emptyList())
     val cartuchosDia by remember(inicio) { visitaDao.observarCartuchosSemana(inicio, fin) }.collectAsState(initial = emptyList())
-    // El mapa muestra EXCLUSIVAMENTE las visitas que Matriz registró al guardar/crear un
-    // registro correspondiente a ese día. No se rellenan puntos solo por existir en la lista de Matriz.
-    val visitas = historial
+    // Consulta liviana: solo los registros de esta semana con coordenadas (no la lista completa de Matriz).
+    val registros by remember(inicio) { matrizDao.observarMatrizEnRango(inicio, fin) }.collectAsState(initial = emptyList())
+    // Visitas de la semana = TODOS los registros de cada día tal como los muestra Filtro Fecha (fecha dentro
+    // de ese día, status distinto de PASE) + el historial guardado. Si un registro ya está en el historial se
+    // usa esa copia (conserva su cartucho); si no, sale con cartucho 1.
+    val visitas = remember(registros, historial, inicio) {
+        val delDia = registros.mapNotNull { m ->
+            val f = m.fecha ?: return@mapNotNull null
+            if (f < inicio || f >= fin || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
+            val u = m.ubicacion ?: return@mapNotNull null
+            VisitaMapaEntity("M:${m.id}", inicioDelDia(f), m.nombre, u, m.id, cartucho = 1, timestamp = f)
+        }
+        (historial + delDia).distinctBy { it.clave to it.fechaDia }
+    }
     // Por defecto se ve el DÍA DE HOY; "Toda la semana" junta todos los días con su color.
     var diaSel by remember(inicio) { mutableStateOf<Int?>(dias.indexOf(inicioDelDia()).takeIf { it >= 0 }) }
     // Estado en un holder: solo la tarjeta lo LEE, así tocar un punto no recompone el mapa ni los demás puntos.
@@ -194,6 +205,7 @@ fun MapaScreen(visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
         if (diaSeleccionado == null) emptyMap()
         else puntos.filter { it.first.fechaDia == diaSeleccionado }.groupingBy { it.first.cartucho }.eachCount()
     }
+    val visitasActivo = conteoCartuchos[cartuchoActivo] ?: 0
     val scope = rememberCoroutineScope()
     var confirmarCambioCartucho by remember { mutableStateOf(false) }
     val visibles = remember(puntos, diaSel, dias) { if (diaSel == null) puntos else puntos.filter { it.first.fechaDia == dias[diaSel!!] } }
@@ -246,9 +258,17 @@ fun MapaScreen(visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
                 }
             }
             Text(
-                "Cartucho activo: $cartuchoActivo · El cambio es manual; normalmente ocurre entre 21 y 27 visitas.",
+                when {
+                    visitasActivo >= 25 -> "Cartucho $cartuchoActivo: $visitasActivo visitas. Llegó al máximo (25): cambia de cartucho."
+                    visitasActivo >= 21 -> "Cartucho $cartuchoActivo: $visitasActivo visitas. Ya puedes cambiar de cartucho (se cambia entre 21 y 25)."
+                    else -> "Cartucho activo: $cartuchoActivo · $visitasActivo visitas. El cambio es manual, entre 21 y 25 visitas."
+                },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = when {
+                    visitasActivo >= 25 -> MaterialTheme.colorScheme.error
+                    visitasActivo >= 21 -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
             )
         } else {
@@ -285,12 +305,14 @@ fun MapaScreen(visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
                 Polygon(points = zonaCafetales, fillColor = Color(0x223F7FC4), strokeColor = Color(0xFF3F7FC4), strokeWidth = 3f)
                 // 7 íconos creados UNA vez (antes se creaba uno nuevo por punto en cada recomposición).
                 val iconos = remember { HUES_DIA.map { BitmapDescriptorFactory.defaultMarker(it) } }
+                // Íconos creados UNA vez (uno por cartucho), no uno nuevo por punto en cada recomposición.
+                val iconosCartucho = remember { HUES_CARTUCHO.map { BitmapDescriptorFactory.defaultMarker(it) } }
                 visibles.forEach { (v, ll) ->
                     val diaIdx = dias.indexOf(v.fechaDia).coerceAtLeast(0)
                     key(v.clave, v.fechaDia) {
                         Marker(
                             state = rememberMarkerState(position = ll),
-                            icon = BitmapDescriptorFactory.defaultMarker(hueCartucho(v.cartucho)),
+                            icon = iconosCartucho[(v.cartucho - 1).coerceAtLeast(0) % iconosCartucho.size],
                             onClick = { seleccionadaState.value = v; true }
                         )
                     }

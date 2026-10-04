@@ -76,6 +76,8 @@ class BackupManager(private val context: Context, private val database: AppDatab
         var uploaded = false
         if (uploadDrive) uploaded = runCatching {
             driveHelper.uploadLocalFile(backup, FOLDER_NAME, "application/zip")
+            // En Drive solo se conservan los 14 respaldos más recientes (antes crecían sin límite).
+            runCatching { driveHelper.pruneBackups(FOLDER_NAME, 14) }
             true
         }.getOrDefault(false)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong(LAST_LOCAL, now).apply()
@@ -118,6 +120,8 @@ class BackupManager(private val context: Context, private val database: AppDatab
                     }
                 }
             }
+            // Red de seguridad: restaurar reemplaza la base actual, así que primero se guarda una copia de ella.
+            createBackup("antes_restaurar", uploadDrive = false)
             database.close()
             val dbFile = context.getDatabasePath(DB_NAME)
             File(dbFile.parentFile, DB_NAME + "-wal").delete()

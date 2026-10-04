@@ -30,7 +30,8 @@ class DriveHelper(private val driveService: Drive, private val context: Context)
     suspend fun uploadFile(uri: Uri, folderName: String, mimeType: String): String = withContext(Dispatchers.IO) {
         try {
             val folderKey = folderName.trimEnd('/')
-            val folderId = folderIdCache[folderKey] ?: findOrCreateFolderId(folderKey).also { folderIdCache[folderKey] = it }
+            val folderId = folderIdCache[folderKey] ?: findFolderIdByName(folderKey)?.also { folderIdCache[folderKey] = it }
+                ?: throw IOException("No se encontró la carpeta remota: $folderName")
             val fileMetadata = File().apply {
                 name = uri.lastPathSegment ?: "UPLOAD_${System.currentTimeMillis()}"
                 parents = listOf(folderId)
@@ -43,6 +44,19 @@ class DriveHelper(private val driveService: Drive, private val context: Context)
         } catch (e: Exception) {
             throw IOException("Error en DriveHelper: ${e.message}")
         }
+    }
+
+    /** Borra de Drive los respaldos más viejos de [folderName]: deja solo los [keep] más recientes. Solo toca
+     *  archivos `matriz_*.zip` dentro de esa carpeta. */
+    suspend fun pruneBackups(folderName: String, keep: Int): Int = withContext(Dispatchers.IO) {
+        val folderId = findFolderIdByName(folderName.trimEnd('/')) ?: return@withContext 0
+        val query = "'$folderId' in parents and trashed = false and name contains 'matriz_' and mimeType != 'application/vnd.google-apps.folder'"
+        val lista = driveService.files().list().setQ(query).setSpaces("drive").setOrderBy("createdTime desc")
+            .setFields("files(id,name)").setPageSize(200).execute().files.orEmpty()
+            .filter { it.name.startsWith("matriz_") && it.name.endsWith(".zip") }
+        var borrados = 0
+        lista.drop(keep).forEach { f -> runCatching { driveService.files().delete(f.id).execute(); borrados++ } }
+        borrados
     }
 
     private fun findOrCreateFolderId(name: String): String {
