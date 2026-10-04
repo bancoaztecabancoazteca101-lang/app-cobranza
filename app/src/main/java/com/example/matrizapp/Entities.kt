@@ -158,5 +158,15 @@ data class VisitaMapaEntity(
     val nombre: String,
     val ubicacion: String,
     val matrizId: String?,
+    // Cartucho de trabajo del día. Empieza en 1 y solo cambia cuando el gestor confirma el cambio.
+    val cartucho: Int = 1,
     val timestamp: Long = System.currentTimeMillis()
+)
+
+/** Estado local del cartucho activo para cada día. Se guarda en Room para que también quede protegido
+ * por Backup y sobreviva a actualizaciones/restauraciones. */
+@Entity(tableName = "cartucho_dia_table")
+data class CartuchoDiaEntity(
+    @PrimaryKey val fechaDia: Long,
+    val cartuchoActivo: Int = 1
 )
