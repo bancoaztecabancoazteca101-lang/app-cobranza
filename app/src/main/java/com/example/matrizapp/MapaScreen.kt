@@ -167,29 +167,16 @@ private val zonaCafetales = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
+fun MapaScreen(visitaDao: VisitaMapaDao, onOpenMatriz: (String) -> Unit) {
     // Solo interesa la SEMANA ACTUAL (lunes a domingo).
     val inicio = remember { inicioSemanaMapa(0) }
     val dias = remember(inicio) { (0..6).map { sumarDiasMapa(inicio, it) } }
     val fin = remember(inicio) { sumarDiasMapa(inicio, 7) }
     val historial by remember(inicio) { visitaDao.getVisitasSemana(inicio, fin) }.collectAsState(initial = emptyList())
     val cartuchosDia by remember(inicio) { visitaDao.observarCartuchosSemana(inicio, fin) }.collectAsState(initial = emptyList())
-    // Consulta liviana (solo los registros de esta semana con coordenadas), no la lista completa de Matriz:
-    // el mapa no se recompone cuando cambia el orden/ubicación de la lista general.
-    val registros by remember(inicio) { matrizDao.observarMatrizEnRango(inicio, fin) }.collectAsState(initial = emptyList())
-    // Visitas de la semana = 1) los registros de cada día tal como los muestra Filtro Fecha (fecha del registro
-    // dentro de ese día, status distinto de PASE) + 2) las ya guardadas (ediciones/altas y el historial de días
-    // anteriores, aunque el registro cambie de fecha después).
-    val visitas = remember(registros, historial, inicio) {
-        val delDia = registros.mapNotNull { m ->
-            val f = m.fecha ?: return@mapNotNull null
-            if (f < inicio || f >= fin || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
-            val u = m.ubicacion ?: return@mapNotNull null
-            val existente = historial.firstOrNull { it.clave == "M:${m.id}" && it.fechaDia == inicioDelDia(f) }
-            VisitaMapaEntity("M:${m.id}", inicioDelDia(f), m.nombre, u, m.id, existente?.cartucho ?: 1, f)
-        }
-        (delDia + historial).distinctBy { it.clave to it.fechaDia }
-    }
+    // El mapa muestra EXCLUSIVAMENTE las visitas que Matriz registró al guardar/crear un
+    // registro correspondiente a ese día. No se rellenan puntos solo por existir en la lista de Matriz.
+    val visitas = historial
     // Por defecto se ve el DÍA DE HOY; "Toda la semana" junta todos los días con su color.
     var diaSel by remember(inicio) { mutableStateOf<Int?>(dias.indexOf(inicioDelDia()).takeIf { it >= 0 }) }
     // Estado en un holder: solo la tarjeta lo LEE, así tocar un punto no recompone el mapa ni los demás puntos.
