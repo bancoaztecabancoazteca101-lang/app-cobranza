@@ -40,6 +40,7 @@ jobs:
           cache-disabled: true
 
       # Disparo intencional de build para validar la corrección actual de Pase.
+      # Backup: validar restauración con retorno Unit.
       - name: Build Debug APK
         run: |
           # main publica la build release (sin R8, probada) como app-debug.apk (el enlace de siempre) y la
