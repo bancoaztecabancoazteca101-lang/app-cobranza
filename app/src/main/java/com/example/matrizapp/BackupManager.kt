@@ -21,6 +21,51 @@ class BackupManager(private val context: Context, private val database: AppDatab
         private const val LAST_APP_VERSION = "last_app_version"
         private const val MAX_LOCAL_BACKUPS = 7
         const val FOLDER_NAME = "MATRIZ_BACKUPS"
+
+        fun backupBeforeDatabaseOpenIfVersionChanged(context: Context): File? {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val current = try {
+                val pi = context.packageManager.getPackageInfo(context.packageName, 0)
+                pi.versionName ?: pi.longVersionCode.toString()
+            } catch (_: Exception) { "desconocida" }
+            val previous = prefs.getString(LAST_APP_VERSION, null)
+            if (previous == null) {
+                prefs.edit().putString(LAST_APP_VERSION, current).apply()
+                return null
+            }
+            if (previous == current) return null
+            val dbFile = context.getDatabasePath(DB_NAME)
+            if (!dbFile.exists() || dbFile.length() == 0L) {
+                prefs.edit().putString(LAST_APP_VERSION, current).apply()
+                return null
+            }
+            val backupDir = File(context.filesDir, "backups").apply { mkdirs() }
+            val stamp = System.currentTimeMillis()
+            val backup = File(backupDir, "matriz_" + stamp + "_antes_actualizacion.zip")
+            return runCatching {
+                ZipOutputStream(FileOutputStream(backup)).use { zip ->
+                    addStaticFile(zip, dbFile, DB_NAME)
+                    addStaticIfExists(zip, File(dbFile.parentFile, DB_NAME + "-wal"), DB_NAME + "-wal")
+                    addStaticIfExists(zip, File(dbFile.parentFile, DB_NAME + "-shm"), DB_NAME + "-shm")
+                    zip.putNextEntry(ZipEntry("manifest.txt"))
+                    zip.write(("reason=antes_actualizacion_" + previous + "\nappVersion=" + current).toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                }
+                prefs.edit().putString(LAST_APP_VERSION, current).putLong(LAST_LOCAL, stamp).apply()
+                backup
+            }.getOrNull()
+        }
+
+        private fun addStaticFile(zip: ZipOutputStream, file: File, entryName: String) {
+            require(file.exists())
+            zip.putNextEntry(ZipEntry(entryName))
+            FileInputStream(file).use { it.copyTo(zip) }
+            zip.closeEntry()
+        }
+
+        private fun addStaticIfExists(zip: ZipOutputStream, file: File, entryName: String) {
+            if (file.exists() && file.length() > 0L) addStaticFile(zip, file, entryName)
+        }
     }
 
     private val backupDir = File(context.filesDir, "backups").apply { mkdirs() }
@@ -85,23 +130,6 @@ class BackupManager(private val context: Context, private val database: AppDatab
         val pi = context.packageManager.getPackageInfo(context.packageName, 0)
         pi.versionName ?: pi.longVersionCode.toString()
     } catch (_: Exception) { "desconocida" }
-
-    fun backupBeforeDatabaseOpenIfVersionChanged(): File? {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val current = currentAppVersion()
-        val previous = prefs.getString(LAST_APP_VERSION, null)
-        if (previous == null) { prefs.edit().putString(LAST_APP_VERSION, current).apply(); return null }
-        if (previous == current) return null
-        val dbFile = context.getDatabasePath(DB_NAME)
-        if (!dbFile.exists() || dbFile.length() == 0L) { prefs.edit().putString(LAST_APP_VERSION, current).apply(); return null }
-        val stamp = System.currentTimeMillis()
-        val backup = File(backupDir, "matriz_" + stamp + "_antes_actualizacion.zip")
-        return runCatching {
-            zipRawDatabase(backup, dbFile, "antes_actualizacion_" + previous)
-            prefs.edit().putString(LAST_APP_VERSION, current).putLong(LAST_LOCAL, stamp).apply()
-            backup
-        }.getOrNull()
-    }
 
     private fun checkpointDatabase() { runCatching { database.openHelper.writableDatabase.execSQL("PRAGMA wal_checkpoint(FULL)") } }
 
