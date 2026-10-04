@@ -23,8 +23,8 @@ interface VisitaMapaDao {
     @Query("UPDATE cartucho_dia_table SET cartuchoActivo = :cartucho WHERE fechaDia = :fechaDia")
     suspend fun setCartuchoActivo(fechaDia: Long, cartucho: Int)
 
-    @Query("SELECT fechaDia, cartuchoActivo FROM cartucho_dia_table WHERE fechaDia >= :inicio AND fechaDia < :fin ORDER BY fechaDia ASC")
-    suspend fun getCartuchosSemana(inicio: Long, fin: Long): List<CartuchoDiaEntity>
+    @Query("SELECT * FROM cartucho_dia_table WHERE fechaDia >= :inicio AND fechaDia < :fin ORDER BY fechaDia ASC")
+    fun observarCartuchosSemana(inicio: Long, fin: Long): Flow<List<CartuchoDiaEntity>>
 
     @Query("DELETE FROM visita_mapa_table WHERE fechaDia < :limite")
     suspend fun borrarAnteriores(limite: Long)
