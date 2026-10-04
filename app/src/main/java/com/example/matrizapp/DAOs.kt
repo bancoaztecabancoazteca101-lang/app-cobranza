@@ -58,12 +58,14 @@ suspend fun VisitaMapaDao.registrarRegistrosDeHoy(items: List<MatrizEntity>) {
     try {
         val hoy = inicioDelDia()
         val finHoy = hoy + 24L * 60 * 60 * 1000
+        asegurarCartuchoDia(hoy)
+        val cartucho = getCartuchoActivo(hoy) ?: 1
         val nuevos = items.mapNotNull { m ->
             val f = m.fecha ?: return@mapNotNull null
             if (f < hoy || f >= finHoy || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
             val p = m.ubicacion?.split(",")?.map { it.trim() } ?: return@mapNotNull null
             if (p.size != 2 || p[0].toDoubleOrNull() == null || p[1].toDoubleOrNull() == null) return@mapNotNull null
-            VisitaMapaEntity("M:${m.id}", hoy, m.nombre, p.joinToString(","), m.id)
+            VisitaMapaEntity("M:${m.id}", hoy, m.nombre, p.joinToString(","), m.id, cartucho)
         }
         if (nuevos.isNotEmpty()) registrarVarias(nuevos)
     } catch (_: Exception) { }
