@@ -12,11 +12,25 @@ import java.io.IOException
 class DriveHelper(private val driveService: Drive, private val context: Context) {
     private val folderIdCache = mutableMapOf<String, String>()
 
+    suspend fun uploadLocalFile(localFile: java.io.File, folderName: String, mimeType: String): String = withContext(Dispatchers.IO) {
+        try {
+            val folderKey = folderName.trimEnd('/')
+            val folderId = folderIdCache[folderKey] ?: findOrCreateFolderId(folderKey).also { folderIdCache[folderKey] = it }
+            val fileMetadata = File().apply { name = localFile.name; parents = listOf(folderId) }
+            val googleFile = java.io.FileInputStream(localFile).use { input ->
+                driveService.files().create(fileMetadata, InputStreamContent(mimeType, input))
+                    .setFields("id, webViewLink").execute()
+            }
+            googleFile.webViewLink ?: "https://drive.google.com/file/d/" + googleFile.id + "/view"
+        } catch (e: Exception) {
+            throw IOException("Error en DriveHelper: " + e.message)
+        }
+    }
+
     suspend fun uploadFile(uri: Uri, folderName: String, mimeType: String): String = withContext(Dispatchers.IO) {
         try {
             val folderKey = folderName.trimEnd('/')
-            val folderId = folderIdCache[folderKey] ?: findFolderIdByName(folderKey)?.also { folderIdCache[folderKey] = it }
-                ?: throw IOException("No se encontró la carpeta remota: $folderName")
+            val folderId = folderIdCache[folderKey] ?: findOrCreateFolderId(folderKey).also { folderIdCache[folderKey] = it }
             val fileMetadata = File().apply {
                 name = uri.lastPathSegment ?: "UPLOAD_${System.currentTimeMillis()}"
                 parents = listOf(folderId)
@@ -29,6 +43,16 @@ class DriveHelper(private val driveService: Drive, private val context: Context)
         } catch (e: Exception) {
             throw IOException("Error en DriveHelper: ${e.message}")
         }
+    }
+
+    private fun findOrCreateFolderId(name: String): String {
+        findFolderIdByName(name)?.let { return it }
+        val metadata = File().apply {
+            this.name = name
+            mimeType = "application/vnd.google-apps.folder"
+        }
+        return driveService.files().create(metadata).setFields("id").execute().id
+            ?: throw IOException("No se pudo crear la carpeta $name en Drive")
     }
 
     private fun findFolderIdByName(name: String): String? {
