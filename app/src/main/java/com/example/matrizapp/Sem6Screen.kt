@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
+fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "", onOpenMatriz: (String) -> Unit = {}) {
     val allItems by viewModel.items.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
@@ -166,7 +166,11 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "") {
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(items, key = { it.id }) { item -> Sem6ItemCard(item, driveHelper = viewModel.driveHelper, onClick = { itemToView = item }) }
+                items(items, key = { it.id }) { item ->
+                    val matrizItem = matrizList.firstOrNull { m -> item.cu.isNotBlank() && m.folioP?.trim().equals(item.cu.trim(), ignoreCase = true) }
+                        ?: matrizList.firstOrNull { m -> m.nombre.trim().equals(item.nombre.trim(), ignoreCase = true) }
+                    Sem6ItemCard(item, driveHelper = viewModel.driveHelper, onClick = { itemToView = item }, matrizItem = matrizItem, onOpenMatriz = { matrizItem?.let { onOpenMatriz(it.id) } })
+                }
             }
         }
     }
@@ -263,7 +267,7 @@ private fun formatCapitalTotal(v: Double): String {
 }
 
 @Composable
-fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) {
+fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit, matrizItem: MatrizEntity?, onOpenMatriz: () -> Unit) {
     val cardColor = when {
         item.susceptible.equals("Recuperado", ignoreCase = true) -> ClayGreenContainer
         item.susceptible.equals("Susceptible", ignoreCase = true) -> ClayYellowContainer
@@ -296,6 +300,11 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit) 
                     }
                     if (item.observaciones.isNotBlank()) {
                         Text("Obs: ${item.observaciones}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                    OutlinedButton(onClick = onOpenMatriz, enabled = matrizItem != null, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (matrizItem != null) "Abrir en Matriz" else "No está en Matriz")
                     }
                 }
             }
