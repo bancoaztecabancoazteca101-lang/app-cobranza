@@ -32,7 +32,7 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, notificacionesHelper: Not
         Surface(color=MaterialTheme.colorScheme.primaryContainer,modifier=Modifier.fillMaxWidth()){
             Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=10.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){
                 Column(Modifier.weight(1f)){Text("TICKETS",style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalTickets),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)}
-                VerticalDivider(modifier=Modifier.height(42.dp))
+                Divider(modifier=Modifier.height(42.dp).width(1.dp))
                 Column(Modifier.weight(1f)){Text("STATUS PAGADO",style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalCobrado),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)}
             }
         }
