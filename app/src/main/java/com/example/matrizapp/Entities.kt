@@ -19,6 +19,16 @@ data class MatrizEntity(
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 
+/** Registro local de cada ticket leído por OCR desde Filtro Fecha. 100% local. */
+@Entity(tableName = "ticket_pago_table")
+data class TicketPagoEntity(
+    @PrimaryKey val id: String,
+    val fecha: Long,
+    val nombre: String?,
+    val cu: String?,
+    val monto: Double
+)
+
 /** Copia independiente de un registro de Matriz cuando su status pasa a "PASE" -- MISMOS
  * campos que MatrizEntity para tener paridad total de UI/funciones, pero es una tabla
  * completamente aparte: una vez copiado, editar aquí NUNCA toca matriz_table y viceversa.
