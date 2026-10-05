@@ -28,10 +28,12 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, notificacionesHelper: Not
     val soloPagados by viewModel.soloPagados.collectAsState(); val totalCobrado by viewModel.totalCobradoRango.collectAsState(); val totalTickets by viewModel.totalTicketsRango.collectAsState()
     val items=rememberItemsFiltrados(allItems,searchQuery){listOf(it.nombre,it.numTT,it.observaciones,it.estado)}
     Column(Modifier.fillMaxSize()){
-        Surface(color=MaterialTheme.colorScheme.secondaryContainer,modifier=Modifier.fillMaxWidth()){
-            Row(Modifier.fillMaxWidth().padding(10.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                Column(Modifier.weight(1f)){Text("TICKETS",style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalTickets),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)}
-                Column(Modifier.weight(1f)){Text("STATUS PAGADO",style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalCobrado),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)}
+        // Resumen fijo: permanece siempre arriba de Filtro Fecha y no forma parte de la lista desplazable.
+        Surface(color=MaterialTheme.colorScheme.primaryContainer,modifier=Modifier.fillMaxWidth()){
+            Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=10.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){
+                Column(Modifier.weight(1f)){Text("TICKETS",style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalTickets),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)}
+                VerticalDivider(modifier=Modifier.height(42.dp))
+                Column(Modifier.weight(1f)){Text("STATUS PAGADO",style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalCobrado),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)}
             }
         }
         if(soloPagados)Surface(color=MaterialTheme.colorScheme.primaryContainer,modifier=Modifier.fillMaxWidth()){Text("Cobrado: $${"%.2f".format(Locale.US,totalCobrado)}",modifier=Modifier.padding(12.dp),fontWeight=FontWeight.Bold)}
