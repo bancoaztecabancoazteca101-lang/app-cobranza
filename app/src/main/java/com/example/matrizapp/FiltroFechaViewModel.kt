@@ -16,7 +16,8 @@ class FiltroFechaViewModel(
     val driveHelper: DriveHelper,
     private val repository: SheetsRepository,
     private val sem6CacheStore: Sem6CacheStore,
-    private val visitaMapaDao: VisitaMapaDao
+    private val visitaMapaDao: VisitaMapaDao,
+    private val ticketPagoDao: TicketPagoDao
 ) : ViewModel() {
 
     private fun inicioDeHoy(): Long = java.time.LocalDate.now()
@@ -86,6 +87,15 @@ class FiltroFechaViewModel(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
+    /** Suma exclusivamente los montos de tickets leídos por OCR, independiente del status. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val totalTicketsRango: StateFlow<Double> = combine(_desde, _hasta) { d, h -> d to h }
+        .flatMapLatest { (d, h) ->
+            if (d != null && h != null) ticketPagoDao.totalEnRango(d, h)
+            else flowOf(0.0)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
     fun setRangoFecha(desde: Long?, hasta: Long?) {
         _desde.value = desde
         _hasta.value = hasta
@@ -132,6 +142,19 @@ class FiltroFechaViewModel(
             }
             val mensajes = mutableListOf<String>()
             val montoTxt = datos.monto?.let { "$" + "%.2f".format(java.util.Locale.US, it) }
+
+            // Cada ticket leído con monto se guarda como ticket independiente para el total.
+            datos.monto?.let { monto ->
+                ticketPagoDao.insertar(
+                    TicketPagoEntity(
+                        id = "T:" + System.currentTimeMillis() + ":" + kotlin.math.abs(datos.textoCompleto.hashCode()),
+                        fecha = System.currentTimeMillis(),
+                        nombre = datos.nombre,
+                        cu = datos.cu,
+                        monto = monto
+                    )
+                )
+            }
 
             // ── 1) Filtro Fecha (hoy) ──
             val candidatosHoy = matrizDao.getMatrizEnRango(inicioDeHoy(), finDeHoy())
