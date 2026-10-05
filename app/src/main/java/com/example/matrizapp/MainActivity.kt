@@ -356,7 +356,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.BolsaGerencia.route) { BolsaGerenciaScreen(bolsaGerenciaVm) }
                             composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
                             composable(Screen.Mapa.route) { MapaScreen(container.database.matrizDao(), container.database.visitaMapaDao(), onOpenMatriz = { id -> mapaOpenId = id; navController.navigate(Screen.Matriz.route) { launchSingleTop = true } }) }
-                            composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery) }
+                            composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery, onOpenMatriz = { id -> mapaOpenId = id; navController.navigate(Screen.Matriz.route) { launchSingleTop = true } }) }
                             composable(Screen.Sms.route) { SmsScreen(smsVm, onNavigateToStatus = { navController.navigate(Screen.SmsStatus.route) }) }
                             composable(Screen.SmsStatus.route) { SmsStatusScreen(onBack = { navController.popBackStack() }) }
                             composable(Screen.Llamadas.route) { CallScreen(callVm) }
