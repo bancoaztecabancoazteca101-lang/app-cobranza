@@ -12,6 +12,7 @@ const val DB_VERSION = 36
 @Database(entities = [MatrizEntity::class, TicketPagoEntity::class, VisitaMapaEntity::class, PaseEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class, BloqueHorarioEntity::class, ContactoLogEntity::class, PlantillaSmsEntity::class, ConfiguracionAutomatizacionEntity::class, ReglaSemanaEntity::class, RutaIAEntity::class, RutaIAFiltroEntity::class, CanalPagoEntity::class, ContactoExtraEntity::class, VelocidadEntity::class, ComisionEntity::class, BolsaGerenciaEntity::class, CartuchoDiaEntity::class], version = DB_VERSION, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun matrizDao(): MatrizDao
+    abstract fun ticketPagoDao(): TicketPagoDao
     abstract fun visitaMapaDao(): VisitaMapaDao
     abstract fun paseDao(): PaseCarteraDao
     abstract fun solicitudDao(): SolicitudDao
