@@ -39,6 +39,23 @@ fun currentSem6SheetName(): String {
 class Sem6CacheStore(context: Context) {
     private val prefs = context.getSharedPreferences("sem6_cache", Context.MODE_PRIVATE)
 
+    /** IDs eliminados manualmente desde la app. Se conservan aunque el Apps Script vuelva
+     * a generar la fila en Cont-Sem-NN, para que un registro borrado no reaparezca. */
+    private val deletedIdsKey = "deleted_ids"
+
+    fun marcarEliminado(id: String) {
+        if (id.isBlank()) return
+        val ids = prefs.getStringSet(deletedIdsKey, emptySet()).orEmpty().toMutableSet()
+        ids.add(id.trim())
+        prefs.edit().putStringSet(deletedIdsKey, ids).apply()
+    }
+
+    fun estaEliminado(id: String): Boolean =
+        id.isNotBlank() && prefs.getStringSet(deletedIdsKey, emptySet()).orEmpty().contains(id.trim())
+
+    fun filtrarEliminados(items: List<Sem6Item>): List<Sem6Item> =
+        items.filterNot { estaEliminado(it.id) }
+
     fun save(items: List<Sem6Item>) {
         val arr = JSONArray()
         items.forEach { item ->
