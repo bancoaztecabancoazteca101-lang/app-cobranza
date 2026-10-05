@@ -13,8 +13,8 @@ import java.text.SimpleDateFormat
 import java.time.format.DateTimeFormatter
 import java.util.*
 
-private val DIAS_CORTOS = listOf("Lun", "Mar", "Mié", "Jue", "Vie")
-private val DIAS_LARGOS = listOf("lunes", "martes", "miércoles", "jueves", "viernes")
+private val DIAS_CORTOS = listOf("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+private val DIAS_LARGOS = listOf("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
 
 @Composable
 fun FiltroSemanalScreen(viewModel: FiltroSemanalViewModel, notificacionesHelper: NotificacionesHelper, searchQuery: String = "") {
@@ -39,7 +39,9 @@ fun FiltroSemanalScreen(viewModel: FiltroSemanalViewModel, notificacionesHelper:
             style = MaterialTheme.typography.labelMedium, color = Color.Gray,
             modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp)
         )
-        TabRow(selectedTabIndex = dia.coerceIn(0, 4)) {
+        // ScrollableTabRow: con 7 días (lunes a domingo) ya no caben todos en el ancho de la pantalla; las
+        // pestañas se deslizan hacia los lados y la seleccionada se mantiene a la vista (el domingo queda al final).
+        ScrollableTabRow(selectedTabIndex = dia.coerceIn(0, semana.lastIndex), edgePadding = 8.dp) {
             semana.forEachIndexed { i, d ->
                 Tab(
                     selected = dia == i,
@@ -55,7 +57,7 @@ fun FiltroSemanalScreen(viewModel: FiltroSemanalViewModel, notificacionesHelper:
         }
         if (items.isEmpty()) {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
-                Text("Sin visitas el ${DIAS_LARGOS[dia.coerceIn(0, 4)]} ${actual.fecha.format(fmt)}", color = Color.Gray)
+                Text("Sin visitas el ${DIAS_LARGOS[dia.coerceIn(0, semana.lastIndex)]} ${actual.fecha.format(fmt)}", color = Color.Gray)
             }
         } else {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
