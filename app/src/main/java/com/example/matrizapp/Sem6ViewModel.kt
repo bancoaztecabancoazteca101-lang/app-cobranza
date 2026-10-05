@@ -197,6 +197,9 @@ class Sem6ViewModel(
             try {
                 val ok = repository.deleteSem6Row(id, sheetName = _semanaSeleccionada.value)
                 if (ok) {
+                    // El Apps Script puede volver a poblar Cont-Sem-NN. Guardamos una
+                    // marca local permanente para que este ID no vuelva a mostrarse.
+                    cacheStore.marcarEliminado(id)
                     _itemsRaw.value = _itemsRaw.value.filter { it.id != id }
                     cacheStore.save(_itemsRaw.value)
                 } else {
@@ -230,13 +233,16 @@ class Sem6ViewModel(
         viewModelScope.launch {
             try {
                 val fresh = repository.fetchSem6Data(sheetName = _semanaSeleccionada.value)
-                _itemsRaw.value = fresh
+                // No mostrar registros que el usuario ya eliminó manualmente, aunque
+                // el Apps Script los haya vuelto a insertar en Google Sheets.
+                val visibles = cacheStore.filtrarEliminados(fresh)
+                _itemsRaw.value = visibles
                 _isFromCache.value = false
                 _lastUpdated.value = System.currentTimeMillis()
                 // El cache local de "último dato conocido" solo tiene sentido para la semana
                 // actual (es lo que se muestra sin conexión al abrir la pantalla); una semana
                 // pasada se puede volver a pedir en vivo cuando haga falta.
-                if (_semanaSeleccionada.value == currentSem6SheetName()) cacheStore.save(fresh)
+                if (_semanaSeleccionada.value == currentSem6SheetName()) cacheStore.save(visibles)
             } catch (e: Exception) {
                 // No se borra lo que ya había en pantalla (cache o carga anterior).
                 _error.value = e.message ?: "No se pudo actualizar"
