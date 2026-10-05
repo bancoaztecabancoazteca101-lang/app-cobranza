@@ -46,7 +46,13 @@ jobs:
           # Las ramas publican las tres para poder comparar.
           TASKS="assembleRelease"
           if [ "${{ github.ref_name }}" != "main" ]; then TASKS="assembleDebug assembleRelease assembleOptimizado"; fi
-          gradle $TASKS --stacktrace > build_output.log 2>&1 || (echo "BUILD_FAILED=true" >> $GITHUB_ENV; true)
+          set +e
+          gradle $TASKS --stacktrace > build_output.log 2>&1
+          BUILD_STATUS=$?
+          if [ "$BUILD_STATUS" -ne 0 ]; then
+            echo "BUILD_FAILED=true" >> $GITHUB_ENV
+          fi
+          exit 0
         continue-on-error: false
 
       # En main: el APK release (sin R8) se publica con el nombre de siempre (app-debug.apk) para que el
