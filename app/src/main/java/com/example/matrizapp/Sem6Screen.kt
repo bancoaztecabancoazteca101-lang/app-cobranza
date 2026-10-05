@@ -302,7 +302,7 @@ fun Sem6ItemCard(item: Sem6Item, driveHelper: DriveHelper, onClick: () -> Unit, 
                         Text("Obs: ${item.observaciones}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
                     OutlinedButton(onClick = onOpenMatriz, enabled = matrizItem != null, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(18.dp))
+                        
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(if (matrizItem != null) "Abrir en Matriz" else "No está en Matriz")
                     }
