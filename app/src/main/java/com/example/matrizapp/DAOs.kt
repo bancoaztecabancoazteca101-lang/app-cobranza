@@ -11,6 +11,10 @@ interface VisitaMapaDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun registrar(visita: VisitaMapaEntity)
 
+    // Cambiar a mano el cartucho de UN punto (si el punto solo existía "en vivo", se guarda con ese cartucho).
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun reemplazar(visita: VisitaMapaEntity)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun registrarVarias(visitas: List<VisitaMapaEntity>)
 

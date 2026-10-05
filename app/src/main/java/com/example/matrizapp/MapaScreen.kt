@@ -208,6 +208,7 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
     val visitasActivo = conteoCartuchos[cartuchoActivo] ?: 0
     val scope = rememberCoroutineScope()
     var confirmarCambioCartucho by remember { mutableStateOf(false) }
+    var confirmarRegresoCartucho by remember { mutableStateOf(false) }
     val visibles = remember(puntos, diaSel, dias) { if (diaSel == null) puntos else puntos.filter { it.first.fechaDia == dias[diaSel!!] } }
 
     val cameraPositionState = rememberCameraPositionState {
@@ -255,6 +256,10 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
                 val esHoy = diaSeleccionado == inicioDelDia()
                 Button(onClick = { confirmarCambioCartucho = true }, enabled = esHoy) {
                     Text("Cambiar a ${cartuchoActivo + 1}")
+                }
+                // Deshacer un cambio hecho por error: solo mueve el cartucho ACTIVO hacia atrás; las visitas ya guardadas no cambian.
+                OutlinedButton(onClick = { confirmarRegresoCartucho = true }, enabled = esHoy && cartuchoActivo > 1) {
+                    Text("Regresar a ${(cartuchoActivo - 1).coerceAtLeast(1)}")
                 }
             }
             Text(
@@ -318,8 +323,27 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
                     }
                 }
             }
-            TarjetaVisitaMapa(seleccionadaState, dias, onOpenMatriz, Modifier.align(Alignment.BottomCenter))
+            TarjetaVisitaMapa(
+                seleccionadaState, dias, onOpenMatriz,
+                onMoverCartucho = { visita, nuevo -> scope.launch { visitaDao.reemplazar(visita.copy(cartucho = nuevo)) } },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
+    }
+
+    if (confirmarRegresoCartucho && diaSeleccionado != null && cartuchoActivo > 1) {
+        AlertDialog(
+            onDismissRequest = { confirmarRegresoCartucho = false },
+            title = { Text("Regresar de cartucho") },
+            text = { Text("El cartucho activo pasará de $cartuchoActivo a ${cartuchoActivo - 1}. Las visitas ya guardadas conservan su cartucho; solo las siguientes entrarán al ${cartuchoActivo - 1}.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch { visitaDao.setCartuchoActivo(diaSeleccionado, cartuchoActivo - 1) }
+                    confirmarRegresoCartucho = false
+                }) { Text("Sí, regresar") }
+            },
+            dismissButton = { TextButton(onClick = { confirmarRegresoCartucho = false }) { Text("Cancelar") } }
+        )
     }
 
     if (confirmarCambioCartucho && diaSeleccionado != null) {
@@ -351,6 +375,7 @@ private fun TarjetaVisitaMapa(
     seleccionada: MutableState<VisitaMapaEntity?>,
     dias: List<Long>,
     onOpenMatriz: (String) -> Unit,
+    onMoverCartucho: (VisitaMapaEntity, Int) -> Unit,
     modifier: Modifier
 ) {
     val v = seleccionada.value ?: return
@@ -369,6 +394,18 @@ private fun TarjetaVisitaMapa(
                 "${fmtNombre.format(Date(v.fechaDia)).replace(".", "").replaceFirstChar { it.uppercase() }} ${fmtDia.format(Date(v.fechaDia))} · ${fmtHora.format(Date(v.timestamp))}",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // Corregir a mano el cartucho de ESTE punto (útil en días anteriores o si varios registros entraron de golpe).
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(12.dp).clip(CircleShape).background(colorCartucho(v.cartucho)))
+                Spacer(Modifier.width(8.dp))
+                Text("Cartucho ${v.cartucho}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                OutlinedButton(
+                    onClick = { val n = v.cartucho - 1; seleccionada.value = v.copy(cartucho = n); onMoverCartucho(v, n) },
+                    enabled = v.cartucho > 1
+                ) { Text("−") }
+                Spacer(Modifier.width(6.dp))
+                OutlinedButton(onClick = { val n = v.cartucho + 1; seleccionada.value = v.copy(cartucho = n); onMoverCartucho(v, n) }) { Text("+") }
+            }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { seleccionada.value = null }) { Text("Cerrar") }
                 if (v.matrizId != null) Button(onClick = { onOpenMatriz(v.matrizId) }) { Text("Abrir en Matriz") }
