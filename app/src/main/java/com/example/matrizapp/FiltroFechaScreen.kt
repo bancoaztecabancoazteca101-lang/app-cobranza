@@ -30,10 +30,10 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, notificacionesHelper: Not
     Column(Modifier.fillMaxSize()){
         // Resumen fijo: permanece siempre arriba de Filtro Fecha y no forma parte de la lista desplazable.
         Surface(color=MaterialTheme.colorScheme.primaryContainer,modifier=Modifier.fillMaxWidth()){
-            Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=10.dp),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically){
-                Column(Modifier.weight(1f)){Text("TICKETS",style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalTickets),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)}
-                Divider(modifier=Modifier.height(42.dp).width(1.dp))
-                Column(Modifier.weight(1f)){Text("STATUS PAGADO",style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalCobrado),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)}
+            Row(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically){
+                Column(Modifier.weight(1f)){Text("TICKETS",style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalTickets),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)}
+                Divider(modifier=Modifier.height(28.dp).width(1.dp))
+                Column(Modifier.weight(1f)){Text("STATUS PAGADO",style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalCobrado),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)}
             }
         }
         if(soloPagados)Surface(color=MaterialTheme.colorScheme.primaryContainer,modifier=Modifier.fillMaxWidth()){Text("Cobrado: $${"%.2f".format(Locale.US,totalCobrado)}",modifier=Modifier.padding(12.dp),fontWeight=FontWeight.Bold)}
