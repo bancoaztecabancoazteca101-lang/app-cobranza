@@ -156,8 +156,8 @@ fun parsearClientesRutaIA(textoOcr: String): List<ClienteRutaIAExtraido> {
 
 suspend fun extraerClientesDeFoto(context: Context, uri: Uri): List<ClienteRutaIAExtraido> = suspendCancellableCoroutine { cont ->
     try {
-        val image = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
-        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
+        val image = OcrImagen.cargar(context, uri)
+        val recognizer = OcrImagen.reconocedor
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
                 val texto = java.text.Normalizer.normalize(visionText.text, java.text.Normalizer.Form.NFC)

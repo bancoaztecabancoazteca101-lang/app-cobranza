@@ -43,6 +43,7 @@ import androidx.navigation.compose.*
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
         val factory = ViewModelFactory(container)
         val crashFile = java.io.File(filesDir, "crash_log.txt")
         val previousCrash = if (crashFile.exists()) crashFile.readText().also { crashFile.delete() } else null
+        val avisoBajada = BackupManager.consumirAvisoBajada(this)
         setContent {
             val colorSchemeAzul = lightColorScheme(
                 primary = Color(0xFF1565C0), onPrimary = Color.White,
@@ -97,6 +99,7 @@ class MainActivity : ComponentActivity() {
                     mutableStateListOf<NotificacionApp>().apply {
                         // Detalle del cierre (para diagnosticar): modelo/Android + el error. El banner de arriba solo dice que hubo un cierre.
                         previousCrash?.let { add(NotificacionApp("La app tuvo un cierre inesperado.\nAndroid ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT}) · ${android.os.Build.MODEL}\n\n" + it.take(3000), horaNotifFormato.format(Date()))) }
+                        avisoBajada?.let { add(NotificacionApp(it, horaNotifFormato.format(Date()))) }
                     }
                 }
                 // El banner arriba SOLO se usa para el cierre inesperado de la app. Los errores de
@@ -132,16 +135,29 @@ class MainActivity : ComponentActivity() {
                 var searchInput by remember { mutableStateOf("") }
                 var searchQuery by remember { mutableStateOf("") }
                 var mapaOpenId by remember { mutableStateOf<String?>(null) }
-                LaunchedEffect(searchInput) { delay(180); searchQuery = searchInput }
+                // snapshotFlow: lee searchInput fuera de la composición. Antes cada tecla recomponía TODA la
+                // pantalla (NavHost incluido) solo para reiniciar el temporizador.
+                LaunchedEffect(Unit) { snapshotFlow { searchInput }.collectLatest { delay(180); searchQuery = it } }
                 var buscandoPorFoto by remember { mutableStateOf(false) }
                 var mostrarSelectorFotoBusqueda by remember { mutableStateOf(false) }
                 var fotoBusquedaUri by remember { mutableStateOf<Uri?>(null) }
                 var isRefreshing by remember { mutableStateOf(false) }
-                fun refreshData() {
+                // Última sincronización y último reporte de dispositivo (ms). Evitan repetir trabajo pesado
+                // (red + Room + workers) cada vez que se cambia de app o se vuelve a abrir.
+                var ultimaSync by remember { mutableStateOf(0L) }
+                var ultimoReporte by remember { mutableStateOf(0L) }
+                fun refreshData(minIntervaloMs: Long = 0L) {
                     if (isRefreshing) return
+                    if (minIntervaloMs > 0 && System.currentTimeMillis() - ultimaSync < minIntervaloMs) return
                     isRefreshing = true
+                    ultimaSync = System.currentTimeMillis()
                     coroutineScope.launch {
-                        try { container.repository.refreshAll() } catch (e: Exception) {
+                        try {
+                            if (System.currentTimeMillis() - container.backupManager.lastLocalTime() > 6 * 60 * 60 * 1000L) {
+                                runCatching { container.backupManager.createBackup("antes_sync", uploadDrive = false) } // a Drive lo sube el respaldo periódico
+                            }
+                            container.repository.refreshAll()
+                        } catch (e: Exception) {
                             val detalle = e.message.orEmpty()
                             val sinRed = listOf("Unable to resolve host", "No address associated", "timeout", "timed out", "Failed to connect", "Network is unreachable", "UnknownHost")
                                 .any { detalle.contains(it, ignoreCase = true) }
@@ -154,11 +170,17 @@ class MainActivity : ComponentActivity() {
                         // WorkManager espera automáticamente hasta que vuelva la conectividad.
                         ClientImageSyncWorker.enqueue(this@MainActivity)
                         SmsStatusWorker.programarAhora(this@MainActivity)
-                        try { container.repository.reportarDispositivo(DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId) } catch (e: Exception) { }
+                        // El reporte del dispositivo son ~5 llamadas a Sheets: una vez por hora basta.
+                        if (System.currentTimeMillis() - ultimoReporte > 60 * 60 * 1000L) {
+                            ultimoReporte = System.currentTimeMillis()
+                            try { container.repository.reportarDispositivo(DeviceInfo.androidId(container.context), DeviceInfo.modelo(), DeviceInfo.buildId) } catch (e: Exception) { }
+                        }
                         isRefreshing = false
                     }
                 }
-                LaunchedEffect(signedIn) { refreshData() }
+                // Primera sincronización con un respiro: la app pinta y responde primero con los datos locales
+                // (Room) y la red arranca después, sin competir con la primera pantalla.
+                LaunchedEffect(signedIn) { delay(1200); refreshData() }
                 val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
                 // Antes el auto-sync cada 3 minutos vivía en un LaunchedEffect(signedIn) suelto,
                 // que sigue corriendo mientras el proceso de la Activity esté vivo -- incluye con
@@ -172,7 +194,7 @@ class MainActivity : ComponentActivity() {
                     var pollingJob: kotlinx.coroutines.Job? = null
                     val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                         when (event) {
-                            androidx.lifecycle.Lifecycle.Event.ON_RESUME -> if (signedIn) refreshData()
+                            androidx.lifecycle.Lifecycle.Event.ON_RESUME -> if (signedIn) refreshData(minIntervaloMs = 60_000L)
                             androidx.lifecycle.Lifecycle.Event.ON_START -> {
                                 if (signedIn && pollingJob == null) {
                                     pollingJob = coroutineScope.launch {
@@ -344,6 +366,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
                             composable(Screen.Notificaciones.route) { NotificacionesAppScreen(notificacionesApp, onLimpiar = { notificacionesApp.clear() }) }
                             composable(Screen.ExportarMatriz.route) { ExportarMatrizScreen(matrizVm) }
+                            composable(Screen.Backup.route) { BackupScreen(container.backupManager) }
                         }
                         }
                     }
@@ -372,6 +395,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Diagnostico : Screen("diagnostico", "Diagnóstico", Icons.Default.BugReport)
     object Notificaciones : Screen("notificaciones_app", "Notificaciones", Icons.Default.Notifications)
     object ExportarMatriz : Screen("exportar_matriz", "Exportar Matriz", Icons.Default.FileDownload)
+    object Backup : Screen("backup", "Backup", Icons.Default.Backup)
     // Submenú de Control (no tienen entrada propia en el drawer -- solo se llega desde las
     // tarjetas dentro de ControlScreen: Penalización, Comisión, Avance, Bolsa Gerencia).
     object Penalizacion : Screen("penalizacion", "Tabla de Velocidades", Icons.Default.BarChart)
@@ -385,6 +409,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
 fun screenTitleFor(route: String): String = listOf(
     Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.FiltroSemanal, Screen.Filtrar,
     Screen.Control, Screen.Ubi, Screen.Mapa, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada,
-    Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Penalizacion,
+    Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Backup, Screen.Penalizacion,
     Screen.Comision, Screen.Avance, Screen.BolsaGerencia
 ).find { it.route == route }?.title ?: ""

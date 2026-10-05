@@ -38,7 +38,8 @@ class MatrizViewModel(
             // distinctUntilChanged: si la sincronización trae los mismos datos no se reprograman alarmas.
             matrizDao.getAllMatriz().distinctUntilChanged().collect { items ->
                 notificacionesHelper.sincronizarAlarmasRetornoMatriz(items)
-                // Mapa: los registros de hoy (los de Filtro Fecha) quedan guardados como visitas de hoy.
+                // Mapa: los registros de hoy (los de Filtro Fecha) quedan guardados como visitas de hoy,
+                // con el cartucho que esté activo en ese momento.
                 visitaMapaDao.registrarRegistrosDeHoy(items)
             }
         }
@@ -106,8 +107,10 @@ class MatrizViewModel(
         viewModelScope.launch {
             val anterior = matrizDao.getById(id)
             matrizDao.updateGestionLocal(id, nuevoEstado, observaciones)
-            // Mapa: editar un registro cuenta como visita de hoy.
-            if (anterior != null) visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
+            // Mapa: editar solo cuenta como visita si el registro que se editó corresponde a HOY.
+            if (anterior != null && anterior.fecha != null && inicioDelDia(anterior.fecha) == inicioDelDia()) {
+                visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
+            }
             triggerSync()
         }
     }
@@ -129,8 +132,10 @@ class MatrizViewModel(
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() },
                 diasAtraso?.takeIf { it.isNotBlank() }, diasApertura?.takeIf { it.isNotBlank() }
             )
-            // Mapa: editar un registro cuenta como visita de hoy.
-            visitaMapaDao.registrarVisitaHoy("M:$id", nombre.trim().uppercase(), ubicacion, id)
+            // Mapa: editar solo cuenta como visita si la fecha guardada corresponde a HOY.
+            if (fecha != null && inicioDelDia(fecha) == inicioDelDia()) {
+                visitaMapaDao.registrarVisitaHoy("M:$id", nombre.trim().uppercase(), ubicacion, id)
+            }
             triggerSync()
         }
     }
@@ -169,7 +174,10 @@ class MatrizViewModel(
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() },
                 diasAtraso?.takeIf { it.isNotBlank() }, diasApertura?.takeIf { it.isNotBlank() }
             )
-            visitaMapaDao.registrarVisitaHoy("M:$idFinal", nombre.trim().uppercase(), ubicacion, idFinal)
+            // Mapa: editar solo cuenta como visita si la fecha guardada corresponde a HOY.
+            if (fecha != null && inicioDelDia(fecha) == inicioDelDia()) {
+                visitaMapaDao.registrarVisitaHoy("M:$idFinal", nombre.trim().uppercase(), ubicacion, idFinal)
+            }
             triggerSync()
             onResult(true, null)
         }
@@ -205,8 +213,10 @@ class MatrizViewModel(
         )
         viewModelScope.launch {
             matrizDao.insertOne(nuevo)
-            // Mapa: crear un registro cuenta como visita de hoy.
-            visitaMapaDao.registrarVisitaHoy("M:$idFinal", nuevo.nombre, nuevo.ubicacion, idFinal)
+            // Mapa: al crear un registro, solo se registra como visita si su fecha es HOY.
+            if (inicioDelDia(fecha) == inicioDelDia()) {
+                visitaMapaDao.registrarVisitaHoy("M:$idFinal", nuevo.nombre, nuevo.ubicacion, idFinal)
+            }
             triggerSync()
             onCreado(nuevo)
         }

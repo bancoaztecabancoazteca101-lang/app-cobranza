@@ -32,7 +32,7 @@ suspend fun leerCapitalesDeFoto(context: Context, uri: Uri): List<FilaCapitalFot
         val escala = minOf(2f, 4000f / maxOf(original.width, original.height)).coerceAtLeast(1f)
         val bmp: Bitmap = if (escala > 1.1f) Bitmap.createScaledBitmap(original, (original.width * escala).toInt(), (original.height * escala).toInt(), true) else original
         val image = com.google.mlkit.vision.common.InputImage.fromBitmap(bmp, 0)
-        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
+        val recognizer = OcrImagen.reconocedor
         recognizer.process(image)
             .addOnSuccessListener { vt ->
                 val lineas = vt.textBlocks.flatMap { it.lines }.filter { it.boundingBox != null }

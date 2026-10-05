@@ -12,6 +12,21 @@ import java.io.IOException
 class DriveHelper(private val driveService: Drive, private val context: Context) {
     private val folderIdCache = mutableMapOf<String, String>()
 
+    suspend fun uploadLocalFile(localFile: java.io.File, folderName: String, mimeType: String): String = withContext(Dispatchers.IO) {
+        try {
+            val folderKey = folderName.trimEnd('/')
+            val folderId = folderIdCache[folderKey] ?: findOrCreateFolderId(folderKey).also { folderIdCache[folderKey] = it }
+            val fileMetadata = File().apply { name = localFile.name; parents = listOf(folderId) }
+            val googleFile = java.io.FileInputStream(localFile).use { input ->
+                driveService.files().create(fileMetadata, InputStreamContent(mimeType, input))
+                    .setFields("id, webViewLink").execute()
+            }
+            googleFile.webViewLink ?: "https://drive.google.com/file/d/" + googleFile.id + "/view"
+        } catch (e: Exception) {
+            throw IOException("Error en DriveHelper: " + e.message)
+        }
+    }
+
     suspend fun uploadFile(uri: Uri, folderName: String, mimeType: String): String = withContext(Dispatchers.IO) {
         try {
             val folderKey = folderName.trimEnd('/')
@@ -29,6 +44,29 @@ class DriveHelper(private val driveService: Drive, private val context: Context)
         } catch (e: Exception) {
             throw IOException("Error en DriveHelper: ${e.message}")
         }
+    }
+
+    /** Borra de Drive los respaldos más viejos de [folderName]: deja solo los [keep] más recientes. Solo toca
+     *  archivos `matriz_*.zip` dentro de esa carpeta. */
+    suspend fun pruneBackups(folderName: String, keep: Int): Int = withContext(Dispatchers.IO) {
+        val folderId = findFolderIdByName(folderName.trimEnd('/')) ?: return@withContext 0
+        val query = "'$folderId' in parents and trashed = false and name contains 'matriz_' and mimeType != 'application/vnd.google-apps.folder'"
+        val lista = driveService.files().list().setQ(query).setSpaces("drive").setOrderBy("createdTime desc")
+            .setFields("files(id,name)").setPageSize(200).execute().files.orEmpty()
+            .filter { it.name.startsWith("matriz_") && it.name.endsWith(".zip") }
+        var borrados = 0
+        lista.drop(keep).forEach { f -> runCatching { driveService.files().delete(f.id).execute(); borrados++ } }
+        borrados
+    }
+
+    private fun findOrCreateFolderId(name: String): String {
+        findFolderIdByName(name)?.let { return it }
+        val metadata = File().apply {
+            this.name = name
+            mimeType = "application/vnd.google-apps.folder"
+        }
+        return driveService.files().create(metadata).setFields("id").execute().id
+            ?: throw IOException("No se pudo crear la carpeta $name en Drive")
     }
 
     private fun findFolderIdByName(name: String): String? {

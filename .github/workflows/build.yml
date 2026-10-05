@@ -7,6 +7,7 @@ on:
       - 'feature/**'
       - 'chatgpt/**'
       - 'claude/**'
+      - 'Backup'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -38,18 +39,18 @@ jobs:
           gradle-version: '8.4'
           cache-disabled: true
 
-      # Disparo intencional de build para validar la corrección actual de Pase.
       - name: Build Debug APK
         run: |
-          # main publica la build release (sin R8, probada) como app-debug.apk (el enlace de siempre) y la
-          # optimizada (R8) como app-optimizado.apk mientras se investiga un cierre al abrir. Las ramas publican las tres.
-          TASKS="assembleRelease assembleOptimizado"
+          # main publica SOLO la build release (sin R8, probada) como app-debug.apk (el enlace de siempre).
+          # La variante "optimizado" hoy es idéntica a release (R8 apagado), así que no se compila en main.
+          # Las ramas publican las tres para poder comparar.
+          TASKS="assembleRelease"
           if [ "${{ github.ref_name }}" != "main" ]; then TASKS="assembleDebug assembleRelease assembleOptimizado"; fi
           gradle $TASKS --stacktrace > build_output.log 2>&1 || (echo "BUILD_FAILED=true" >> $GITHUB_ENV; true)
         continue-on-error: false
 
       # En main: el APK release (sin R8) se publica con el nombre de siempre (app-debug.apk) para que el
-      # enlace permanente latest-debug siga funcionando; app-optimizado.apk queda aparte.
+      # enlace permanente latest-debug siga funcionando.
       - name: APK release con el nombre de siempre (solo main)
         if: env.BUILD_FAILED != 'true' && github.ref_name == 'main'
         run: |
@@ -57,9 +58,14 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/debug/app-debug.apk
           rm -f app/build/outputs/apk/release/app-release.apk
 
-      - name: Show log tail
+      - name: Show compiler errors
         if: always()
-        run: tail -n 400 build_output.log || true
+        run: |
+          echo "===== ERRORES DEL COMPILADOR ====="
+          grep -n -E '(^| )e: |error:|Unresolved reference|Type mismatch|Expecting|Cannot access|Compilation error' build_output.log | tail -n 120 || true
+          echo "===== FIN ERRORES ====="
+          echo "===== COLA DEL LOG ====="
+          tail -n 250 build_output.log || true
 
       - name: Report failure as Issue
         if: env.BUILD_FAILED == 'true'

@@ -21,7 +21,11 @@ class MainApplication : Application(), coil.ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // IMPORTANTE: se ejecuta antes de abrir Room. Si esta instalación reemplazó una versión
+        // anterior, conserva una copia de la base existente antes de cualquier migración.
+        BackupManager.backupBeforeDatabaseOpenIfVersionChanged(this)
         container = AppContainer(this)
+        BackupWorker.programar(this)
         SmsStatusWorker.programarPeriodicamente(this)
         notificationScope.launch {
             runCatching { MultiDeviceNotificationManager(this@MainApplication).register() }
