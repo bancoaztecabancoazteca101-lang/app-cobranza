@@ -8,6 +8,7 @@ on:
       - 'chatgpt/**'
       - 'claude/**'
       - 'Backup'
+      - 'Semana-6'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
