@@ -3,6 +3,15 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+interface TicketPagoDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertar(ticket: TicketPagoEntity)
+
+    @Query("SELECT COALESCE(SUM(monto), 0.0) FROM ticket_pago_table WHERE fecha >= :desde AND fecha <= :hasta")
+    fun totalEnRango(desde: Long, hasta: Long): Flow<Double>
+}
+
+@Dao
 interface VisitaMapaDao {
     // fin EXCLUSIVO (inicio del lunes siguiente): con BETWEEN las visitas de ese lunes entrarían en la semana anterior.
     @Query("SELECT * FROM visita_mapa_table WHERE fechaDia >= :inicio AND fechaDia < :fin ORDER BY fechaDia ASC, timestamp ASC")
