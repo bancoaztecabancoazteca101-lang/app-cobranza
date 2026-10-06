@@ -50,6 +50,26 @@ object AutomatizacionPrefs {
     fun setCatchupActiva(context: Context, valor: Boolean) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_CATCHUP_ACTIVA, valor).apply()
     }
+
+    // ── "No contactar hoy": saca a un cliente de TODAS las corridas automáticas del día (bloques y catchup),
+    // incluso si ya empezó una corrida. Sirve cuando llega un comprobante de pago que aún no se puede marcar
+    // como Pagado. Vive solo en este teléfono y se vence a medianoche (no hace falta migración de base).
+    private const val KEY_EXCLUIDOS = "excluidos_hoy"
+    private const val KEY_EXCLUIDOS_DIA = "excluidos_dia"
+
+    fun excluirHoy(context: Context, clienteId: String, excluir: Boolean) {
+        val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val hoy = LocalDate.now().toString()
+        val ids = if (p.getString(KEY_EXCLUIDOS_DIA, "") == hoy) p.getStringSet(KEY_EXCLUIDOS, emptySet()).orEmpty().toMutableSet() else mutableSetOf()
+        if (excluir) ids.add(clienteId) else ids.remove(clienteId)
+        p.edit().putString(KEY_EXCLUIDOS_DIA, hoy).putStringSet(KEY_EXCLUIDOS, ids).apply()
+    }
+
+    fun excluidoHoy(context: Context, clienteId: String): Boolean {
+        val p = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (p.getString(KEY_EXCLUIDOS_DIA, "") != LocalDate.now().toString()) return false
+        return p.getStringSet(KEY_EXCLUIDOS, emptySet()).orEmpty().contains(clienteId)
+    }
 }
 
 // ============================================================
@@ -297,6 +317,17 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
     fun smsPermitido(numero: String) = yaContactados == null || NumeroContactadoGuard.reservarSms(context, numero)
     val subIdLlamada = config.simSeleccionada
     val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
+    // Mientras se procesa un cliente (titular + hasta 4 referencias + extras pueden tardar minutos) puede llegar
+    // su comprobante: antes cada llamada/SMS que faltaba salía igual. Ahora se re-lee al cliente (¿Pagado?) y la
+    // exclusión del día antes de cada llamada y cada SMS. Solo en corridas reales; el botón de prueba siempre sigue.
+    val matrizDaoVivo = (context.applicationContext as MainApplication).container.database.matrizDao()
+    suspend fun sigueActivo(): Boolean {
+        if (yaContactados == null) return true
+        if (AutomatizacionPrefs.excluidoHoy(context, r.id)) return false
+        val f = matrizDaoVivo.getById(r.id) ?: return false
+        return !esPagado(f.estado)
+    }
+    var detenido = false
     // Solo en corridas reales (yaContactados != null): el botón de prueba no pasa por el guard.
     val ttLibre = yaContactados == null || r.numTT.isBlank() || NumeroContactadoGuard.reservar(context, r.numTT)
     if (r.numTT.isNotBlank() && ttLibre) {
@@ -304,7 +335,8 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         yaContactados?.add(ultimos10Digitos(r.numTT))
         llamarSilenciadoYEsperar(context, subIdLlamada, r.numTT, config)
         huboLlamada = true
-        val smsTtOk = smsPermitido(r.numTT)
+        val smsTtOk = sigueActivo() && smsPermitido(r.numTT)
+        if (!smsTtOk && !sigueActivo()) detenido = true
         if (smsTtOk) SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
         else resumen.appendLine("• SMS a TT omitido: ese número ya recibió un SMS automático hace menos de 30 min")
         // Oferta de descuento del día: se agrega como línea extra después del SMS normal,
@@ -338,12 +370,17 @@ private suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matriz
         .filter { yaContactados == null || ultimos10(it) !in yaContactados }
         .filter { yaContactados == null || NumeroContactadoGuard.reservar(context, it) } // no repetir al mismo número en 15 min, por cualquier camino
     yaContactados?.addAll(telefonosReferencia.map { ultimos10(it) })
-    telefonosReferencia.forEach { tel ->
+    var referenciasContactadas = 0
+    for (tel in telefonosReferencia) {
         if (huboLlamada) delay(config.segundosPausaEntreLlamadas * 1_000L)
+        // Después de la pausa (puede haber pasado un rato) y antes de marcar: ¿ya pagó o se excluyó?
+        if (detenido || !sigueActivo()) { detenido = true; break }
         llamarSilenciadoYEsperar(context, subIdLlamada, tel, config)
         huboLlamada = true
-        if (smsPermitido(tel)) SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
+        referenciasContactadas++
+        if (sigueActivo() && smsPermitido(tel)) SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
     }
+    if (detenido) resumen.appendLine("• DETENIDO: el cliente ya pagó o se excluyó hoy; faltaron ${telefonosReferencia.size - referenciasContactadas} referencia(s)")
     if (telefonosReferencia.isNotEmpty()) resumen.appendLine("• Llamada + SMS de referencia a ${telefonosReferencia.size} número(s): ${telefonosReferencia.joinToString(", ")}")
     else resumen.appendLine("• Sin referencias con número válido (Ref1-Ref4 / contactos extra)")
     return resumen.toString().trim()
@@ -421,7 +458,7 @@ class LlamadaAutomaticaWorker(
             // porque solo se miraba activa() una vez al arrancar. Ahora corta aquí mismo, entre
             // un cliente y el siguiente, sin esperar a que termine todo el bloque.
             if (!AutomatizacionPrefs.activa(applicationContext)) break
-            if (esPagado(r.estado)) continue
+            if (esPagado(r.estado) || AutomatizacionPrefs.excluidoHoy(applicationContext, r.id)) continue
             val sem = r.semana.trim().toIntOrNull() ?: continue
             if (sem !in 1..5) continue
 
@@ -440,7 +477,7 @@ class LlamadaAutomaticaWorker(
             // arrancó el bloque, y entre la pausa y las llamadas anteriores pueden pasar minutos):
             // si en ese tiempo se marcó Pagado (ticket, edición o sync), ya no se le llama.
             val fresco = matrizDao.getById(r.id) ?: continue
-            if (esPagado(fresco.estado)) continue
+            if (esPagado(fresco.estado) || AutomatizacionPrefs.excluidoHoy(applicationContext, r.id)) continue
             if (!AutomatizacionPrefs.activa(applicationContext)) break
             val variante = logDao.contarTotalContactos(r.id) // antes de reclamar, para no correr la rotación de plantillas
             if (!reclamarContactoEnBloque(logDao, r.id, hoyMillis, bloqueActualIndex)) continue
@@ -491,7 +528,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
             // corta el catchup en curso en cuanto se apaga cualquiera de los 2 interruptores.
             if (!AutomatizacionPrefs.activa(applicationContext)) break
             if (!AutomatizacionPrefs.catchupActiva(applicationContext)) break
-            if (esPagado(r.estado)) continue
+            if (esPagado(r.estado) || AutomatizacionPrefs.excluidoHoy(applicationContext, r.id)) continue
             val sem = r.semana.trim().toIntOrNull() ?: continue
             if (sem !in 1..5) continue
             if (sem !in semanasConCatchup) continue // catchup apagado para esta semana específica
@@ -514,7 +551,7 @@ class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : Corouti
             if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
             esPrimerContacto = false
             val fresco = matrizDao.getById(r.id) ?: continue // relee: puede haberse marcado Pagado durante la pausa
-            if (esPagado(fresco.estado)) continue
+            if (esPagado(fresco.estado) || AutomatizacionPrefs.excluidoHoy(applicationContext, r.id)) continue
             if (!AutomatizacionPrefs.activa(applicationContext)) break
             procesarClienteLlamadaAutomatica(applicationContext, fresco, sem, config, logDao, plantillaDao, contactoExtraDao, yaContactados)
             logDao.insertar(ContactoLogEntity(clienteId = r.id, fechaDia = ayerMillis, bloqueIndex = -1))

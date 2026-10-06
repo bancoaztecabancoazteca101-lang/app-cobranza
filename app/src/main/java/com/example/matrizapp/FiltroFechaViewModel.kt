@@ -205,6 +205,13 @@ class FiltroFechaViewModel(
                             repository.updateSem6Susceptible(matchS6.id, "Recuperado", sheetName = currentSem6SheetName())
                         } catch (e: Exception) { false }
                         if (ok) {
+                            // Si ese cliente también está en Matriz (mismo CU), sale de las llamadas/SMS automáticos de hoy:
+                            // el comprobante puede llegar justo cuando corre un bloque o el catchup.
+                            val cuS6 = matchS6.cu.filter { it.isDigit() }
+                            if (cuS6.isNotEmpty()) {
+                                matrizDao.getAllMatriz().first().firstOrNull { it.folioP?.filter { c -> c.isDigit() } == cuS6 }
+                                    ?.let { AutomatizacionPrefs.excluirHoy(context, it.id, true) }
+                            }
                             sem6CacheStore.load()?.first?.let { guardados ->
                                 sem6CacheStore.save(guardados.map { if (it.id == matchS6.id) it.copy(susceptible = "Recuperado") else it })
                             }

@@ -1,4 +1,5 @@
 package com.example.matrizapp
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -76,6 +77,8 @@ fun FiltroFechaDetailDialog(item:MatrizEntity,df:SimpleDateFormat,driveHelper:Dr
         ExposedDropdownMenuBox(expanded=estadoMenuExpanded,onExpandedChange={estadoMenuExpanded=it}){OutlinedTextField(value=estado,onValueChange={estado=it},label={Text("Status")},readOnly=true,trailingIcon={ExposedDropdownMenuDefaults.TrailingIcon(expanded=estadoMenuExpanded)},modifier=Modifier.fillMaxWidth().menuAnchor());ExposedDropdownMenu(expanded=estadoMenuExpanded,onDismissRequest={estadoMenuExpanded=false}){DropdownMenuItem(text={Text("(Sin status)")},onClick={estado="";estadoMenuExpanded=false});ESTADOS_MATRIZ.forEach{opcion->DropdownMenuItem(text={Text(opcion)},onClick={estado=opcion;estadoMenuExpanded=false})}}}
         OutlinedTextField(value=hora,onValueChange={hora=it},label={Text("Hora")},readOnly=true,trailingIcon={IconButton(onClick={val cal=Calendar.getInstance();android.app.TimePickerDialog(context,{_,h,min->cal.set(Calendar.HOUR_OF_DAY,h);cal.set(Calendar.MINUTE,min);cal.set(Calendar.SECOND,0);hora=SimpleDateFormat("HH:mm:ss",Locale.getDefault()).format(cal.time)},cal.get(Calendar.HOUR_OF_DAY),cal.get(Calendar.MINUTE),true).show()}){Icon(Icons.Default.AccessTime,contentDescription="Elegir hora")}},modifier=Modifier.fillMaxWidth())
         OutlinedButton(onClick={scopeCompartir.launch{compartirMatrizPorWhatsApp(context,item,estado,hora)}},modifier=Modifier.fillMaxWidth()){Icon(Icons.Default.Share,contentDescription=null,tint=Color(0xFF25D366),modifier=Modifier.size(18.dp));Spacer(Modifier.width(8.dp));Text("Compartir por WhatsApp")}
+        var excluidoHoy by remember(item.id){mutableStateOf(AutomatizacionPrefs.excluidoHoy(context,item.id))}
+        OutlinedButton(onClick={excluidoHoy=!excluidoHoy;AutomatizacionPrefs.excluirHoy(context,item.id,excluidoHoy);Toast.makeText(context,if(excluidoHoy)"No se le llamará ni se le mandará SMS automático hoy" else "Volverá a entrar a las corridas automáticas",Toast.LENGTH_SHORT).show()},modifier=Modifier.fillMaxWidth()){Text(if(excluidoHoy)"Reanudar contacto automático hoy" else "No contactar hoy (automático)")}
     }},confirmButton={Button(onClick={onGuardarEstadoYHora(item.id,estado,hora);onDismiss()}){Text("Guardar")}},dismissButton={TextButton(onClick=onDismiss){Text("Cerrar")}})
     if(showPaymentChannels)PaymentChannelsDialog(customerName=item.nombre,ubicacion=item.ubicacion,onDismiss={showPaymentChannels=false})
 }

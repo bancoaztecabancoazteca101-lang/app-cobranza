@@ -183,6 +183,16 @@ fun MatrizDetailDialog(
                     Spacer(Modifier.width(8.dp))
                     Text("Compartir por WhatsApp")
                 }
+                // Saca al cliente de las llamadas/SMS automáticos de HOY (bloques y catchup), p. ej. si mandó comprobante.
+                var excluidoHoy by remember(item.id) { mutableStateOf(AutomatizacionPrefs.excluidoHoy(context, item.id)) }
+                OutlinedButton(
+                    onClick = {
+                        excluidoHoy = !excluidoHoy
+                        AutomatizacionPrefs.excluirHoy(context, item.id, excluidoHoy)
+                        Toast.makeText(context, if (excluidoHoy) "No se le llamará ni se le mandará SMS automático hoy" else "Volverá a entrar a las corridas automáticas", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (excluidoHoy) "Reanudar contacto automático hoy" else "No contactar hoy (automático)") }
             }
         },
         confirmButton = {
