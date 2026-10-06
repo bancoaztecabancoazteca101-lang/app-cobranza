@@ -48,6 +48,12 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "", onOpenMatriz:
     var mostrarBuscarMatriz by remember { mutableStateOf(false) }
     var prefillMatriz by remember { mutableStateOf<MatrizEntity?>(null) }
     val matrizList by viewModel.matrizList.collectAsState()
+    val matrizPorCu = remember(matrizList) {
+        buildMap<String, MatrizEntity> { for (m in matrizList) { val k = m.folioP?.trim()?.lowercase().orEmpty(); if (k.isNotEmpty()) putIfAbsent(k, m) } }
+    }
+    val matrizPorNombre = remember(matrizList) {
+        buildMap<String, MatrizEntity> { for (m in matrizList) putIfAbsent(m.nombre.trim().lowercase(), m) }
+    }
     val contextFoto = androidx.compose.ui.platform.LocalContext.current
     val leyendoFoto by viewModel.leyendoFotoCapital.collectAsState()
     val aplicandoCapital by viewModel.aplicandoCapital.collectAsState()
@@ -167,8 +173,9 @@ fun Sem6Screen(viewModel: Sem6ViewModel, searchQuery: String = "", onOpenMatriz:
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 items(items, key = { it.id }) { item ->
-                    val matrizItem = matrizList.firstOrNull { m -> item.cu.isNotBlank() && m.folioP?.trim().equals(item.cu.trim(), ignoreCase = true) }
-                        ?: matrizList.firstOrNull { m -> m.nombre.trim().equals(item.nombre.trim(), ignoreCase = true) }
+                    // Búsqueda en un índice armado UNA vez (antes se recorría toda la lista de Matriz dos veces por tarjeta).
+                    val matrizItem = (if (item.cu.isNotBlank()) matrizPorCu[item.cu.trim().lowercase()] else null)
+                        ?: matrizPorNombre[item.nombre.trim().lowercase()]
                     Sem6ItemCard(item, driveHelper = viewModel.driveHelper, onClick = { itemToView = item }, matrizItem = matrizItem, onOpenMatriz = { matrizItem?.let { onOpenMatriz(it.id) } })
                 }
             }

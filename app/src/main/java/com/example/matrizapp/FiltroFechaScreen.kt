@@ -1,4 +1,5 @@
 package com.example.matrizapp
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,10 +27,31 @@ import java.util.*
 fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, notificacionesHelper: NotificacionesHelper, searchQuery: String = "") {
     val allItems by viewModel.filteredList.collectAsState(); val df=remember{SimpleDateFormat("dd/MM/yyyy",Locale.getDefault())}; var itemToView by remember{mutableStateOf<MatrizEntity?>(null)}; val context=LocalContext.current
     val soloPagados by viewModel.soloPagados.collectAsState(); val totalCobrado by viewModel.totalCobradoRango.collectAsState(); val totalTickets by viewModel.totalTicketsRango.collectAsState()
+    var verTickets by remember { mutableStateOf(false) }; val ticketsLista by viewModel.ticketsRango.collectAsState()
     val items=rememberItemsFiltrados(allItems,searchQuery){listOf(it.nombre,it.numTT,it.observaciones,it.estado)}
+    if(verTickets){
+        val fmtHora=remember{SimpleDateFormat("dd/MM HH:mm",Locale("es","MX"))}
+        AlertDialog(onDismissRequest={verTickets=false},
+            title={Text("Tickets leídos · $"+"%.2f".format(Locale.US,totalTickets))},
+            text={
+                if(ticketsLista.isEmpty())Text("No hay tickets leídos en este rango.")
+                else LazyColumn(Modifier.heightIn(max=360.dp)){items(ticketsLista,key={it.id}){t->
+                    Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically){
+                        Column(Modifier.weight(1f)){
+                            Text(t.nombre?:t.cu?:"Sin nombre",style=MaterialTheme.typography.bodyMedium)
+                            Text(fmtHora.format(Date(t.fecha))+(t.cu?.let{" · CU "+it}?:""),style=MaterialTheme.typography.bodySmall,color=Color.Gray)
+                        }
+                        Text("$"+"%.2f".format(Locale.US,t.monto),style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.Bold)
+                        TextButton(onClick={viewModel.borrarTicket(t.id)}){Text("Borrar",color=MaterialTheme.colorScheme.error)}
+                    }
+                    Divider()
+                }}
+            },
+            confirmButton={TextButton(onClick={verTickets=false}){Text("Cerrar")}})
+    }
     Column(Modifier.fillMaxSize()){
         // Resumen fijo: permanece siempre arriba de Filtro Fecha y no forma parte de la lista desplazable.
-        Surface(color=MaterialTheme.colorScheme.primaryContainer,modifier=Modifier.fillMaxWidth()){
+        Surface(color=MaterialTheme.colorScheme.primaryContainer,modifier=Modifier.fillMaxWidth().clickable{verTickets=true}){
             Row(Modifier.fillMaxWidth().padding(horizontal=10.dp,vertical=5.dp),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically){
                 Column(Modifier.weight(1f)){Text("TICKETS",style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.Bold);Text("$" + "%.2f".format(Locale.US,totalTickets),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)}
                 Divider(modifier=Modifier.height(28.dp).width(1.dp))

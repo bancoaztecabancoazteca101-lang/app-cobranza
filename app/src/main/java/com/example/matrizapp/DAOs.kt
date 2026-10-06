@@ -9,6 +9,17 @@ interface TicketPagoDao {
 
     @Query("SELECT COALESCE(SUM(monto), 0.0) FROM ticket_pago_table WHERE fecha >= :desde AND fecha <= :hasta")
     fun totalEnRango(desde: Long, hasta: Long): Flow<Double>
+
+    @Query("SELECT * FROM ticket_pago_table WHERE fecha >= :desde AND fecha <= :hasta ORDER BY fecha DESC")
+    fun listarEnRango(desde: Long, hasta: Long): Flow<List<TicketPagoEntity>>
+
+    @Query("DELETE FROM ticket_pago_table WHERE id = :id")
+    suspend fun borrar(id: String)
+
+    // ¿Ya se guardó hoy un ticket del mismo cliente (por CU o, si no hay CU, por nombre) con el mismo monto?
+    // Evita contar doble el mismo ticket si se lee otra vez.
+    @Query("SELECT COUNT(*) FROM ticket_pago_table WHERE fecha >= :desde AND ABS(monto - :monto) < 0.005 AND ((:cu != '' AND cu = :cu) OR (:cu = '' AND nombre = :nombre))")
+    suspend fun contarSimilares(monto: Double, cu: String, nombre: String, desde: Long): Int
 }
 
 @Dao

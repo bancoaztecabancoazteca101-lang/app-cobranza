@@ -39,22 +39,23 @@ fun currentSem6SheetName(): String {
 class Sem6CacheStore(context: Context) {
     private val prefs = context.getSharedPreferences("sem6_cache", Context.MODE_PRIVATE)
 
-    /** IDs eliminados manualmente desde la app. Se conservan aunque el Apps Script vuelva
-     * a generar la fila en Cont-Sem-NN, para que un registro borrado no reaparezca. */
-    private val deletedIdsKey = "deleted_ids"
+    /** IDs eliminados manualmente desde la app, POR HOJA (Cont-Sem-NN). Se conservan aunque el Apps Script
+     * vuelva a generar la fila, para que un registro borrado no reaparezca; pero solo en la semana donde
+     * se borró: si el mismo cliente vuelve en otra semana, se muestra normal. */
+    private fun deletedIdsKey(hoja: String) = "deleted_ids_" + hoja
 
-    fun marcarEliminado(id: String) {
+    fun marcarEliminado(id: String, hoja: String) {
         if (id.isBlank()) return
-        val ids = prefs.getStringSet(deletedIdsKey, emptySet()).orEmpty().toMutableSet()
+        val ids = prefs.getStringSet(deletedIdsKey(hoja), emptySet()).orEmpty().toMutableSet()
         ids.add(id.trim())
-        prefs.edit().putStringSet(deletedIdsKey, ids).apply()
+        prefs.edit().putStringSet(deletedIdsKey(hoja), ids).apply()
     }
 
-    fun estaEliminado(id: String): Boolean =
-        id.isNotBlank() && prefs.getStringSet(deletedIdsKey, emptySet()).orEmpty().contains(id.trim())
+    fun estaEliminado(id: String, hoja: String): Boolean =
+        id.isNotBlank() && prefs.getStringSet(deletedIdsKey(hoja), emptySet()).orEmpty().contains(id.trim())
 
-    fun filtrarEliminados(items: List<Sem6Item>): List<Sem6Item> =
-        items.filterNot { estaEliminado(it.id) }
+    fun filtrarEliminados(items: List<Sem6Item>, hoja: String): List<Sem6Item> =
+        items.filterNot { estaEliminado(it.id, hoja) }
 
     fun save(items: List<Sem6Item>) {
         val arr = JSONArray()

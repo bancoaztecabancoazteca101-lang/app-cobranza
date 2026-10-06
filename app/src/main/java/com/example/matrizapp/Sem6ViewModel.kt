@@ -199,7 +199,7 @@ class Sem6ViewModel(
                 if (ok) {
                     // El Apps Script puede volver a poblar Cont-Sem-NN. Guardamos una
                     // marca local permanente para que este ID no vuelva a mostrarse.
-                    cacheStore.marcarEliminado(id)
+                    cacheStore.marcarEliminado(id, _semanaSeleccionada.value)
                     _itemsRaw.value = _itemsRaw.value.filter { it.id != id }
                     cacheStore.save(_itemsRaw.value)
                 } else {
@@ -232,10 +232,11 @@ class Sem6ViewModel(
         _error.value = null
         viewModelScope.launch {
             try {
-                val fresh = repository.fetchSem6Data(sheetName = _semanaSeleccionada.value)
+                val hojaActual = _semanaSeleccionada.value
+                val fresh = repository.fetchSem6Data(sheetName = hojaActual)
                 // No mostrar registros que el usuario ya eliminó manualmente, aunque
                 // el Apps Script los haya vuelto a insertar en Google Sheets.
-                val visibles = cacheStore.filtrarEliminados(fresh)
+                val visibles = cacheStore.filtrarEliminados(fresh, hojaActual)
                 _itemsRaw.value = visibles
                 _isFromCache.value = false
                 _lastUpdated.value = System.currentTimeMillis()

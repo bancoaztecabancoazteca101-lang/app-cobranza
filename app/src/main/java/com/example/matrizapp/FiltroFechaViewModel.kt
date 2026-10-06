@@ -87,6 +87,16 @@ class FiltroFechaViewModel(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
+    /** Tickets leídos por OCR en el rango visible (para verlos y borrar uno mal leído). */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val ticketsRango: StateFlow<List<TicketPagoEntity>> = combine(_desde, _hasta) { d, h -> d to h }
+        .flatMapLatest { (d, h) ->
+            if (d != null && h != null) ticketPagoDao.listarEnRango(d, h) else flowOf(emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun borrarTicket(id: String) { viewModelScope.launch { ticketPagoDao.borrar(id) } }
+
     /** Suma exclusivamente los montos de tickets leídos por OCR, independiente del status. */
     @OptIn(ExperimentalCoroutinesApi::class)
     val totalTicketsRango: StateFlow<Double> = combine(_desde, _hasta) { d, h -> d to h }
@@ -145,12 +155,18 @@ class FiltroFechaViewModel(
 
             // Cada ticket leído con monto se guarda como ticket independiente para el total.
             datos.monto?.let { monto ->
-                ticketPagoDao.insertar(
+                val cuDigitos = datos.cu?.filter { it.isDigit() }.orEmpty()
+                val nombreTk = datos.nombre?.trim()?.uppercase().orEmpty()
+                // Sin duplicados: el mismo cliente con el mismo monto el mismo día cuenta una sola vez.
+                val yaEsta = (cuDigitos.isNotEmpty() || nombreTk.isNotEmpty()) &&
+                    ticketPagoDao.contarSimilares(monto, cuDigitos, nombreTk, inicioDeHoy()) > 0
+                if (yaEsta) mensajes += "Ese ticket ya estaba contado hoy (no se suma otra vez)"
+                else ticketPagoDao.insertar(
                     TicketPagoEntity(
                         id = "T:" + System.currentTimeMillis() + ":" + kotlin.math.abs(datos.textoCompleto.hashCode()),
                         fecha = System.currentTimeMillis(),
-                        nombre = datos.nombre,
-                        cu = datos.cu,
+                        nombre = nombreTk.ifEmpty { null },
+                        cu = cuDigitos.ifEmpty { null },
                         monto = monto
                     )
                 )
