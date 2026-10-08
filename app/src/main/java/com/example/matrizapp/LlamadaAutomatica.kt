@@ -560,7 +560,7 @@ suspend fun calcularColaCatchup(context: Context): List<ItemColaCatchup> {
         val deficit = ReglaRepeticion.calcularDeficit(sem, contactosAyer, reglas)
         if (deficit <= 0) return@mapNotNull null
         val numeros = (listOf(r.numTT, r.ref1, r.ref2, r.ref3, r.ref4) + contactoExtraDao.obtenerPara(r.id).map { it.telefono })
-            .map { it.filter { c -> c.isDigit() }.takeLast(10) }.filter { it.length >= 7 }.distinct().size
+            .map { (it ?: "").filter { c -> c.isDigit() }.takeLast(10) }.filter { it.length >= 7 }.distinct().size
         ItemColaCatchup(r, sem, contactosAyer, deficit, numeros, AutomatizacionPrefs.excluidoHoy(context, r.id))
     }.sortedBy { it.registro.nombre }
 }
