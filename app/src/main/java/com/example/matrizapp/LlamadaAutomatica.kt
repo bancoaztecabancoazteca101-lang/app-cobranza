@@ -51,6 +51,28 @@ object AutomatizacionPrefs {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putBoolean(KEY_CATCHUP_ACTIVA, valor).apply()
     }
 
+    // ── Horarios de catchup EDITABLES. Antes eran 2 fijos (8:15 y 9:15). Ahora es una lista (máx. 12) que se
+    // guarda en el teléfono. Si nunca se editó, siguen siendo 8:15 y 9:15.
+    private const val KEY_CATCHUP_HORARIOS = "catchup_horarios"
+    const val MAX_HORARIOS_CATCHUP = 12
+    val HORARIOS_CATCHUP_POR_DEFECTO = listOf(8 to 15, 9 to 15)
+
+    fun catchupHorarios(context: Context): List<Pair<Int, Int>> {
+        val raw = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString(KEY_CATCHUP_HORARIOS, null)
+            ?: return HORARIOS_CATCHUP_POR_DEFECTO
+        return raw.split(",").mapNotNull { t ->
+            val p = t.trim().split(":")
+            val h = p.getOrNull(0)?.toIntOrNull(); val m = p.getOrNull(1)?.toIntOrNull()
+            if (h != null && m != null && h in 0..23 && m in 0..59) h to m else null
+        }.distinct().sortedWith(compareBy({ it.first }, { it.second })).take(MAX_HORARIOS_CATCHUP)
+    }
+
+    fun setCatchupHorarios(context: Context, horarios: List<Pair<Int, Int>>) {
+        val txt = horarios.distinct().sortedWith(compareBy({ it.first }, { it.second })).take(MAX_HORARIOS_CATCHUP)
+            .joinToString(",") { "%02d:%02d".format(it.first, it.second) }
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString(KEY_CATCHUP_HORARIOS, txt).apply()
+    }
+
     // ── "No contactar hoy": saca a un cliente de TODAS las corridas automáticas del día (bloques y catchup),
     // incluso si ya empezó una corrida. Sirve cuando llega un comprobante de pago que aún no se puede marcar
     // como Pagado. Vive solo en este teléfono y se vence a medianoche (no hace falta migración de base).
@@ -147,13 +169,18 @@ class LlamadaAutomaticaScheduler(
      * fallas puntuales (batería/señal durante el día) como el caso estructural de clientes con
      * alta tardía + semana alta cuyos offsets se pasan del último bloque del día. */
     private fun programarCatchup() {
-        programarAlarmaCatchup(hora = 8, minuto = 15, requestCode = REQUEST_CODE_CATCHUP_815)
-        programarAlarmaCatchup(hora = 9, minuto = 15, requestCode = REQUEST_CODE_CATCHUP_915)
+        // Primero se cancelan TODAS (incluidas las 2 fijas de antes y los horarios que se hayan quitado) y luego
+        // se programa una alarma por cada horario de la lista editable.
+        cancelarCatchup()
+        AutomatizacionPrefs.catchupHorarios(context).forEachIndexed { i, (h, m) ->
+            programarAlarmaCatchup(hora = h, minuto = m, requestCode = REQUEST_CODE_CATCHUP_BASE + i)
+        }
     }
 
     private fun cancelarCatchup() {
         alarmManager.cancel(pendingCatchup(REQUEST_CODE_CATCHUP_815))
         alarmManager.cancel(pendingCatchup(REQUEST_CODE_CATCHUP_915))
+        for (i in 0 until AutomatizacionPrefs.MAX_HORARIOS_CATCHUP) alarmManager.cancel(pendingCatchup(REQUEST_CODE_CATCHUP_BASE + i))
     }
 
     private fun pendingCatchup(requestCode: Int): PendingIntent {
@@ -180,6 +207,7 @@ class LlamadaAutomaticaScheduler(
         private const val REQUEST_CODE_MEDIANOCHE = 6_999
         private const val REQUEST_CODE_CATCHUP_815 = 6_997
         private const val REQUEST_CODE_CATCHUP_915 = 6_998
+        private const val REQUEST_CODE_CATCHUP_BASE = 7_000 // 7000..7011: horarios editables (no choca con bloques 6000+id ni 6997-6999)
         private const val MAX_ID_ESPERADO = 500L
     }
 }
@@ -499,6 +527,44 @@ class LlamadaAutomaticaWorker(
 // ahora — acreditando el contacto hacia "ayer", así la segunda
 // corrida (9:15) ve lo que ya cubrió la primera y no duplica.
 // ============================================================
+/** Un cliente que hoy entraría al catchup. */
+data class ItemColaCatchup(
+    val registro: MatrizEntity,
+    val semana: Int,
+    val contactosAyer: Int,
+    val deficit: Int,
+    val numeros: Int,
+    val excluidoHoy: Boolean
+)
+
+/** Clientes que el catchup recontactaría AHORA, con la MISMA regla del worker de abajo (no pagado, semana 1-5 con
+ * catchup activo, dado de alta AYER y con déficit > 0). Es solo lectura: no llama ni manda nada. Se usa para mostrar
+ * la cola en la pantalla de Catchup. Si cambias la regla del worker, cámbiala aquí también. */
+suspend fun calcularColaCatchup(context: Context): List<ItemColaCatchup> {
+    val container = (context.applicationContext as MainApplication).container
+    val registros = container.database.matrizDao().getAllMatriz().first()
+    val logDao = container.database.contactoLogDao()
+    val contactoExtraDao = container.database.contactoExtraDao()
+    val entidadesRegla = container.database.reglaSemanaDao().obtenerEntidadesOSembrar()
+    val reglas = entidadesRegla.associate { it.semana to it.offsetsList() }
+    val semanasConCatchup = entidadesRegla.filter { it.catchupActivo }.map { it.semana }.toSet()
+    val ayer = LocalDate.now().minusDays(1)
+    val ayerMillis = inicioDeDiaMillis(ayer)
+    return registros.mapNotNull { r ->
+        if (esPagado(r.estado)) return@mapNotNull null
+        val sem = r.semana.trim().toIntOrNull() ?: return@mapNotNull null
+        if (sem !in 1..5 || sem !in semanasConCatchup) return@mapNotNull null
+        val fechaAlta = ReglaRepeticion.fechaAltaDe(r) ?: return@mapNotNull null
+        if (fechaAlta.toLocalDate() != ayer) return@mapNotNull null
+        val contactosAyer = logDao.contarContactosEnDia(r.id, ayerMillis)
+        val deficit = ReglaRepeticion.calcularDeficit(sem, contactosAyer, reglas)
+        if (deficit <= 0) return@mapNotNull null
+        val numeros = (listOf(r.numTT, r.ref1, r.ref2, r.ref3, r.ref4) + contactoExtraDao.obtenerPara(r.id).map { it.telefono })
+            .map { it.filter { c -> c.isDigit() }.takeLast(10) }.filter { it.length >= 7 }.distinct().size
+        ItemColaCatchup(r, sem, contactosAyer, deficit, numeros, AutomatizacionPrefs.excluidoHoy(context, r.id))
+    }.sortedBy { it.registro.nombre }
+}
+
 class CatchupLlamadaWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {

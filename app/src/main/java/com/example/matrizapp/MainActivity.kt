@@ -360,7 +360,10 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Sms.route) { SmsScreen(smsVm, onNavigateToStatus = { navController.navigate(Screen.SmsStatus.route) }) }
                             composable(Screen.SmsStatus.route) { SmsStatusScreen(onBack = { navController.popBackStack() }) }
                             composable(Screen.Llamadas.route) { CallScreen(callVm) }
-                            composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
+                            composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm, onAbrirCatchup = { navController.navigate(Screen.Catchup.route) }) }
+                            composable(Screen.Catchup.route) {
+                                CatchupScreen(container, matrizVm, onOpenMatriz = { id -> mapaOpenId = id; navController.navigate(Screen.Matriz.route) { launchSingleTop = true } })
+                            }
                             composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
                             composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm, searchQuery) }
                             composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
@@ -385,6 +388,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Control : Screen("control", "Control", Icons.Default.BarChart)
     object Ubi : Screen("ubi", "Ubi", Icons.Default.Map)
     object Mapa : Screen("mapa", "Mapa", Icons.Default.Map)
+    object Catchup : Screen("catchup", "Catchup", Icons.Default.Schedule) // se abre desde Bloques de horario (no va en el menú)
     object Sem6 : Screen("sem6", "Semana 6", Icons.Default.Visibility)
     object Sms : Screen("sms", "SMS", Icons.Default.Send)
     object SmsStatus : Screen("sms_status", "SMS por Status APP", Icons.Default.Sms)
@@ -408,7 +412,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
  * en cuál hoja/pantalla estás (Matriz, Filtro Fecha, Pase, etc.), cosa que antes no se mostraba. */
 fun screenTitleFor(route: String): String = listOf(
     Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.FiltroSemanal, Screen.Filtrar,
-    Screen.Control, Screen.Ubi, Screen.Mapa, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada,
+    Screen.Control, Screen.Ubi, Screen.Mapa, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada, Screen.Catchup,
     Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Backup, Screen.Penalizacion,
     Screen.Comision, Screen.Avance, Screen.BolsaGerencia
 ).find { it.route == route }?.title ?: ""
