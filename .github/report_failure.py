@@ -4,9 +4,17 @@ import urllib.request
 
 with open('build_output.log', encoding='utf-8', errors='replace') as f:
     log = f.read()
-log = log[-60000:]
+# Los errores del compilador ("e: archivo:línea mensaje") van PRIMERO: antes quedaban enterrados bajo la traza de
+# Gradle y el issue solo mostraba "Compilation error".
+errores = []
+for linea in log.splitlines():
+    if linea.startswith('e: ') or ' e: file' in linea or 'error:' in linea or 'Unresolved reference' in linea:
+        if linea not in errores:
+            errores.append(linea.strip())
+resumen = "\n".join(errores[:60]) if errores else "(sin líneas e: en el log)"
+log = log[-50000:]
 
-body = "```\n" + log + "\n```"
+body = "ERRORES DEL COMPILADOR:\n```\n" + resumen + "\n```\n\nCOLA DEL LOG:\n```\n" + log + "\n```"
 sha = os.environ.get('GITHUB_SHA', '')[:7]
 repo = os.environ['GH_REPO']
 token = os.environ['GH_TOKEN']
