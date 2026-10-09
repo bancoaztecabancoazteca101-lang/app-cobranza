@@ -28,6 +28,9 @@ class MatrizWearBridgeService : WearableListenerService() {
                 val allMatriz = db.matrizDao().getAllMatriz().first()
                 val solicitudes = db.solicitudDao().getAllSolicitud().first()
                 val control = db.controlDao().getAll().first()
+                val penalizacion = db.velocidadDao().getFlow().first()
+                val comision = db.comisionDao().getFlow().first()
+                val bolsa = db.bolsaGerenciaDao().getFlow().first()
                 val cache = app.container.sem6CacheStore
                 val sem6 = cache.load()?.first.orEmpty().let { cache.filtrarEliminados(it, currentSem6SheetName()) }
                 val hoy = Calendar.getInstance().apply {
@@ -83,9 +86,33 @@ class MatrizWearBridgeService : WearableListenerService() {
                     it.requisito.replace(",", "").replace("$", "").trim().toDoubleOrNull() ?: 0.0
                 }
                 json.put("Control", JSONArray().apply {
-                    put(JSONObject().put("titulo", "Requerido hoy").put("valor", requerido(hoyActivos)))
-                    put(JSONObject().put("titulo", "Requerido semana").put("valor", requerido(semanaActiva)))
+                    put(JSONObject().put("titulo", "Avance · requerido hoy").put("valor", requerido(hoyActivos)))
+                    put(JSONObject().put("titulo", "Avance · requerido semana").put("valor", requerido(semanaActiva)))
                     control.take(MAX_ROWS).forEach { put(JSONObject().put("titulo", it.semana).put("valor", it.requerido)) }
+                    penalizacion?.let { p ->
+                        put(JSONObject().apply {
+                            put("titulo", "Penalización"); put("RK", p.rk); put("Plan 100", p.plan100)
+                            put("Total", p.total); put("Requerido 3-6", p.reque36); put("Monto 3-6", p.monto36)
+                            put("CU Pase", p.cuPase); put("Capital", p.capital); put("Días operación", p.diasOp)
+                        })
+                    }
+                    comision?.let { p ->
+                        put(JSONObject().apply {
+                            put("titulo", "Comisión"); put("Momento sem 1-2", p.momento12); put("Indirecta sem 1-2", p.indirecta12)
+                            put("Momento sem 3", p.momento3); put("Indirecta sem 3", p.indirecta3)
+                            put("Momento sem 4-6", p.momento46); put("Indirecta sem 4-6", p.indirecta46)
+                            put("Momento sem 7-9", p.momento79); put("Indirecta sem 7-9", p.indirecta79)
+                            put("Meta", p.meta)
+                        })
+                    }
+                    bolsa?.let { p ->
+                        put(JSONObject().apply {
+                            put("titulo", "Bolsa Gerencia"); put("Cobranza gerencia", p.cobranzaGerencia)
+                            put("Cumplimiento plan", p.cumplimientoPlan); put("Monto base", p.montoBase)
+                            put("Número gestores", p.numeroGestores); put("Cobranza 1-9 gestor", p.cobranza1a9Gestor)
+                            put("Cobranza 1-9 gerencia", p.cobranza1a9Gerencia)
+                        })
+                    }
                 })
                 json.put("Semana 6", JSONArray().apply {
                     sem6.take(MAX_ROWS).forEach { item ->
