@@ -51,13 +51,13 @@ class WearMainActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Ruta y clientes",
-                            style = MaterialTheme.typography.caption,
+                            style = MaterialTheme.typography.body2,
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Conecta con tu teléfono para recibir los datos de Matriz.",
-                            style = MaterialTheme.typography.caption,
+                            style = MaterialTheme.typography.body2,
                             textAlign = TextAlign.Center
                         )
                     }
