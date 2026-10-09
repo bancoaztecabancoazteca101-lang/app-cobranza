@@ -104,6 +104,7 @@ jobs:
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/optimizado/*.apk
+            wear/build/outputs/apk/debug/*.apk
           make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
