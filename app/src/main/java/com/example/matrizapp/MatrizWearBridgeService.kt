@@ -10,7 +10,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
@@ -102,12 +101,14 @@ class MatrizWearBridgeService : WearableListenerService() {
                 })
                 val bytes = json.toString().toByteArray(Charsets.UTF_8)
                 require(bytes.size <= MAX_PAYLOAD_BYTES) { "La consulta es demasiado grande para el reloj." }
-                Wearable.getMessageClient(this@MatrizWearBridgeService).sendMessage(sourceNode, PATH_SNAPSHOT, bytes).await()
+                com.google.android.gms.tasks.Tasks.await(Wearable.getMessageClient(this@MatrizWearBridgeService).sendMessage(sourceNode, PATH_SNAPSHOT, bytes))
             }.onFailure { error ->
                 Log.e(TAG, "No se pudo preparar la consulta para Wear OS", error)
                 runCatching {
-                    Wearable.getMessageClient(this@MatrizWearBridgeService)
-                        .sendMessage(sourceNode, PATH_ERROR, (error.message ?: "Error de sincronización").toByteArray()).await()
+                    com.google.android.gms.tasks.Tasks.await(
+                        Wearable.getMessageClient(this@MatrizWearBridgeService)
+                            .sendMessage(sourceNode, PATH_ERROR, (error.message ?: "Error de sincronización").toByteArray())
+                    )
                 }
             }
         }
