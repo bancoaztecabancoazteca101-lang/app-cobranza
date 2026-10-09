@@ -10,13 +10,13 @@
         <uses-library android:name="com.google.android.wearable" android:required="false" />
         <meta-data android:name="com.google.android.wearable.standalone" android:value="true" />
         <activity
-            android:name=".WearMainActivity"
+            android:name="com.example.matrizapp.wear.WearMainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <service android:name=".MatrizWearDataService" android:exported="true"><intent-filter><action android:name="com.google.android.gms.wearable.BIND_LISTENER" /></intent-filter></service>
+        <service android:name="com.example.matrizapp.wear.MatrizWearDataService" android:exported="true"><intent-filter><action android:name="com.google.android.gms.wearable.BIND_LISTENER" /></intent-filter></service>
     </application>
 </manifest>
