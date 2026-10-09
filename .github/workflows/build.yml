@@ -46,7 +46,7 @@ jobs:
           # La variante "optimizado" hoy es idéntica a release (R8 apagado), así que no se compila en main.
           # Las ramas publican las tres para poder comparar.
           TASKS="assembleRelease"
-          if [ "${{ github.ref_name }}" != "main" ]; then TASKS="assembleDebug assembleRelease assembleOptimizado"; fi
+          if [ "${{ github.ref_name }}" != "main" ]; then TASKS="assembleDebug assembleRelease assembleOptimizado :wear:assembleDebug"; fi
           set +e
           gradle $TASKS --stacktrace > build_output.log 2>&1
           BUILD_STATUS=$?
