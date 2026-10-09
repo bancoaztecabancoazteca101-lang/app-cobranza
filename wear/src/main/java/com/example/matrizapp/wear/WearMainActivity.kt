@@ -1,6 +1,8 @@
 package com.example.matrizapp.wear
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -59,7 +61,22 @@ class WearMainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() { super.onResume(); loadCache(); requestSnapshot() }
+    private val refreshHandler = Handler(Looper.getMainLooper())
+    private val refreshCacheRunnable = object : Runnable {
+        override fun run() { loadCache(); refreshHandler.postDelayed(this, 1200L) }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        loadCache()
+        requestSnapshot()
+        refreshHandler.postDelayed(refreshCacheRunnable, 1200L)
+    }
+
+    override fun onPause() {
+        refreshHandler.removeCallbacks(refreshCacheRunnable)
+        super.onPause()
+    }
 
     private fun loadCache() {
         val prefs = getSharedPreferences(MatrizWearDataService.PREFS, MODE_PRIVATE)
