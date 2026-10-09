@@ -18,6 +18,8 @@ private fun esEstadoNotificable(estado: String) = estado.trim().lowercase() in E
 
 class NotificacionesHelper(private val context: Context) {
     init { crearCanal() }
+    /** Atajo para los ViewModels: confirma el retorno de este registro como puesto/cambiado hoy. */
+    fun confirmarRetorno(id: String) = confirmarRetornoHoy(context, id)
     private fun crearCanal() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -76,7 +78,10 @@ class NotificacionesHelper(private val context: Context) {
         val idsAnteriores = prefs.getStringSet("ids_matriz", emptySet()) ?: emptySet()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val ahora = System.currentTimeMillis(); val hoyCal = java.util.Calendar.getInstance()
-        val objetivos = items.filter { it -> esEstadoNotificable(it.estado) && !it.hora.isNullOrBlank() && it.fecha != null && esHoy(it.fecha!!, hoyCal) }
+        // Solo avisan los retornos CONFIRMADOS hoy en este teléfono (se creó el registro, o se cambió su status u hora).
+        // Antes avisaba todo registro con fecha de hoy + Retorno/App + hora, y editar CUALQUIER dato de un registro
+        // viejo le pone fecha de hoy (el formulario siempre guarda "ahora"): llegaban avisos de clientes que no se visitaron hoy.
+        val objetivos = items.filter { it -> esEstadoNotificable(it.estado) && !it.hora.isNullOrBlank() && it.fecha != null && esHoy(it.fecha!!, hoyCal) && retornoConfirmadoHoy(context, it.id) }
         if (objetivos.isEmpty() && idsAnteriores.isEmpty()) return
         val puedeExacta = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) alarmManager.canScheduleExactAlarms() else true
         val idsNuevos = mutableSetOf<String>()
@@ -106,6 +111,23 @@ class NotificacionesHelper(private val context: Context) {
         return PendingIntent.getBroadcast(context, id.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
     companion object {
+        private const val PREFS_CONFIRMADOS = "retornos_confirmados"
+
+        /** Marca que el retorno de este registro se puso o cambió HOY aquí; sin esto no suena el aviso. Vence a medianoche. */
+        fun confirmarRetornoHoy(context: Context, id: String) {
+            val p = context.getSharedPreferences(PREFS_CONFIRMADOS, Context.MODE_PRIVATE)
+            val hoy = java.time.LocalDate.now().toString()
+            val set = p.getStringSet("ids", emptySet()).orEmpty().filter { it.endsWith("|$hoy") }.toMutableSet()
+            set.add("$id|$hoy")
+            p.edit().putStringSet("ids", set).apply()
+        }
+
+        fun retornoConfirmadoHoy(context: Context, id: String): Boolean {
+            val hoy = java.time.LocalDate.now().toString()
+            return context.getSharedPreferences(PREFS_CONFIRMADOS, Context.MODE_PRIVATE)
+                .getStringSet("ids", emptySet()).orEmpty().contains("$id|$hoy")
+        }
+
         fun mostrarNotificacion(context: Context, id: String, nombre: String, numTT: String?, estado: String?, colonia: String?, calle: String?, ubicacion: String?, requerido: String?) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
             val etiqueta = if (estado?.trim()?.lowercase() == "app") "App" else "Retorno"

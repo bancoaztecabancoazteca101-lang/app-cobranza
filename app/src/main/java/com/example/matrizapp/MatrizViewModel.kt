@@ -107,6 +107,7 @@ class MatrizViewModel(
         viewModelScope.launch {
             val anterior = matrizDao.getById(id)
             matrizDao.updateGestionLocal(id, nuevoEstado, observaciones)
+            if (anterior != null && anterior.estado.trim() != nuevoEstado.trim()) notificacionesHelper.confirmarRetorno(id)
             // Mapa: editar solo cuenta como visita si el registro que se editó corresponde a HOY.
             if (anterior != null && anterior.fecha != null && inicioDelDia(anterior.fecha) == inicioDelDia()) {
                 visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
@@ -124,6 +125,7 @@ class MatrizViewModel(
         diasAtraso: String? = null, diasApertura: String? = null
     ) {
         viewModelScope.launch {
+            val previo = matrizDao.getById(id)
             matrizDao.updateRegistroCompleto(
                 id, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
                 observaciones, estado, ubicacion, fecha, hora, ruta, folioP,
@@ -132,6 +134,8 @@ class MatrizViewModel(
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() },
                 diasAtraso?.takeIf { it.isNotBlank() }, diasApertura?.takeIf { it.isNotBlank() }
             )
+            // Retorno: el aviso solo suena si el status o la hora de retorno cambiaron en ESTE guardado.
+            if (previo == null || previo.estado.trim() != estado.trim() || (previo.hora ?: "").trim() != (hora ?: "").trim()) notificacionesHelper.confirmarRetorno(id)
             // Mapa: editar solo cuenta como visita si la fecha guardada corresponde a HOY.
             if (fecha != null && inicioDelDia(fecha) == inicioDelDia()) {
                 visitaMapaDao.registrarVisitaHoy("M:$id", nombre.trim().uppercase(), ubicacion, id)
@@ -166,6 +170,7 @@ class MatrizViewModel(
                     return@launch
                 }
             }
+            val previoId = matrizDao.getById(idFinal)
             matrizDao.updateRegistroCompleto(
                 idFinal, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
                 observaciones, estado, ubicacion, fecha, hora, ruta, folioP,
@@ -174,6 +179,7 @@ class MatrizViewModel(
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() },
                 diasAtraso?.takeIf { it.isNotBlank() }, diasApertura?.takeIf { it.isNotBlank() }
             )
+            if (previoId == null || previoId.estado.trim() != estado.trim() || (previoId.hora ?: "").trim() != (hora ?: "").trim()) notificacionesHelper.confirmarRetorno(idFinal)
             // Mapa: editar solo cuenta como visita si la fecha guardada corresponde a HOY.
             if (fecha != null && inicioDelDia(fecha) == inicioDelDia()) {
                 visitaMapaDao.registrarVisitaHoy("M:$idFinal", nombre.trim().uppercase(), ubicacion, idFinal)
@@ -213,6 +219,8 @@ class MatrizViewModel(
         )
         viewModelScope.launch {
             matrizDao.insertOne(nuevo)
+            // Retorno: un registro recién creado puede traer su status/hora de retorno: cuenta como confirmado hoy.
+            notificacionesHelper.confirmarRetorno(idFinal)
             // Mapa: al crear un registro, solo se registra como visita si su fecha es HOY.
             if (inicioDelDia(fecha) == inicioDelDia()) {
                 visitaMapaDao.registrarVisitaHoy("M:$idFinal", nuevo.nombre, nuevo.ubicacion, idFinal)
