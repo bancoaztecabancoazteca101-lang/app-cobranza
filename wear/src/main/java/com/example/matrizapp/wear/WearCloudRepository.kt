@@ -1,12 +1,10 @@
 package com.example.matrizapp.wear
 
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
 
 /**
  * Consulta independiente desde el reloj. No usa el Data Layer ni requiere que Matriz
@@ -17,16 +15,19 @@ object WearCloudRepository {
 
     fun fetchSnapshot(token: String): JSONObject {
         require(token.length >= 24) { "Configura el token de acceso de Wear OS." }
-        val encoded = URLEncoder.encode(token, "UTF-8")
-        val connection = (URL("$API_URL?action=wear_snapshot&token=$encoded").openConnection() as HttpURLConnection)
+        val connection = (URL(API_URL).openConnection() as HttpURLConnection)
         try {
-            connection.requestMethod = "GET"
+            connection.requestMethod = "POST"
             connection.connectTimeout = 15000
             connection.readTimeout = 20000
+            connection.doOutput = true
             connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            val requestBody = JSONObject().put("action", "wear_snapshot").put("token", token).toString()
+            connection.outputStream.use { it.write(requestBody.toByteArray(Charsets.UTF_8)) }
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader(Charsets.UTF_8)?.use(BufferedReader::readText).orEmpty()
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (status !in 200..299) throw IOException("Servidor respondió HTTP $status")
             val json = JSONObject(body)
             if (!json.optBoolean("ok", false)) {
