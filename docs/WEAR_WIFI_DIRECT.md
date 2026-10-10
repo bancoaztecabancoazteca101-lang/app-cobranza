@@ -23,13 +23,13 @@ El token se envía en el cuerpo de una petición HTTPS POST, no en la URL. Se gu
 
 ## Datos entregados
 
-- **Matriz:** hasta 35 filas recientes de la hoja `Matriz `.
-- **Solicitud:** hasta 35 filas recientes de `Solicitud`.
-- **Filtro Fecha:** filas de `Filtro Fecha`; si esa hoja está vacía, usa filas de Matriz cuya fecha corresponda al día actual.
-- **Control:** hasta 35 filas de `GraficaSuma`.
-- **Semana 6:** hasta 35 filas de la hoja `Cont-Sem-N` de la semana ISO actual; si no existe, usa la semana numerada más reciente.
+- **Matriz:** todas las filas de la hoja `Matriz `; se muestran en lista desplazable y con búsqueda.
+- **Solicitud:** todas las filas de `Solicitud`, con búsqueda.
+- **Filtro Fecha:** todas las filas de `Filtro Fecha`; si esa hoja está vacía, usa las filas de Matriz cuya fecha corresponda al día actual.
+- **Control:** todas las filas de `GraficaSuma`.
+- **Semana 6:** todas las filas de la hoja `Cont-Sem-N` de la semana ISO actual; si no existe, usa la semana numerada más reciente.
 
-Los registros leídos desde Sheets reflejan lo que ya esté sincronizado allí. Los cambios que solo existan en Room del teléfono y no hayan llegado a Sheets no pueden aparecer en el reloj con este método.
+Cada sección permite buscar por texto dentro de los registros cargados. Los registros leídos desde Sheets reflejan lo que ya esté sincronizado allí. Los cambios que solo existan en Room del teléfono y no hayan llegado a Sheets no pueden aparecer en el reloj con este método.
 
 ## Limitación de despliegue
 
