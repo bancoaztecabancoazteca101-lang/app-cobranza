@@ -280,6 +280,8 @@ function configurarBackend() {
 
 
 // ===== Consulta independiente para Wear OS (solo lectura) =====
+// Se devuelven todas las filas de las cinco hojas solicitadas; el reloj pagina visualmente
+// con LazyColumn y no debe ocultar clientes por un límite arbitrario de 35 registros.
 // Configurar en Project Settings > Script properties:
 // WEAR_API_TOKEN = una cadena aleatoria larga que solo se introduce en el reloj.
 // Después de actualizar este archivo, crear una nueva versión del Web App deployment.
@@ -304,11 +306,11 @@ function wearSnapshot_(p) {
       ok:true,
       updatedAt:Date.now(),
       source:'Google Sheets',
-      'Matriz': matrizRows.slice(-35).reverse().map(mapMatriz_),
-      'Solicitud': solicitudRows.slice(-35).reverse().map(mapSolicitud_),
-      'Filtro Fecha': (filtroRows.length ? filtroRows.slice(-35).reverse().map(mapMatriz_) : todayMatriz.slice(-35).reverse().map(mapMatriz_)),
-      'Control': controlRows.slice(-35).map((r,i) => ({ titulo:String(r[0] || ('Fila '+(i+1))), valor:String(r[1] == null ? '' : r[1]) })),
-      'Semana 6': sem6Rows.filter(r => String(r[0] || '').trim()).slice(-35).reverse().map(mapSem6_),
+      'Matriz': matrizRows.slice().reverse().map(mapMatriz_),
+      'Solicitud': solicitudRows.slice().reverse().map(mapSolicitud_),
+      'Filtro Fecha': (filtroRows.length ? filtroRows.slice().reverse().map(mapMatriz_) : todayMatriz.slice().reverse().map(mapMatriz_)),
+      'Control': controlRows.map((r,i) => ({ titulo:String(r[0] || ('Fila '+(i+1))), valor:String(r[1] == null ? '' : r[1]) })), 
+      'Semana 6': sem6Rows.filter(r => String(r[0] || '').trim()).slice().reverse().map(mapSem6_), 
       sem6Sheet:sem6Name || ''
     };
   } catch (err) {
