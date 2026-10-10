@@ -355,10 +355,18 @@ function dateKey_(v) {
 function currentSem6Sheet_(ss) {
   const names=ss.getSheets().map(s=>s.getName()).filter(n=>/^Cont-Sem-\d+$/i.test(n));
   if (!names.length) return '';
-  const currentWeek=Number(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'w'));
+  const currentWeek=isoWeekNumber_(new Date());
   const currentName='Cont-Sem-'+currentWeek;
   if (names.indexOf(currentName)>=0) return currentName;
   return names.sort((a,b)=>Number(b.substring(b.lastIndexOf('-')+1))-Number(a.substring(a.lastIndexOf('-')+1)))[0];
+}
+
+function isoWeekNumber_(input) {
+  const d = new Date(input.getTime());
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(),0,1);
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
 
 function json_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
