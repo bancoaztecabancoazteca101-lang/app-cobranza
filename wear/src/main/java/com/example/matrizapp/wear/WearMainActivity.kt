@@ -107,7 +107,7 @@ private fun HomeScreen(updatedAt: Long, error: String?, counts: Map<String, Int>
     Column(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("MATRIZ", style = MaterialTheme.typography.title2, fontWeight = FontWeight.Bold)
-        Text("Consulta de hojas", style = MaterialTheme.typography.caption)
+        Text("Consulta de hojas", style = MaterialTheme.typography.caption2)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(SECCIONES.size) { index ->
                 val name = SECCIONES[index]
@@ -115,14 +115,14 @@ private fun HomeScreen(updatedAt: Long, error: String?, counts: Map<String, Int>
                     Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(name, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text((counts[name] ?: 0).toString(), style = MaterialTheme.typography.caption)
+                        Text((counts[name] ?: 0).toString(), style = MaterialTheme.typography.caption2)
                     }
                 }
             }
         }
         Text(if (updatedAt > 0) "Datos: " + SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(updatedAt)) else "Sin datos sincronizados",
-            style = MaterialTheme.typography.caption)
-        if (!error.isNullOrBlank()) Text(error, style = MaterialTheme.typography.caption)
+            style = MaterialTheme.typography.caption2)
+        if (!error.isNullOrBlank()) Text(error, style = MaterialTheme.typography.caption2)
         Button(onClick = onSync) { Text("Sincronizar") }
     }
 }
@@ -143,9 +143,9 @@ private fun SectionScreen(title: String, rows: JSONArray, onBack: () -> Unit, on
                         Text(row.optString("nombre", row.optString("titulo", "Registro")), fontWeight = FontWeight.Bold, maxLines = 2)
                         val subtitle = listOf(row.optString("estado"), row.optString("numTT"), row.optString("cu"),
                             row.optString("colonia"), row.optString("hora")).filter { it.isNotBlank() && it != "null" }.joinToString(" · ")
-                        if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.caption, maxLines = 2)
+                        if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.caption2, maxLines = 2)
                         val amount = row.optString("requisito", row.optString("req", row.optString("valor")))
-                        if (amount.isNotBlank() && amount != "null") Text("Req: $amount", style = MaterialTheme.typography.caption)
+                        if (amount.isNotBlank() && amount != "null") Text("Req: $amount", style = MaterialTheme.typography.caption2)
                     }
                 }
             }
