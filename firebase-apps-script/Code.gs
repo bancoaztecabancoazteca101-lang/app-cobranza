@@ -25,8 +25,11 @@ function doPost(e) {
 }
 
 function handle_(p) {
-  if (p.apiKey !== CONFIG.API_KEY) return { ok: false, error: 'unauthorized' };
   const action = String(p.action || '').toLowerCase();
+  // Endpoint de solo lectura para Wear OS. Usa un token separado guardado en Script Properties;
+  // no reutiliza la API_KEY antigua de notificaciones.
+  if (action === 'wear_snapshot') return wearSnapshot_(p);
+  if (p.apiKey !== CONFIG.API_KEY) return { ok: false, error: 'unauthorized' };
   if (action === 'register') return withLock_(() => register_(p));
   if (action === 'list') return list_();
   if (action === 'toggle') return withLock_(() => toggle_(p));
@@ -273,6 +276,89 @@ function configurarBackend() {
   const sh=sheet_(); installMinuteTrigger();
   Logger.log('Hoja creada: '+sh.getName()); Logger.log('Activador configurado: pollRetornos_ cada minuto');
   return {ok:true,sheetName:sh.getName(),trigger:'pollRetornos_ cada minuto',headers:sh.getRange(1,1,1,8).getValues()[0]};
+}
+
+
+// ===== Consulta independiente para Wear OS (solo lectura) =====
+// Configurar en Project Settings > Script properties:
+// WEAR_API_TOKEN = una cadena aleatoria larga que solo se introduce en el reloj.
+// Después de actualizar este archivo, crear una nueva versión del Web App deployment.
+function wearSnapshot_(p) {
+  const expected = PropertiesService.getScriptProperties().getProperty('WEAR_API_TOKEN');
+  const supplied = String(p.token || '');
+  if (!expected || supplied.length < 24 || !constantTimeEquals_(expected, supplied)) {
+    return { ok:false, error:'wear_unauthorized' };
+  }
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const matrizRows = sheetRows_(ss, 'Matriz ');
+    const solicitudRows = sheetRows_(ss, 'Solicitud');
+    const controlRows = sheetRows_(ss, 'GraficaSuma');
+    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    const todayMatriz = matrizRows.filter(r => dateKey_(r[11]) === today);
+    const filtroRows = sheetRows_(ss, 'Filtro Fecha');
+    const sem6Name = currentSem6Sheet_(ss);
+    const sem6Rows = sem6Name ? sheetRows_(ss, sem6Name) : [];
+
+    return {
+      ok:true,
+      updatedAt:Date.now(),
+      source:'Google Sheets',
+      'Matriz': matrizRows.slice(-35).reverse().map(mapMatriz_),
+      'Solicitud': solicitudRows.slice(-35).reverse().map(mapSolicitud_),
+      'Filtro Fecha': (filtroRows.length ? filtroRows.slice(-35).reverse().map(mapMatriz_) : todayMatriz.slice(-35).reverse().map(mapMatriz_)),
+      'Control': controlRows.slice(-35).map((r,i) => ({ titulo:String(r[0] || ('Fila '+(i+1))), valor:String(r[1] == null ? '' : r[1]) })),
+      'Semana 6': sem6Rows.slice(1).filter(r => String(r[0] || '').trim()).slice(-35).reverse().map(mapSem6_),
+      sem6Sheet:sem6Name || ''
+    };
+  } catch (err) {
+    return { ok:false, error:'wear_data_unavailable', detail:String(err && err.message || err) };
+  }
+}
+function constantTimeEquals_(a,b) {
+  a=String(a); b=String(b);
+  if (a.length !== b.length) return false;
+  let diff=0;
+  for (let i=0;i<a.length;i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+function sheetRows_(ss,name) {
+  const sh=ss.getSheetByName(name);
+  if (!sh || sh.getLastRow()<2) return [];
+  return sh.getRange(2,1,sh.getLastRow()-1,Math.min(Math.max(sh.getLastColumn(),1),28)).getValues();
+}
+function cellText_(r,i) { const v=r && r.length>i ? r[i] : ''; return v instanceof Date ? v.toISOString() : String(v == null ? '' : v); }
+function mapMatriz_(r) {
+  return { id:cellText_(r,12), nombre:cellText_(r,0), semana:cellText_(r,1), requisito:cellText_(r,2),
+    numTT:cellText_(r,3), ref1:cellText_(r,4), ref2:cellText_(r,5), observaciones:cellText_(r,6),
+    estado:cellText_(r,7), ubicacion:cellText_(r,8), imagenUrl:cellText_(r,9), imagenUrl2:cellText_(r,10),
+    fecha:cellText_(r,11), hora:cellText_(r,13), ruta:cellText_(r,14), folioP:cellText_(r,15) };
+}
+function mapSolicitud_(r) {
+  return { id:cellText_(r,0), nombre:cellText_(r,1), numero:cellText_(r,2), sucursal:cellText_(r,3),
+    ubicacion:cellText_(r,4), imagenUrl:cellText_(r,5), imagenUrl2:cellText_(r,6),
+    nombreRef1:cellText_(r,7), ref1:cellText_(r,8), nombreRef2:cellText_(r,9), ref2:cellText_(r,10),
+    observaciones:cellText_(r,11), estado:cellText_(r,13), gestor:cellText_(r,16), fecha:cellText_(r,17) };
+}
+function mapSem6_(r) {
+  return { nombre:cellText_(r,0), sem:cellText_(r,1), req:cellText_(r,2), id:cellText_(r,3),
+    cu:cellText_(r,4), ubicacion:cellText_(r,5), imagenUrl:cellText_(r,6), colonia:cellText_(r,8),
+    visitas:cellText_(r,9), ultimaFechaVisita:cellText_(r,10), numTT:cellText_(r,11),
+    seContiene:cellText_(r,12), susceptible:cellText_(r,13), observaciones:cellText_(r,14),
+    capital:cellText_(r,15), abono:cellText_(r,16) };
+}
+function dateKey_(v) {
+  if (!v) return '';
+  const d = v instanceof Date ? v : new Date(String(v));
+  return isNaN(d.getTime()) ? '' : Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+function currentSem6Sheet_(ss) {
+  const names=ss.getSheets().map(s=>s.getName()).filter(n=>/^Cont-Sem-\d+$/i.test(n));
+  if (!names.length) return '';
+  const currentWeek=Number(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'w'));
+  const currentName='Cont-Sem-'+currentWeek;
+  if (names.indexOf(currentName)>=0) return currentName;
+  return names.sort((a,b)=>Number(b.substring(b.lastIndexOf('-')+1))-Number(a.substring(a.lastIndexOf('-')+1)))[0];
 }
 
 function json_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
