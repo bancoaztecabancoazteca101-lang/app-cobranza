@@ -23,6 +23,45 @@ interface TicketPagoDao {
 }
 
 @Dao
+interface Sem6Dao {
+    @Query("SELECT * FROM sem6_registro_table WHERE hoja = :hoja ORDER BY nombre COLLATE NOCASE")
+    fun observarHoja(hoja: String): Flow<List<Sem6RegistroEntity>>
+
+    @Query("SELECT * FROM sem6_registro_table WHERE hoja = :hoja")
+    suspend fun obtenerHoja(hoja: String): List<Sem6RegistroEntity>
+
+    @Query("SELECT * FROM sem6_registro_table WHERE hoja = :hoja AND id = :id LIMIT 1")
+    suspend fun obtener(hoja: String, id: String): Sem6RegistroEntity?
+
+    @Query("SELECT DISTINCT hoja FROM sem6_registro_table")
+    suspend fun hojas(): List<String>
+
+    @Query("SELECT imagenUrl FROM sem6_registro_table WHERE imagenUrl IS NOT NULL AND imagenUrl != ''")
+    suspend fun todasLasImagenes(): List<String>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun guardar(registro: Sem6RegistroEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertarSiFalta(registros: List<Sem6RegistroEntity>)
+
+    @Query("UPDATE sem6_registro_table SET seContiene = :seContiene, susceptible = :susceptible, observaciones = :observaciones, capital = :capital, abono = :abono WHERE hoja = :hoja AND id = :id")
+    suspend fun actualizarNotas(hoja: String, id: String, seContiene: String, susceptible: String, observaciones: String, capital: String, abono: String): Int
+
+    @Query("UPDATE sem6_registro_table SET susceptible = :valor WHERE hoja = :hoja AND id = :id")
+    suspend fun actualizarSusceptible(hoja: String, id: String, valor: String): Int
+
+    @Query("UPDATE sem6_registro_table SET capital = :capital WHERE hoja = :hoja AND id = :id")
+    suspend fun actualizarCapital(hoja: String, id: String, capital: String): Int
+
+    @Query("UPDATE sem6_registro_table SET colonia = :colonia WHERE hoja = :hoja AND id = :id")
+    suspend fun actualizarColonia(hoja: String, id: String, colonia: String): Int
+
+    @Query("DELETE FROM sem6_registro_table WHERE hoja = :hoja AND id = :id")
+    suspend fun eliminar(hoja: String, id: String): Int
+}
+
+@Dao
 interface VisitaMapaDao {
     // fin EXCLUSIVO (inicio del lunes siguiente): con BETWEEN las visitas de ese lunes entrarían en la semana anterior.
     @Query("SELECT * FROM visita_mapa_table WHERE fechaDia >= :inicio AND fechaDia < :fin ORDER BY fechaDia ASC, timestamp ASC")

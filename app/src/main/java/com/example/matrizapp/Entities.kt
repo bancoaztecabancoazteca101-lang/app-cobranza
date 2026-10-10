@@ -180,3 +180,38 @@ data class CartuchoDiaEntity(
     @PrimaryKey val fechaDia: Long,
     val cartuchoActivo: Int = 1
 )
+
+/** Registro de Semana 6, 100% dentro de la app (reemplaza la hoja "Cont-Sem-NN" que llenaba el script de Apps Script
+ * `guardarRegistroSemana6`). Una fila por cliente y por semana: [hoja] = "Cont-Sem-NN" (semana ISO). */
+@Entity(tableName = "sem6_registro_table", primaryKeys = ["hoja", "id"])
+data class Sem6RegistroEntity(
+    val hoja: String,
+    val id: String,
+    val nombre: String,
+    val sem: String = "6",
+    val req: String = "",
+    val cu: String = "",
+    val ubicacion: String = "",
+    val imagenUrl: String? = null,
+    val colonia: String = "",
+    val visitas: Int = 0,
+    val ultimaFechaVisita: String = "",
+    val numTT: String = "",
+    val seContiene: String = "",
+    val susceptible: String = "",
+    val observaciones: String = "",
+    val capital: String = "",
+    val abono: String = ""
+)
+
+fun Sem6RegistroEntity.toItem() = Sem6Item(
+    nombre = nombre, sem = sem, req = req, id = id, cu = cu, imagenUrl = imagenUrl, colonia = colonia, visitas = visitas,
+    ultimaFechaVisita = ultimaFechaVisita, numTT = numTT, ubicacion = ubicacion, seContiene = seContiene,
+    susceptible = susceptible, observaciones = observaciones, capital = capital, abono = abono
+)
+
+fun Sem6Item.toEntity(hoja: String) = Sem6RegistroEntity(
+    hoja = hoja, id = id, nombre = nombre, sem = sem, req = req, cu = cu, ubicacion = ubicacion, imagenUrl = imagenUrl,
+    colonia = colonia, visitas = visitas, ultimaFechaVisita = ultimaFechaVisita, numTT = numTT, seContiene = seContiene,
+    susceptible = susceptible, observaciones = observaciones, capital = capital, abono = abono
+)

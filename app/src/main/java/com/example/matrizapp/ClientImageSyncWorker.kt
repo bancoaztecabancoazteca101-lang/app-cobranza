@@ -20,11 +20,10 @@ class ClientImageSyncWorker(appContext: Context, workerParams: WorkerParameters)
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val matriz = container.database.matrizDao().getAllMatriz().first()
-            // Semana 6 no vive en Room: se lee la hoja (hay red) y, si falla, la última copia guardada.
-            val sem6 = try { container.repository.fetchSem6Data(currentSem6SheetName()) } catch (_: Exception) { emptyList() }
-                .ifEmpty { container.sem6CacheStore.load()?.first.orEmpty() }
+            // Semana 6 ya vive en Room (tabla sem6_registro_table).
+            val sem6 = container.database.sem6Dao().todasLasImagenes()
 
-            val fuentes = (matriz.flatMap { listOf(it.imagenUrl, it.imagenUrl2) } + sem6.map { it.imagenUrl })
+            val fuentes = (matriz.flatMap { listOf(it.imagenUrl, it.imagenUrl2) } + sem6)
                 .filter { !it.isNullOrBlank() }.map { it!!.trim() }.distinct()
 
             for (fuente in fuentes) {

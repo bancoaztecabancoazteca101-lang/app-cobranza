@@ -17,7 +17,8 @@ class FiltroFechaViewModel(
     private val repository: SheetsRepository,
     private val sem6CacheStore: Sem6CacheStore,
     private val visitaMapaDao: VisitaMapaDao,
-    private val ticketPagoDao: TicketPagoDao
+    private val ticketPagoDao: TicketPagoDao,
+    private val sem6Dao: Sem6Dao
 ) : ViewModel() {
 
     private fun inicioDeHoy(): Long = java.time.LocalDate.now()
@@ -191,8 +192,8 @@ class FiltroFechaViewModel(
             }
 
             // ── 2) Semana 6 (hoja de la semana actual; si no hay red, la última copia guardada) ──
-            val itemsSem6 = try { repository.fetchSem6Data(currentSem6SheetName()) } catch (e: Exception) { emptyList() }
-                .ifEmpty { sem6CacheStore.load()?.first.orEmpty() }
+            val hojaSem6 = currentSem6SheetName()
+            val itemsSem6 = sem6Dao.obtenerHoja(hojaSem6).map { it.toItem() }
             val busquedaS6 = buscarClienteDeTicket(datos, itemsSem6, { it.nombre }, { it.cu })
             val matchS6 = busquedaS6.match
             if (matchS6 != null) {
@@ -203,13 +204,8 @@ class FiltroFechaViewModel(
                     abono == null || abono <= 0.0 -> mensajes += "Semana 6: ${matchS6.nombre} no tiene Abono capturado, no se marcó Recuperado"
                     monto + 0.005 < abono -> mensajes += "Semana 6: ${matchS6.nombre} pagó $montoTxt, menos del Abono ($${"%.2f".format(java.util.Locale.US, abono)}); no se marcó Recuperado"
                     else -> {
-                        val ok = try {
-                            repository.updateSem6Susceptible(matchS6.id, "Recuperado", sheetName = currentSem6SheetName())
-                        } catch (e: Exception) { false }
+                        val ok = sem6Dao.actualizarSusceptible(hojaSem6, matchS6.id, "Recuperado") > 0
                         if (ok) {
-                            sem6CacheStore.load()?.first?.let { guardados ->
-                                sem6CacheStore.save(guardados.map { if (it.id == matchS6.id) it.copy(susceptible = "Recuperado") else it })
-                            }
                             onSem6Cambio()
                             mensajes += "Semana 6: ${matchS6.nombre} marcado Recuperado ($montoTxt ≥ Abono)"
                         } else mensajes += "Semana 6: no se pudo marcar a ${matchS6.nombre} como Recuperado (revisa tu conexión)"

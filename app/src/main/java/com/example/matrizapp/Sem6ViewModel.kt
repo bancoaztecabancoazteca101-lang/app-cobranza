@@ -1,6 +1,12 @@
 package com.example.matrizapp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -12,13 +18,24 @@ class Sem6ViewModel(
     private val repository: SheetsRepository,
     private val cacheStore: Sem6CacheStore,
     val driveHelper: DriveHelper,
-    private val matrizDao: MatrizDao
+    private val matrizDao: MatrizDao,
+    private val sem6Dao: Sem6Dao,
+    private val appContext: android.content.Context
 ) : ViewModel() {
     /** Cartera de Matriz (local) para buscar al cliente al agregar un registro a Semana 6. */
     val matrizList: StateFlow<List<MatrizEntity>> = matrizDao.getAllMatriz()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _itemsRaw = MutableStateFlow<List<Sem6Item>>(emptyList())
+    // Semana que se está mostrando. Arranca en la actual; el usuario puede elegir una semana pasada desde el selector.
+    private val _semanaSeleccionada = MutableStateFlow(currentSem6SheetName())
+    val semanaSeleccionada: StateFlow<String> = _semanaSeleccionada
+
+    // Semana 6 vive en Room (tabla sem6_registro_table), ya no en la hoja Cont-Sem-NN: cualquier cambio en la tabla
+    // se refleja solo en pantalla.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val _itemsRaw: StateFlow<List<Sem6Item>> = _semanaSeleccionada
+        .flatMapLatest { hoja -> sem6Dao.observarHoja(hoja).map { lista -> lista.map { it.toItem() } } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _orden = MutableStateFlow(OrdenLista.ORIGINAL)
     val orden: StateFlow<OrdenLista> = _orden
@@ -73,12 +90,6 @@ class Sem6ViewModel(
     private val _errorRegistro = MutableStateFlow<String?>(null)
     val errorRegistro: StateFlow<String?> = _errorRegistro
 
-    // Semana que se está mostrando. Arranca en la actual; el usuario puede elegir una
-    // semana pasada desde el selector, y desde ahí se lee/escribe en esa hoja mientras
-    // no la vuelva a cambiar.
-    private val _semanaSeleccionada = MutableStateFlow(currentSem6SheetName())
-    val semanaSeleccionada: StateFlow<String> = _semanaSeleccionada
-
     private val _semanasDisponibles = MutableStateFlow<List<String>>(emptyList())
     val semanasDisponibles: StateFlow<List<String>> = _semanasDisponibles
 
@@ -86,7 +97,7 @@ class Sem6ViewModel(
     fun cargarSemanasDisponibles() {
         viewModelScope.launch {
             try {
-                val lista = repository.listSem6SheetNames()
+                val lista = sem6Dao.hojas()
                 // Por si la semana actual aún no tiene hoja creada (p. ej. lunes muy
                 // temprano), la agregamos igual para que se pueda seleccionar de regreso.
                 _semanasDisponibles.value = (lista + currentSem6SheetName()).distinct()
@@ -101,9 +112,6 @@ class Sem6ViewModel(
     fun seleccionarSemana(sheetName: String) {
         if (sheetName == _semanaSeleccionada.value) return
         _semanaSeleccionada.value = sheetName
-        _itemsRaw.value = emptyList()
-        _isFromCache.value = false
-        cargar()
     }
 
     /** Guarda Se Contiene/Susceptible/Observaciones para un registro y actualiza la lista en
@@ -113,15 +121,8 @@ class Sem6ViewModel(
         _errorNotas.value = null
         viewModelScope.launch {
             try {
-                val ok = repository.updateSem6Notas(id, seContiene, susceptible, observaciones, capital, abono, sheetName = _semanaSeleccionada.value)
-                if (ok) {
-                    _itemsRaw.value = _itemsRaw.value.map { item ->
-                        if (item.id == id) item.copy(seContiene = seContiene, susceptible = susceptible, observaciones = observaciones, capital = capital, abono = abono) else item
-                    }
-                    cacheStore.save(_itemsRaw.value)
-                } else {
-                    _errorNotas.value = "No se encontró el registro en ${_semanaSeleccionada.value.replace("Cont-Sem-", "Semana ")}"
-                }
+                val ok = sem6Dao.actualizarNotas(_semanaSeleccionada.value, id, seContiene, susceptible, observaciones, capital, abono) > 0
+                if (!ok) _errorNotas.value = "No se encontró el registro en ${_semanaSeleccionada.value.replace("Cont-Sem-", "Semana ")}"
                 onDone(ok)
             } catch (e: Exception) {
                 _errorNotas.value = e.message ?: "No se pudo guardar"
@@ -157,13 +158,9 @@ class Sem6ViewModel(
             var ok = 0; var fallidos = 0
             for (c in cambios) {
                 try {
-                    if (repository.updateSem6Capital(c.item.id, c.nuevoCapital, sheetName = _semanaSeleccionada.value)) {
-                        _itemsRaw.value = _itemsRaw.value.map { if (it.id == c.item.id) it.copy(capital = c.nuevoCapital) else it }
-                        ok++
-                    } else fallidos++
+                    if (sem6Dao.actualizarCapital(_semanaSeleccionada.value, c.item.id, c.nuevoCapital) > 0) ok++ else fallidos++
                 } catch (e: Exception) { fallidos++ }
             }
-            cacheStore.save(_itemsRaw.value)
             _aplicandoCapital.value = false
             onDone(ok, fallidos)
         }
@@ -176,9 +173,12 @@ class Sem6ViewModel(
         _errorRegistro.value = null
         viewModelScope.launch {
             try {
-                val creado = repository.appendSem6Row(nombre, sem, req, cu, colonia, ubicacion, numTT, sheetName = _semanaSeleccionada.value)
-                _itemsRaw.value = _itemsRaw.value + creado
-                cacheStore.save(_itemsRaw.value)
+                val id = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
+                val fechaHora = java.text.SimpleDateFormat("d/M/yyyy HH:mm", java.util.Locale("es", "MX")).format(java.util.Date())
+                sem6Dao.guardar(Sem6RegistroEntity(
+                    hoja = _semanaSeleccionada.value, id = id, nombre = nombre, sem = sem, req = req, cu = cu, ubicacion = ubicacion,
+                    colonia = colonia, visitas = 0, ultimaFechaVisita = fechaHora, numTT = numTT
+                ))
                 onDone(true)
             } catch (e: Exception) {
                 _errorRegistro.value = e.message ?: "No se pudo agregar"
@@ -195,13 +195,10 @@ class Sem6ViewModel(
         _errorRegistro.value = null
         viewModelScope.launch {
             try {
-                val ok = repository.deleteSem6Row(id, sheetName = _semanaSeleccionada.value)
+                val ok = sem6Dao.eliminar(_semanaSeleccionada.value, id) > 0
                 if (ok) {
-                    // El Apps Script puede volver a poblar Cont-Sem-NN. Guardamos una
-                    // marca local permanente para que este ID no vuelva a mostrarse.
+                    // Marca permanente: el generador no debe volver a crear este registro desde Matriz.
                     cacheStore.marcarEliminado(id, _semanaSeleccionada.value)
-                    _itemsRaw.value = _itemsRaw.value.filter { it.id != id }
-                    cacheStore.save(_itemsRaw.value)
                 } else {
                     _errorRegistro.value = "No se encontró el registro en ${_semanaSeleccionada.value.replace("Cont-Sem-", "Semana ")}"
                 }
@@ -216,36 +213,40 @@ class Sem6ViewModel(
     }
 
     init {
-        // Muestra de inmediato lo último conocido (si hay) mientras llega la respuesta en vivo.
-        cacheStore.load()?.let { (cachedItems, ts) ->
-            _itemsRaw.value = cachedItems
-            _lastUpdated.value = ts
-            _isFromCache.value = true
+        // 1) Importación ÚNICA de lo que ya existe en las hojas Cont-Sem-NN (se reintenta al abrir hasta que salga bien).
+        viewModelScope.launch(Dispatchers.IO) {
+            val prefs = appContext.getSharedPreferences("sem6_interna", android.content.Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("importado_v1", false)) {
+                val ok = Sem6Generador.importarDesdeHojas(repository, sem6Dao) { hoja, id -> cacheStore.estaEliminado(id, hoja) }
+                if (ok) prefs.edit().putBoolean("importado_v1", true).apply()
+            }
         }
-        cargar()
+        // 2) Reemplazo del script guardarRegistroSemana6: cada vez que cambia Matriz se actualiza Semana 6.
+        viewModelScope.launch(Dispatchers.IO) {
+            matrizDao.getAllMatriz().distinctUntilChanged().collect { lista ->
+                try {
+                    Sem6Generador.actualizar(sem6Dao, lista) { hoja, id -> cacheStore.estaEliminado(id, hoja) }
+                    Sem6Generador.completarColonias(appContext, sem6Dao, currentSem6SheetName())
+                } catch (_: Exception) { }
+            }
+        }
+        _lastUpdated.value = System.currentTimeMillis()
         cargarSemanasDisponibles()
     }
 
+    /** "Actualizar": vuelve a calcular Semana 6 desde Matriz (ya no se descarga nada de Google Sheets). */
     fun cargar() {
         if (_isLoading.value) return
         _isLoading.value = true
         _error.value = null
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val hojaActual = _semanaSeleccionada.value
-                val fresh = repository.fetchSem6Data(sheetName = hojaActual)
-                // No mostrar registros que el usuario ya eliminó manualmente, aunque
-                // el Apps Script los haya vuelto a insertar en Google Sheets.
-                val visibles = cacheStore.filtrarEliminados(fresh, hojaActual)
-                _itemsRaw.value = visibles
+                Sem6Generador.actualizar(sem6Dao, matrizDao.getAllMatriz().first()) { hoja, id -> cacheStore.estaEliminado(id, hoja) }
+                Sem6Generador.completarColonias(appContext, sem6Dao, currentSem6SheetName())
                 _isFromCache.value = false
                 _lastUpdated.value = System.currentTimeMillis()
-                // El cache local de "último dato conocido" solo tiene sentido para la semana
-                // actual (es lo que se muestra sin conexión al abrir la pantalla); una semana
-                // pasada se puede volver a pedir en vivo cuando haga falta.
-                if (_semanaSeleccionada.value == currentSem6SheetName()) cacheStore.save(visibles)
+                cargarSemanasDisponibles()
             } catch (e: Exception) {
-                // No se borra lo que ya había en pantalla (cache o carga anterior).
                 _error.value = e.message ?: "No se pudo actualizar"
             } finally {
                 _isLoading.value = false
