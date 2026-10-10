@@ -1,5 +1,8 @@
 package com.example.matrizapp
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -65,7 +68,11 @@ fun FiltroFechaScreen(viewModel: FiltroFechaViewModel, notificacionesHelper: Not
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FiltroItemCard(item:MatrizEntity,df:SimpleDateFormat,driveHelper:DriveHelper,onClick:()->Unit){val esRetorno=item.estado.contains("retorno",true);Card(onClick=onClick,modifier=Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=if(esRetorno)Color(0xFFBDBDBD)else MaterialTheme.colorScheme.surface)){Row(Modifier.padding(16.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){PortadaThumbnail(item.imagenUrl,driveHelper);Column(Modifier.weight(1f)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(item.nombre,style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f));StatusBadge(item.estado)};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("TT: ${item.numTT}",style=MaterialTheme.typography.bodySmall);Text("Req: ${item.requisito.ifBlank{"-"}}",style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.Bold)};ColoniaLabel(item.ubicacion);Spacer(Modifier.height(4.dp));ContactActionsRow(numTT=item.numTT,ref1=item.ref1,ref2=item.ref2,ubicacion=item.ubicacion)}}}}
+fun FiltroItemCard(item:MatrizEntity,df:SimpleDateFormat,driveHelper:DriveHelper,onClick:()->Unit){val esRetorno=item.estado.contains("retorno",true)
+    // Cuentas de 6 semanas (Sem = 6): se resaltan con borde y fondo morados y una etiqueta "SEM 6" para identificarlas de un vistazo.
+    val esSem6=item.semana.trim()=="6";val morado=Color(0xFF8E24AA)
+    val fondo=when{esRetorno->Color(0xFFBDBDBD);esSem6->morado.copy(alpha=0.16f).compositeOver(MaterialTheme.colorScheme.surface);else->MaterialTheme.colorScheme.surface}
+    Card(onClick=onClick,modifier=Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=fondo),border=if(esSem6)BorderStroke(2.dp,morado)else null){Row(Modifier.padding(16.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){PortadaThumbnail(item.imagenUrl,driveHelper);Column(Modifier.weight(1f)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(item.nombre,style=MaterialTheme.typography.titleSmall,modifier=Modifier.weight(1f));if(esSem6){Surface(color=morado,shape=RoundedCornerShape(6.dp)){Text("SEM 6",color=Color.White,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.labelSmall,modifier=Modifier.padding(horizontal=6.dp,vertical=2.dp))};Spacer(Modifier.width(6.dp))};StatusBadge(item.estado)};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("TT: ${item.numTT}",style=MaterialTheme.typography.bodySmall);Text("Req: ${item.requisito.ifBlank{"-"}}",style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.Bold)};ColoniaLabel(item.ubicacion);Spacer(Modifier.height(4.dp));ContactActionsRow(numTT=item.numTT,ref1=item.ref1,ref2=item.ref2,ubicacion=item.ubicacion)}}}}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
