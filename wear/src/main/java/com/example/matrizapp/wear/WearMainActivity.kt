@@ -1,6 +1,8 @@
 package com.example.matrizapp.wear
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -38,6 +40,7 @@ class WearMainActivity : ComponentActivity() {
     private var selectedRecord by mutableStateOf<JSONObject?>(null)
     private var lastUpdated by mutableStateOf(0L)
     private var requesting by mutableStateOf(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,6 +91,8 @@ class WearMainActivity : ComponentActivity() {
     private fun requestSnapshot() {
         if (requesting) return
         requesting = true
+        val previousUpdated = getSharedPreferences(MatrizWearDataService.PREFS, MODE_PRIVATE)
+            .getLong(MatrizWearDataService.KEY_UPDATED, 0L)
         syncError = "Conectando con Matriz del teléfono…"
         Wearable.getNodeClient(this).connectedNodes
             .addOnSuccessListener { nodes ->
@@ -105,8 +110,13 @@ class WearMainActivity : ComponentActivity() {
                             sent = true
                             pending--
                             if (pending == 0) {
-                                requesting = false
-                                if (sent) syncError = null
+                                if (sent) {
+                                    syncError = "Esperando los datos de Matriz…"
+                                    waitForSnapshot(previousUpdated, 0)
+                                } else {
+                                    requesting = false
+                                    syncError = "No se pudo solicitar la consulta al teléfono."
+                                }
                             }
                         }
                         .addOnFailureListener { error ->
@@ -123,6 +133,24 @@ class WearMainActivity : ComponentActivity() {
                 requesting = false
                 syncError = error.localizedMessage ?: "No se pudo localizar el teléfono emparejado."
             }
+    }
+
+    private fun waitForSnapshot(previousUpdated: Long, attempt: Int) {
+        mainHandler.postDelayed({
+            val savedUpdated = getSharedPreferences(MatrizWearDataService.PREFS, MODE_PRIVATE)
+                .getLong(MatrizWearDataService.KEY_UPDATED, 0L)
+            if (savedUpdated > previousUpdated) {
+                loadCache()
+                requesting = false
+                syncError = null
+            } else if (attempt < 20) {
+                waitForSnapshot(previousUpdated, attempt + 1)
+            } else {
+                loadCache()
+                requesting = false
+                syncError = "El teléfono no respondió. Se conservan los últimos datos guardados."
+            }
+        }, 500L)
     }
 }
 
