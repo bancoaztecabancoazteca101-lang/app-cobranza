@@ -209,25 +209,48 @@ private fun HomeScreen(
 
 @Composable
 private fun SectionScreen(title: String, rows: JSONArray, onBack: () -> Unit, onSelect: (JSONObject) -> Unit) {
+    var query by remember(title) { mutableStateOf("") }
+    val allRows = remember(rows) {
+        (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }
+    }
+    val filteredRows = remember(allRows, query) {
+        val q = query.trim()
+        if (q.isEmpty()) allRows
+        else allRows.filter { it.toString().contains(q, ignoreCase = true) }
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = onBack) { Text("Atrás") }
             Text(title, style = MaterialTheme.typography.title3, fontWeight = FontWeight.Bold)
         }
-        if (rows.length() == 0) Text("No hay registros disponibles.", modifier = Modifier.padding(8.dp))
-        else LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(rows.length()) { index ->
-                val row = rows.optJSONObject(index) ?: JSONObject()
+        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Text("Buscar en todos los registros", style = MaterialTheme.typography.caption2)
+            BasicTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                singleLine = true,
+                textStyle = MaterialTheme.typography.body2
+            )
+        }
+        Text("${filteredRows.size} registros", style = MaterialTheme.typography.caption2)
+        if (filteredRows.isEmpty()) {
+            Text(if (allRows.isEmpty()) "No hay registros disponibles." else "No hay coincidencias.", modifier = Modifier.padding(8.dp))
+        } else LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(filteredRows) { row ->
                 Card(onClick = { onSelect(row) }, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(8.dp)) {
                         Text(row.optString("nombre", row.optString("titulo", "Registro")), fontWeight = FontWeight.Bold, maxLines = 2)
                         val subtitle = listOf(
                             row.optString("estado"), row.optString("numTT"), row.optString("cu"),
-                            row.optString("colonia"), row.optString("hora")
-                        ).filter { it.isNotBlank() && it != "null" }.joinToString(" · ")
-                        if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.caption2, maxLines = 2)
+                            row.optString("semana", row.optString("sem")), row.optString("colonia"),
+                            row.optString("hora"), row.optString("fecha"), row.optString("sucursal")
+                        ).filter { it.isNotBlank() && it != "null" }.distinct().joinToString(" · ")
+                        if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.caption2, maxLines = 3)
                         val amount = row.optString("requisito", row.optString("req", row.optString("valor")))
                         if (amount.isNotBlank() && amount != "null") Text("Req: $amount", style = MaterialTheme.typography.caption2)
+                        val address = row.optString("ubicacion")
+                        if (address.isNotBlank() && address != "null") Text(address, style = MaterialTheme.typography.caption2, maxLines = 2)
                     }
                 }
             }
@@ -246,9 +269,12 @@ private fun DetailScreen(item: JSONObject, onBack: () -> Unit) {
         val keys = item.keys()
         while (keys.hasNext()) {
             val key = keys.next()
-            if (key in setOf("imagenUrl", "imagenUrl2", "ubicacionRaw", "ubicacion", "nombre", "titulo", "id", "fecha")) continue
             val value = item.optString(key)
-            if (value.isNotBlank() && value != "null" && value != "0") Text("${keyLabel(key)}: $value", style = MaterialTheme.typography.body2)
+            if (value.isBlank() || value == "null" || value == "0" || key == "nombre" || key == "titulo") continue
+            when (key) {
+                "imagenUrl", "imagenUrl2" -> Text(if (value.isNotBlank()) "${keyLabel(key)}: Foto disponible" else "", style = MaterialTheme.typography.body2)
+                else -> Text("${keyLabel(key)}: $value", style = MaterialTheme.typography.body2)
+            }
         }
     }
 }
