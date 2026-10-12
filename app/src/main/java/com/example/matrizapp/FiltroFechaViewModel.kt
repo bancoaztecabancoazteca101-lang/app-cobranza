@@ -278,7 +278,9 @@ internal fun tokensNombre(nombre: String): List<String> =
     quitarAcentos(nombre).uppercase().split(Regex("[^A-Z]+")).filter { it.length >= 2 }
 
 /** Igual, o a 1 letra de diferencia (error típico de OCR) si la palabra tiene 5+ letras. */
-internal fun tokenParecido(a: String, b: String): Boolean {
+internal fun tokenParecido(a0: String, b0: String): Boolean {
+    // El OCR confunde "I" con "L" (Iván/Lván): para comparar se tratan como la misma letra.
+    val a = a0.replace('L', 'I'); val b = b0.replace('L', 'I')
     if (a == b) return true
     if (a.length < 5 || b.length < 5 || kotlin.math.abs(a.length - b.length) > 1) return false
     var i = 0; var j = 0; var difs = 0

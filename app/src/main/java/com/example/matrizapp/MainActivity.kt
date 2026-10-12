@@ -105,6 +105,8 @@ class MainActivity : ComponentActivity() {
                 // El banner arriba SOLO se usa para el cierre inesperado de la app. Los errores de
                 // sincronización (sin internet, etc.) van directo al área de Notificaciones (el contador
                 // del menú) sin interrumpir la pantalla.
+                val scopeAvisos = rememberCoroutineScope()
+                var bannerCartucho by remember { mutableStateOf<AvisoCartucho?>(null) } // aviso de cartucho (con botón para cambiar)
                 var bannerMensaje by remember { mutableStateOf<String?>(if (previousCrash != null) "La app tuvo un cierre inesperado. Abre Notificaciones para ver el detalle." else null) }
                 fun agregarNotificacion(mensaje: String) {
                     if (notificacionesApp.firstOrNull()?.mensaje == mensaje) return // sin repetidas seguidas (auto-sync cada pocos minutos)
@@ -125,6 +127,12 @@ class MainActivity : ComponentActivity() {
                 val sem6Vm: Sem6ViewModel = viewModel(factory = factory)
                 val smsVm: SmsViewModel = viewModel(factory = factory)
                 val callVm: CallViewModel = viewModel(factory = factory)
+                LaunchedEffect(Unit) {
+                    matrizVm.avisoCartucho.collect { a ->
+                        agregarNotificacion("Cartucho ${a.cartucho}: llevas ${a.visitas} visitas. Cambia al cartucho ${a.cartucho + 1} para no olvidarlo (Mapa → Cambiar a ${a.cartucho + 1}).")
+                        bannerCartucho = a
+                    }
+                }
                 val bloqueVm: BloqueHorarioViewModel = viewModel(factory = factory)
                 val plantillaVm: PlantillaSmsViewModel = viewModel(factory = factory)
                 val rutaIAVm: RutaIAViewModel = viewModel(factory = factory)
@@ -306,6 +314,28 @@ class MainActivity : ComponentActivity() {
                         })
                     }) { innerPadding ->
                         Column(modifier = Modifier.fillMaxSize()) {
+                            // Al llegar a 20 visitas en el cartucho activo: aviso con botón para cambiar de cartucho.
+                            bannerCartucho?.let { aviso ->
+                                Surface(
+                                    tonalElevation = 4.dp, color = MaterialTheme.colorScheme.tertiaryContainer,
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), shape = MaterialTheme.shapes.small
+                                ) {
+                                    Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(20.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Cartucho ${aviso.cartucho}: ${aviso.visitas} visitas. Cambia al cartucho ${aviso.cartucho + 1} para no olvidarlo.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                                        TextButton(onClick = {
+                                            val dao = container.database.visitaMapaDao()
+                                            scopeAvisos.launch(kotlinx.coroutines.Dispatchers.IO) { dao.asegurarCartuchoDia(aviso.dia); dao.setCartuchoActivo(aviso.dia, aviso.cartucho + 1) }
+                                            androidx.core.app.NotificationManagerCompat.from(this@MainActivity).cancel(CartuchoAviso.NOTIF_ID)
+                                            bannerCartucho = null
+                                        }) { Text("Cambiar a ${aviso.cartucho + 1}") }
+                                        IconButton(onClick = { bannerCartucho = null }, modifier = Modifier.size(32.dp)) {
+                                            Icon(Icons.Default.Close, contentDescription = "Cerrar aviso", modifier = Modifier.size(18.dp))
+                                        }
+                                    }
+                                }
+                            }
                             bannerMensaje?.let { message ->
                                 Surface(
                                     tonalElevation = 2.dp,

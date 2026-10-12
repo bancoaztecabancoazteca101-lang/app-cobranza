@@ -12,12 +12,16 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.TimeUnit
+
+/** Evento para el aviso dentro de la app: se llegó a 20 visitas en el cartucho activo de hoy. */
+data class AvisoCartucho(val dia: Long, val cartucho: Int, val visitas: Int)
 
 class MatrizViewModel(
     private val repository: SheetsRepository,
@@ -27,7 +31,33 @@ class MatrizViewModel(
     private val notificacionesHelper: NotificacionesHelper,
     private val visitaMapaDao: VisitaMapaDao
 ) : ViewModel() {
+    private val _avisoCartucho = kotlinx.coroutines.flow.MutableSharedFlow<AvisoCartucho>(extraBufferCapacity = 4)
+    val avisoCartucho: kotlinx.coroutines.flow.SharedFlow<AvisoCartucho> = _avisoCartucho
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun vigilarCartucho() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // "hoy" se recalcula cada minuto para que el vigilante siga bien después de la medianoche.
+            kotlinx.coroutines.flow.flow { while (true) { emit(inicioDelDia()); kotlinx.coroutines.delay(60_000) } }
+                .distinctUntilChanged()
+                .flatMapLatest { hoy ->
+                    val fin = hoy + 24L * 60 * 60 * 1000
+                    combine(visitaMapaDao.getVisitasSemana(hoy, fin), visitaMapaDao.observarCartuchosSemana(hoy, fin)) { visitas, cartuchos ->
+                        val activo = cartuchos.firstOrNull()?.cartuchoActivo ?: 1
+                        Triple(hoy, activo, visitas.count { it.cartucho == activo })
+                    }
+                }
+                .distinctUntilChanged()
+                .collect { (hoy, activo, n) ->
+                    if (n >= CartuchoAviso.VISITAS_AVISO && notificacionesHelper.avisarCartucho(hoy, activo, n)) {
+                        _avisoCartucho.tryEmit(AvisoCartucho(hoy, activo, n))
+                    }
+                }
+        }
+    }
+
     init {
+        vigilarCartucho()
         // Igual que en Filtro Fecha: cada vez que cambian los datos de Matriz se revisan los
         // "Retorno"/"App" de HOY con hora y se reprograman/cancelan las alarmas locales. Así no
         // hace falta ir también a Filtro Fecha a repetir la captura. Corre en Dispatchers.IO

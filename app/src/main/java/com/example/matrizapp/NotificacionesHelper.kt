@@ -20,6 +20,12 @@ class NotificacionesHelper(private val context: Context) {
     init { crearCanal() }
     /** Atajo para los ViewModels: confirma el retorno de este registro como puesto/cambiado hoy. */
     fun confirmarRetorno(id: String) = confirmarRetornoHoy(context, id)
+    /** Avisa (barra del teléfono, con botón para cambiar de cartucho) al llegar a 20 visitas. true = es la primera vez hoy. */
+    fun avisarCartucho(dia: Long, cartuchoActivo: Int, visitas: Int): Boolean {
+        if (!CartuchoAviso.marcarSiNuevo(context, dia, cartuchoActivo)) return false
+        CartuchoAviso.mostrar(context, dia, cartuchoActivo, visitas)
+        return true
+    }
     private fun crearCanal() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

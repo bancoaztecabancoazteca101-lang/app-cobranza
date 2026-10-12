@@ -343,7 +343,9 @@ fun MatrizFullFormDialog(
     mostrarCamposExtra: Boolean = true,
     // Solo para registro nuevo (item == null): valores iniciales de los campos (lo usa Ruta IA para
     // registrar como cliente nuevo una parada que no está en Matriz).
-    prefill: MatrizEntity? = null
+    prefill: MatrizEntity? = null,
+    // Si viene, el aviso de "registros en la misma ubicación" deja abrir ese registro en Matriz.
+    onAbrirRegistro: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val esNuevo = item == null
@@ -606,7 +608,7 @@ fun MatrizFullFormDialog(
                         }
                     )
                 }
-                AvisoMismaUbicacion(rememberCoincidenciasUbicacion(ubicacion, item?.id))
+                AvisoMismaUbicacion(rememberCoincidenciasUbicacion(ubicacion, item?.id), onAbrirRegistro)
                 if (mostrarCamposExtra) {
                     OutlinedTextField(
                         value = domicilioLaboral, onValueChange = { domicilioLaboral = filtrarCoordenadas(it) }, label = { Text("Domicilio Laboral") },
@@ -1346,7 +1348,10 @@ fun FiltroFechaOrdenButton(
  * nombre más probable en la imagen (línea sin números, 2 a 5 palabras, elige la de texto
  * más grande/alto ya que suele ser el título/nombre del cliente en la pantalla fotografiada).
  * Devuelve null si no encuentra nada que parezca un nombre. */
-suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): String? = suspendCancellableCoroutine { cont ->
+suspend fun extraerNombreDeImagen(context: android.content.Context, uri: Uri): String? =
+    extraerNombreDeImagenCrudo(context, uri)?.let { NombreOcr.corregir(context, it) }
+
+private suspend fun extraerNombreDeImagenCrudo(context: android.content.Context, uri: Uri): String? = suspendCancellableCoroutine { cont ->
     try {
         val image = OcrImagen.cargar(context, uri)
         val alturaImagen = image.height
@@ -1483,7 +1488,12 @@ fun diasAtrasoASemana(dias: Int): Int = (dias / 7) + 1
  * (ej. "Requerido $2,034" / "18 días de atraso") para llenar también los campos Req y Sem.
  * No reemplaza a extraerNombreDeImagen, que se sigue usando donde solo hace falta el
  * nombre (buscador con foto, Solicitud, exportar Matriz). */
-suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: Uri): DatosClienteOcr = suspendCancellableCoroutine { cont ->
+suspend fun extraerDatosClienteDeImagen(context: android.content.Context, uri: Uri): DatosClienteOcr {
+    val d = extraerDatosClienteDeImagenCrudo(context, uri)
+    return d.nombre?.let { d.copy(nombre = NombreOcr.corregir(context, it)) } ?: d
+}
+
+private suspend fun extraerDatosClienteDeImagenCrudo(context: android.content.Context, uri: Uri): DatosClienteOcr = suspendCancellableCoroutine { cont ->
     try {
         val image = OcrImagen.cargar(context, uri)
         val alturaImagen = image.height
@@ -1568,7 +1578,12 @@ private fun esLineaDeNombreTicket(l: String): Boolean =
  * depender de un encabezado fijo. El monto siempre aparece como "Usted pagó: $X.XX". El CU
  * a veces viene parcialmente enmascarado con X (formato de terminal), en cuyo caso el regex
  * simplemente no encuentra match y queda null -- el match en el ViewModel se hace por nombre. */
-suspend fun extraerDatosTicketDeImagen(context: android.content.Context, uri: Uri): DatosTicketOcr = suspendCancellableCoroutine { cont ->
+suspend fun extraerDatosTicketDeImagen(context: android.content.Context, uri: Uri): DatosTicketOcr {
+    val d = extraerDatosTicketDeImagenCrudo(context, uri)
+    return d.nombre?.let { d.copy(nombre = NombreOcr.corregir(context, it)) } ?: d
+}
+
+private suspend fun extraerDatosTicketDeImagenCrudo(context: android.content.Context, uri: Uri): DatosTicketOcr = suspendCancellableCoroutine { cont ->
     try {
         val image = OcrImagen.cargar(context, uri)
         val recognizer = OcrImagen.reconocedor
@@ -1642,7 +1657,7 @@ fun rememberCoincidenciasUbicacion(coordenadas: String?, excluirId: String?): Li
 }
 
 @Composable
-fun AvisoMismaUbicacion(coincidencias: List<CoincidenciaUbicacion>) {
+fun AvisoMismaUbicacion(coincidencias: List<CoincidenciaUbicacion>, onAbrir: ((String) -> Unit)? = null) {
     if (coincidencias.isEmpty()) return
     var abierto by remember(coincidencias) { mutableStateOf(false) }
     Surface(
@@ -1663,7 +1678,14 @@ fun AvisoMismaUbicacion(coincidencias: List<CoincidenciaUbicacion>) {
             if (abierto) {
                 Spacer(Modifier.height(6.dp))
                 coincidencias.forEach {
-                    Text("• ${it.nombre} (${it.distanciaM} m)", color = MaterialTheme.colorScheme.onErrorContainer)
+                    if (onAbrir != null) {
+                        // Toca el nombre para ir a ese registro en Matriz.
+                        TextButton(onClick = { onAbrir(it.id) }, contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+                            Text("• ${it.nombre} (${it.distanciaM} m) — Abrir en Matriz", color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                    } else {
+                        Text("• ${it.nombre} (${it.distanciaM} m)", color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
                 }
             }
         }

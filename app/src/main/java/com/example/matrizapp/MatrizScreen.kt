@@ -55,10 +55,11 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
     itemToView?.let { item ->
-        MatrizDetailDialog(item, viewModel.driveHelper, onDismiss = { itemToView = null }, onEditClick = { itemToEdit = item; itemToView = null })
+        MatrizDetailDialog(item, viewModel.driveHelper, onDismiss = { itemToView = null }, onEditClick = { itemToEdit = item; itemToView = null },
+            onAbrirRegistro = { id -> allItems.firstOrNull { it.id == id }?.let { itemToView = it } })
     }
     itemToEdit?.let { item ->
-        MatrizFullFormDialog(item, viewModel, onDismiss = { itemToEdit = null }, onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura ->
+        MatrizFullFormDialog(item, viewModel, onDismiss = { itemToEdit = null }, onAbrirRegistro = { id -> allItems.firstOrNull { it.id == id }?.let { itemToEdit = null; itemToView = it } }, onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura ->
             viewModel.cambiarIdYGuardar(item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura) { exito, error ->
                 if (!exito) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
             }
@@ -70,6 +71,7 @@ fun MatrizScreen(viewModel: MatrizViewModel, searchQuery: String = "", filtro: (
             item = null,
             viewModel = viewModel,
             onDismiss = { showCreateDialog = false },
+            onAbrirRegistro = { id -> allItems.firstOrNull { it.id == id }?.let { showCreateDialog = false; itemToView = it } },
             onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura ->
                 viewModel.crearRegistro(idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, ref3, ref4, diaPago, domicilioLaboral, diasAtraso, diasApertura) { creado ->
                     itemToView = creado
@@ -130,7 +132,9 @@ fun formatearMontoMatriz(req: String): String {
 fun MatrizDetailDialog(
     item: MatrizEntity, driveHelper: DriveHelper, onDismiss: () -> Unit, onEditClick: (() -> Unit)?,
     // Si viene, se muestra el botón "Ruta en Maps" (lo usa Ruta IA para navegar a la parada).
-    onRutaClick: (() -> Unit)? = null
+    onRutaClick: (() -> Unit)? = null,
+    // Si viene, el aviso de registros cercanos (<10 m) deja abrir ese registro en Matriz.
+    onAbrirRegistro: ((String) -> Unit)? = null
 ) {
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = LocalContext.current
@@ -151,7 +155,7 @@ fun MatrizDetailDialog(
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { PortadaThumbnail(rawImageUrl = item.imagenUrl, driveHelper = driveHelper, size = 160.dp) }
-                AvisoMismaUbicacion(rememberCoincidenciasUbicacion(item.ubicacion, item.id))
+                AvisoMismaUbicacion(rememberCoincidenciasUbicacion(item.ubicacion, item.id), onAbrirRegistro)
                 Text("ID: ${item.id}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 StatusBadge(item.estado)
                 Spacer(Modifier.height(2.dp))
