@@ -17,7 +17,8 @@ class FiltroFechaViewModel(
     private val repository: SheetsRepository,
     private val sem6CacheStore: Sem6CacheStore,
     private val visitaMapaDao: VisitaMapaDao,
-    private val ticketPagoDao: TicketPagoDao
+    private val ticketPagoDao: TicketPagoDao,
+    private val sem6Dao: Sem6Dao
 ) : ViewModel() {
 
     private fun inicioDeHoy(): Long = java.time.LocalDate.now()
@@ -120,6 +121,8 @@ class FiltroFechaViewModel(
         viewModelScope.launch {
             val anterior = matrizDao.getById(id)
             matrizDao.updateEstadoYHora(id, nuevoEstado, nuevaHora)
+            // Retorno: el aviso solo suena si el status o la hora cambiaron en este guardado.
+            if (anterior != null && (anterior.estado.trim() != nuevoEstado.trim() || (anterior.hora ?: "").trim() != nuevaHora.trim())) notificacionesHelper.confirmarRetorno(id)
             // Mapa: editar un registro cuenta como visita de hoy.
             if (anterior != null) visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
             onResult(notificacionesHelper.evaluarProgramacion(nuevoEstado, nuevaHora))
@@ -189,8 +192,8 @@ class FiltroFechaViewModel(
             }
 
             // ── 2) Semana 6 (hoja de la semana actual; si no hay red, la última copia guardada) ──
-            val itemsSem6 = try { repository.fetchSem6Data(currentSem6SheetName()) } catch (e: Exception) { emptyList() }
-                .ifEmpty { sem6CacheStore.load()?.first.orEmpty() }
+            val hojaSem6 = currentSem6SheetName()
+            val itemsSem6 = sem6Dao.obtenerHoja(hojaSem6).map { it.toItem() }
             val busquedaS6 = buscarClienteDeTicket(datos, itemsSem6, { it.nombre }, { it.cu })
             val matchS6 = busquedaS6.match
             if (matchS6 != null) {
@@ -201,9 +204,7 @@ class FiltroFechaViewModel(
                     abono == null || abono <= 0.0 -> mensajes += "Semana 6: ${matchS6.nombre} no tiene Abono capturado, no se marcó Recuperado"
                     monto + 0.005 < abono -> mensajes += "Semana 6: ${matchS6.nombre} pagó $montoTxt, menos del Abono ($${"%.2f".format(java.util.Locale.US, abono)}); no se marcó Recuperado"
                     else -> {
-                        val ok = try {
-                            repository.updateSem6Susceptible(matchS6.id, "Recuperado", sheetName = currentSem6SheetName())
-                        } catch (e: Exception) { false }
+                        val ok = sem6Dao.actualizarSusceptible(hojaSem6, matchS6.id, "Recuperado") > 0
                         if (ok) {
                             // Si ese cliente también está en Matriz (mismo CU), sale de las llamadas/SMS automáticos de hoy:
                             // el comprobante puede llegar justo cuando corre un bloque o el catchup.
@@ -211,9 +212,6 @@ class FiltroFechaViewModel(
                             if (cuS6.isNotEmpty()) {
                                 matrizDao.getAllMatriz().first().firstOrNull { it.folioP?.filter { c -> c.isDigit() } == cuS6 }
                                     ?.let { AutomatizacionPrefs.excluirHoy(context, it.id, true) }
-                            }
-                            sem6CacheStore.load()?.first?.let { guardados ->
-                                sem6CacheStore.save(guardados.map { if (it.id == matchS6.id) it.copy(susceptible = "Recuperado") else it })
                             }
                             onSem6Cambio()
                             mensajes += "Semana 6: ${matchS6.nombre} marcado Recuperado ($montoTxt ≥ Abono)"
@@ -287,7 +285,9 @@ internal fun tokensNombre(nombre: String): List<String> =
     quitarAcentos(nombre).uppercase().split(Regex("[^A-Z]+")).filter { it.length >= 2 }
 
 /** Igual, o a 1 letra de diferencia (error típico de OCR) si la palabra tiene 5+ letras. */
-internal fun tokenParecido(a: String, b: String): Boolean {
+internal fun tokenParecido(a0: String, b0: String): Boolean {
+    // El OCR confunde "I" con "L" (Iván/Lván): para comparar se tratan como la misma letra.
+    val a = a0.replace('L', 'I'); val b = b0.replace('L', 'I')
     if (a == b) return true
     if (a.length < 5 || b.length < 5 || kotlin.math.abs(a.length - b.length) > 1) return false
     var i = 0; var j = 0; var difs = 0

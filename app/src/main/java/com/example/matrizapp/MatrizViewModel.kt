@@ -12,12 +12,16 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.TimeUnit
+
+/** Evento para el aviso dentro de la app: se llegó a 20 visitas en el cartucho activo de hoy. */
+data class AvisoCartucho(val dia: Long, val cartucho: Int, val visitas: Int)
 
 class MatrizViewModel(
     private val repository: SheetsRepository,
@@ -27,7 +31,33 @@ class MatrizViewModel(
     private val notificacionesHelper: NotificacionesHelper,
     private val visitaMapaDao: VisitaMapaDao
 ) : ViewModel() {
+    private val _avisoCartucho = kotlinx.coroutines.flow.MutableSharedFlow<AvisoCartucho>(extraBufferCapacity = 4)
+    val avisoCartucho: kotlinx.coroutines.flow.SharedFlow<AvisoCartucho> = _avisoCartucho
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun vigilarCartucho() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // "hoy" se recalcula cada minuto para que el vigilante siga bien después de la medianoche.
+            kotlinx.coroutines.flow.flow { while (true) { emit(inicioDelDia()); kotlinx.coroutines.delay(60_000) } }
+                .distinctUntilChanged()
+                .flatMapLatest { hoy ->
+                    val fin = hoy + 24L * 60 * 60 * 1000
+                    combine(visitaMapaDao.getVisitasSemana(hoy, fin), visitaMapaDao.observarCartuchosSemana(hoy, fin)) { visitas, cartuchos ->
+                        val activo = cartuchos.firstOrNull()?.cartuchoActivo ?: 1
+                        Triple(hoy, activo, visitas.count { it.cartucho == activo })
+                    }
+                }
+                .distinctUntilChanged()
+                .collect { (hoy, activo, n) ->
+                    if (n >= CartuchoAviso.VISITAS_AVISO && notificacionesHelper.avisarCartucho(hoy, activo, n)) {
+                        _avisoCartucho.tryEmit(AvisoCartucho(hoy, activo, n))
+                    }
+                }
+        }
+    }
+
     init {
+        vigilarCartucho()
         // Igual que en Filtro Fecha: cada vez que cambian los datos de Matriz se revisan los
         // "Retorno"/"App" de HOY con hora y se reprograman/cancelan las alarmas locales. Así no
         // hace falta ir también a Filtro Fecha a repetir la captura. Corre en Dispatchers.IO
@@ -107,6 +137,7 @@ class MatrizViewModel(
         viewModelScope.launch {
             val anterior = matrizDao.getById(id)
             matrizDao.updateGestionLocal(id, nuevoEstado, observaciones)
+            if (anterior != null && anterior.estado.trim() != nuevoEstado.trim()) notificacionesHelper.confirmarRetorno(id)
             // Mapa: editar solo cuenta como visita si el registro que se editó corresponde a HOY.
             if (anterior != null && anterior.fecha != null && inicioDelDia(anterior.fecha) == inicioDelDia()) {
                 visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
@@ -124,6 +155,7 @@ class MatrizViewModel(
         diasAtraso: String? = null, diasApertura: String? = null
     ) {
         viewModelScope.launch {
+            val previo = matrizDao.getById(id)
             matrizDao.updateRegistroCompleto(
                 id, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
                 observaciones, estado, ubicacion, fecha, hora, ruta, folioP,
@@ -132,6 +164,8 @@ class MatrizViewModel(
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() },
                 diasAtraso?.takeIf { it.isNotBlank() }, diasApertura?.takeIf { it.isNotBlank() }
             )
+            // Retorno: el aviso solo suena si el status o la hora de retorno cambiaron en ESTE guardado.
+            if (previo == null || previo.estado.trim() != estado.trim() || (previo.hora ?: "").trim() != (hora ?: "").trim()) notificacionesHelper.confirmarRetorno(id)
             // Mapa: editar solo cuenta como visita si la fecha guardada corresponde a HOY.
             if (fecha != null && inicioDelDia(fecha) == inicioDelDia()) {
                 visitaMapaDao.registrarVisitaHoy("M:$id", nombre.trim().uppercase(), ubicacion, id)
@@ -166,6 +200,7 @@ class MatrizViewModel(
                     return@launch
                 }
             }
+            val previoId = matrizDao.getById(idFinal)
             matrizDao.updateRegistroCompleto(
                 idFinal, nombre.trim().uppercase(), semana, requisito, numTT, ref1, ref2,
                 observaciones, estado, ubicacion, fecha, hora, ruta, folioP,
@@ -174,6 +209,7 @@ class MatrizViewModel(
                 diaPago?.takeIf { it.isNotBlank() }, domicilioLaboral?.takeIf { it.isNotBlank() },
                 diasAtraso?.takeIf { it.isNotBlank() }, diasApertura?.takeIf { it.isNotBlank() }
             )
+            if (previoId == null || previoId.estado.trim() != estado.trim() || (previoId.hora ?: "").trim() != (hora ?: "").trim()) notificacionesHelper.confirmarRetorno(idFinal)
             // Mapa: editar solo cuenta como visita si la fecha guardada corresponde a HOY.
             if (fecha != null && inicioDelDia(fecha) == inicioDelDia()) {
                 visitaMapaDao.registrarVisitaHoy("M:$idFinal", nombre.trim().uppercase(), ubicacion, idFinal)
@@ -213,6 +249,8 @@ class MatrizViewModel(
         )
         viewModelScope.launch {
             matrizDao.insertOne(nuevo)
+            // Retorno: un registro recién creado puede traer su status/hora de retorno: cuenta como confirmado hoy.
+            notificacionesHelper.confirmarRetorno(idFinal)
             // Mapa: al crear un registro, solo se registra como visita si su fecha es HOY.
             if (inicioDelDia(fecha) == inicioDelDia()) {
                 visitaMapaDao.registrarVisitaHoy("M:$idFinal", nuevo.nombre, nuevo.ubicacion, idFinal)
