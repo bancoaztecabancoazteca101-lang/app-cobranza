@@ -74,9 +74,6 @@ interface VisitaMapaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun reemplazar(visita: VisitaMapaEntity)
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun registrarVarias(visitas: List<VisitaMapaEntity>)
-
     @Query("SELECT cartuchoActivo FROM cartucho_dia_table WHERE fechaDia = :fechaDia LIMIT 1")
     suspend fun getCartuchoActivo(fechaDia: Long): Int?
 
@@ -111,26 +108,6 @@ suspend fun VisitaMapaDao.registrarVisitaHoy(clave: String, nombre: String, ubic
         val cartucho = getCartuchoActivo(hoy) ?: 1
         registrar(VisitaMapaEntity(clave, hoy, nombre, partes.joinToString(","), matrizId, cartucho))
         borrarAnteriores(hoy - 120L * 24 * 60 * 60 * 1000) // se conservan ~4 meses
-    } catch (_: Exception) { }
-}
-
-/** Guarda en el historial del Mapa TODOS los registros de hoy (los mismos que muestra Filtro Fecha:
- * fecha = hoy y status distinto de PASE). Así, si después cambian su fecha, el punto de hoy se conserva.
- * IGNORE: lo ya guardado no se duplica. */
-suspend fun VisitaMapaDao.registrarRegistrosDeHoy(items: List<MatrizEntity>) {
-    try {
-        val hoy = inicioDelDia()
-        val finHoy = hoy + 24L * 60 * 60 * 1000
-        asegurarCartuchoDia(hoy)
-        val cartucho = getCartuchoActivo(hoy) ?: 1
-        val nuevos = items.mapNotNull { m ->
-            val f = m.fecha ?: return@mapNotNull null
-            if (f < hoy || f >= finHoy || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
-            val p = m.ubicacion?.split(",")?.map { it.trim() } ?: return@mapNotNull null
-            if (p.size != 2 || p[0].toDoubleOrNull() == null || p[1].toDoubleOrNull() == null) return@mapNotNull null
-            VisitaMapaEntity("M:${m.id}", hoy, m.nombre, p.joinToString(","), m.id, cartucho)
-        }
-        if (nuevos.isNotEmpty()) registrarVarias(nuevos)
     } catch (_: Exception) { }
 }
 
