@@ -77,10 +77,7 @@ fun ContactActionsRow(numTT: String?, ref1: String? = null, ref2: String? = null
             IconButton(modifier = iconButtonModifier, onClick = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("sms:$numTT")))
             }) { Icon(Icons.Default.Sms, contentDescription = "SMS", tint = Color(0xFF00897B)) }
-            IconButton(modifier = iconButtonModifier, onClick = {
-                val url = "https://api.whatsapp.com/send?phone=$numTT"
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            }) { Icon(Icons.Default.Chat, contentDescription = "WhatsApp", tint = Color(0xFF25D366)) }
+            BotonWhatsApp(numTT, negocio = true) // titular: WhatsApp Business
         }
         if (!ref1.isNullOrBlank()) {
             IconButton(modifier = iconButtonModifier, onClick = {
@@ -89,6 +86,7 @@ fun ContactActionsRow(numTT: String?, ref1: String? = null, ref2: String? = null
             IconButton(modifier = iconButtonModifier, onClick = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("sms:$ref1")))
             }) { Icon(Icons.Default.Sms, contentDescription = "SMS Ref 1", tint = Color(0xFF00897B).copy(alpha = 0.6f)) }
+            BotonWhatsApp(ref1, negocio = false, alpha = 0.6f)
         }
         if (!ref2.isNullOrBlank()) {
             IconButton(modifier = iconButtonModifier, onClick = {
@@ -97,6 +95,7 @@ fun ContactActionsRow(numTT: String?, ref1: String? = null, ref2: String? = null
             IconButton(modifier = iconButtonModifier, onClick = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("sms:$ref2")))
             }) { Icon(Icons.Default.Sms, contentDescription = "SMS Ref 2", tint = Color(0xFF00897B).copy(alpha = 0.4f)) }
+            BotonWhatsApp(ref2, negocio = false, alpha = 0.6f)
         }
         if (!ubicacion.isNullOrBlank() && ubicacion != "N/A") {
             IconButton(modifier = iconButtonModifier, onClick = {
@@ -115,7 +114,7 @@ fun ContactActionsRow(numTT: String?, ref1: String? = null, ref2: String? = null
  * detalle de Matriz y Filtro Fecha, una fila por cada campo de contacto (NumTT, Ref1, Ref2).
  */
 @Composable
-fun ContactFieldRow(label: String, numero: String?) {
+fun ContactFieldRow(label: String, numero: String?, whatsApp: Boolean = true, whatsAppNegocio: Boolean = label.contains("TT", ignoreCase = true)) {
     if (numero.isNullOrBlank()) return
     val context = LocalContext.current
     Row(
@@ -131,6 +130,7 @@ fun ContactFieldRow(label: String, numero: String?) {
             IconButton(modifier = Modifier.size(34.dp), onClick = {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("sms:$numero")))
             }) { Icon(Icons.Default.Sms, contentDescription = "SMS $label", tint = Color(0xFF00897B)) }
+            if (whatsApp) BotonWhatsApp(numero, negocio = whatsAppNegocio)
         }
     }
 }

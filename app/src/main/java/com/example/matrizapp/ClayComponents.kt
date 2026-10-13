@@ -245,13 +245,7 @@ fun CustomerClayCard(
                     Icon(Icons.Default.Message, contentDescription = "Enviar SMS", tint = ClaySmsTeal)
                 }
 
-                IconButton(onClick = {
-                    val url = "https://api.whatsapp.com/send?phone=$tt"
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    context.startActivity(intent)
-                }) {
-                    Icon(Icons.Default.Chat, contentDescription = "Enviar WhatsApp", tint = ClayWhatsAppGreen)
-                }
+                BotonWhatsApp(tt, negocio = true) // titular: WhatsApp Business
             }
 
             // Maps CTA (Only rendered if location data exists)

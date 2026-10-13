@@ -85,24 +85,16 @@ class MatrizFirebaseMessagingService : FirebaseMessagingService() {
             builder.addAction(android.R.drawable.ic_menu_mylocation, "Iniciar ruta", navPendingIntent)
         }
 
-        val digits = numTT.orEmpty().filter { it.isDigit() }
-        val whatsappNumber = when {
-            digits.length == 10 -> "52$digits"
-            digits.length in 11..15 -> digits
-            else -> ""
-        }
-        if (whatsappNumber.isNotBlank()) {
-            val whatsappIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$whatsappNumber")).apply {
-                setPackage("com.whatsapp")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            if (whatsappIntent.resolveActivity(packageManager) != null) {
-                val waPendingIntent = PendingIntent.getActivity(
-                    this, ("wa_$eventId").hashCode(), whatsappIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                builder.addAction(android.R.drawable.ic_dialog_email, "WhatsApp", waPendingIntent)
-            }
+        // Titular: WhatsApp Business primero; si no está instalado, el normal. Número limpio (52 + 10 dígitos).
+        val waIntent = listOf(WhatsAppHelper.PKG_BUSINESS, WhatsAppHelper.PKG_NORMAL)
+            .mapNotNull { WhatsAppHelper.intentPara(numTT, it) }
+            .firstOrNull { it.resolveActivity(packageManager) != null }
+        if (waIntent != null) {
+            val waPendingIntent = PendingIntent.getActivity(
+                this, ("wa_$eventId").hashCode(), waIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(android.R.drawable.ic_dialog_email, "WhatsApp", waPendingIntent)
         }
 
         NotificationManagerCompat.from(this).notify(
