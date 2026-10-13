@@ -68,9 +68,8 @@ class MatrizViewModel(
             // distinctUntilChanged: si la sincronización trae los mismos datos no se reprograman alarmas.
             matrizDao.getAllMatriz().distinctUntilChanged().collect { items ->
                 notificacionesHelper.sincronizarAlarmasRetornoMatriz(items)
-                // Mapa: los registros de hoy (los de Filtro Fecha) quedan guardados como visitas de hoy,
-                // con el cartucho que esté activo en ese momento.
-                visitaMapaDao.registrarRegistrosDeHoy(items)
+                // El historial del mapa se registra únicamente desde acciones explícitas de crear/editar
+                // o registrar un pago; observar/sincronizar la lista no representa una visita real.
             }
         }
     }
