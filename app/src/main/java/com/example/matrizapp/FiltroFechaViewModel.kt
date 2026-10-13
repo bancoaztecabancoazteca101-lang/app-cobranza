@@ -123,8 +123,10 @@ class FiltroFechaViewModel(
             matrizDao.updateEstadoYHora(id, nuevoEstado, nuevaHora)
             // Retorno: el aviso solo suena si el status o la hora cambiaron en este guardado.
             if (anterior != null && (anterior.estado.trim() != nuevoEstado.trim() || (anterior.hora ?: "").trim() != nuevaHora.trim())) notificacionesHelper.confirmarRetorno(id)
-            // Mapa: editar un registro cuenta como visita de hoy.
-            if (anterior != null) visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
+            // Mapa: solo cuenta como visita si el registro editado tiene fecha de hoy.
+            if (anterior?.fecha != null && inicioDelDia(anterior.fecha) == inicioDelDia()) {
+                visitaMapaDao.registrarVisitaHoy("M:$id", anterior.nombre, anterior.ubicacion, id)
+            }
             onResult(notificacionesHelper.evaluarProgramacion(nuevoEstado, nuevaHora))
         }
     }
