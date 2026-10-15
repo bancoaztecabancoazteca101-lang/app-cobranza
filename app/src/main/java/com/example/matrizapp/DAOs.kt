@@ -143,7 +143,10 @@ interface MatrizDao {
     fun observarMatrizEnRango(desde: Long, hasta: Long): Flow<List<MatrizEntity>>
     @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
-        ubicacion = :ubicacion, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP,
+        ubicacion = CASE
+            WHEN :ubicacion IS NULL OR TRIM(:ubicacion) = '' OR UPPER(TRIM(:ubicacion)) = 'N/A'
+            THEN ubicacion ELSE :ubicacion END,
+        fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP,
         descuentoPago = :descuentoPago, descuentoAhorro = :descuentoAhorro,
         ref3 = :ref3, ref4 = :ref4, diaPago = :diaPago, domicilioLaboral = :domicilioLaboral,
         diasAtraso = :diasAtraso, diasApertura = :diasApertura, isDirty = 1
