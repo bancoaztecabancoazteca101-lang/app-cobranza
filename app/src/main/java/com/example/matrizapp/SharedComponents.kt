@@ -412,7 +412,7 @@ fun MatrizFullFormDialog(
     var diasApertura by remember { mutableStateOf(item?.diasApertura ?: "") }
     var buscandoUbicacionLaboral by remember { mutableStateOf(false) }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
-    var buscandoUbicacion by remember { mutableStateOf(esNuevo && prefill?.ubicacion.isNullOrBlank()) }
+    var buscandoUbicacion by remember { mutableStateOf(false) }
     var activePhotoSlot by remember { mutableStateOf(1) }
     // Buscar domicilio escribiendo la dirección (sin necesidad de estar en el sitio): se
     // geocodifica el texto igual que en Ruta IA y se llena el campo con "lat,lng".
