@@ -181,13 +181,8 @@ class RutaIAViewModel(
         viewModelScope.launch {
             rutaIADao.updateEstadoLocal(item.id, nuevoEstado)
             if (nuevoEstado == "Visitado" && item.esNuevo && item.cuMatrizMatch == null) {
-                // Al marcar "Visitado" el gestor normalmente está parado en la puerta del cliente, así
-                // que se captura el GPS real del teléfono en este momento para el alta en Matriz, en vez
-                // de arrastrar la coordenada geocodificada por texto (imprecisa, ver fix del 24/09/2026).
-                // Si no hay fix de GPS disponible (permiso denegado, sin señal), cae de vuelta a la
-                // coordenada geocodificada como antes.
-                // Marcar visitado no captura GPS. La ubicación solo se guarda si se pulsa
-                // el botón correspondiente en el formulario de Matriz.
+                // Marcar visitado da de alta el registro sin ubicación. El GPS solo se captura
+                // mediante el botón de ubicación del formulario de Matriz.
                 val idMatriz = darDeAltaEnMatriz(item)
                 rutaIADao.marcarAltaEnMatriz(item.id, idMatriz)
             }
