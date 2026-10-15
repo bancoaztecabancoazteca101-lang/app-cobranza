@@ -158,7 +158,10 @@ interface MatrizDao {
     )
     @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito,
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
-        ubicacion = :ubicacion, imagenUrl = :imagenUrl, imagenUrl2 = :imagenUrl2, fecha = :fecha,
+        ubicacion = CASE
+            WHEN :ubicacion IS NULL OR TRIM(:ubicacion) = '' OR UPPER(TRIM(:ubicacion)) = 'N/A'
+            THEN ubicacion ELSE :ubicacion END,
+        imagenUrl = :imagenUrl, imagenUrl2 = :imagenUrl2, fecha = :fecha,
         hora = :hora, ruta = :ruta, folioP = :folioP
         WHERE id = :id AND isDirty = 0""")
     // UPDATE parcial usado por el pull de Sheets (SheetsRepository.refreshMatriz) para registros
