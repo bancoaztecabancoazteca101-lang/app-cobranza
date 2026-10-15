@@ -45,13 +45,13 @@ val ESTADOS_MATRIZ = listOf("APP", "Retorno", "Pagado", "PASE", "FILTRAR", "Mano
 /**
  * Obtiene una ubicación actual para capturar domicilios, no una ubicación antigua de caché.
  * Solo acepta coordenadas finitas, dentro del rango geográfico, con precisión declarada
- * de hasta 50 m y una lectura de antigüedad máxima de 30 s. El llamador conserva el valor
+ * de hasta 30 m y una lectura de antigüedad máxima de 30 s. El llamador conserva el valor
  * anterior cuando devuelve null; nunca se reemplaza una ubicación guardada por una falla.
  */
 suspend fun obtenerUbicacionActual(context: android.content.Context): String? {
     return try {
         val client = LocationServices.getFusedLocationProviderClient(context)
-        val location = withTimeoutOrNull(15_000L) {
+        val location = withTimeoutOrNull(10_000L) {
             client.getCurrentLocation(
                 Priority.PRIORITY_HIGH_ACCURACY,
                 CancellationTokenSource().token
@@ -63,7 +63,7 @@ suspend fun obtenerUbicacionActual(context: android.content.Context): String? {
         if (!lat.isFinite() || !lng.isFinite()) return null
         if (lat !in -90.0..90.0 || lng !in -180.0..180.0) return null
         if (!location.hasAccuracy() || !location.accuracy.isFinite() ||
-            location.accuracy <= 0f || location.accuracy > 50f
+            location.accuracy <= 0f || location.accuracy > 30f
         ) return null
 
         val edadNanos = android.os.SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos
@@ -1315,7 +1315,7 @@ fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista, Pair<Doub
                                 val ubic = parseLatLngOrden(obtenerUbicacionActual(context))
                                 buscandoUbicacion = false
                                 if (ubic == null) {
-                                    Toast.makeText(context, "No se pudo obtener tu ubicación actual (revisa el GPS)", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "GPS impreciso o sin señal reciente. Intenta de nuevo.", Toast.LENGTH_SHORT).show()
                                 } else {
                                     onOrdenChange(opcion, ubic)
                                 }
@@ -1371,7 +1371,7 @@ fun FiltroFechaOrdenButton(
                                 val ubic = parseLatLngOrden(obtenerUbicacionActual(context))
                                 buscandoUbicacion = false
                                 if (ubic == null) {
-                                    Toast.makeText(context, "No se pudo obtener tu ubicación actual (revisa el GPS)", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "GPS impreciso o sin señal reciente. Intenta de nuevo.", Toast.LENGTH_SHORT).show()
                                 } else {
                                     onOrdenChange(opcion, ubic)
                                 }
