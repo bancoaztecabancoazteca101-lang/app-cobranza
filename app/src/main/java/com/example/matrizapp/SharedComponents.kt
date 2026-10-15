@@ -28,10 +28,13 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import kotlinx.coroutines.sync.withPermit
 import java.util.Locale
@@ -39,12 +42,39 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 val ESTADOS_MATRIZ = listOf("APP", "Retorno", "Pagado", "PASE", "FILTRAR", "Mano")
 
+/**
+ * Obtiene una ubicación actual para capturar domicilios, no una ubicación antigua de caché.
+ * Solo acepta coordenadas finitas, dentro del rango geográfico, con precisión declarada
+ * de hasta 50 m y una lectura de antigüedad máxima de 30 s. El llamador conserva el valor
+ * anterior cuando devuelve null; nunca se reemplaza una ubicación guardada por una falla.
+ */
 suspend fun obtenerUbicacionActual(context: android.content.Context): String? {
     return try {
         val client = LocationServices.getFusedLocationProviderClient(context)
-        val location = client.lastLocation.await() ?: return null
-        "${location.latitude}, ${location.longitude}"
-    } catch (e: SecurityException) { null } catch (e: Exception) { null }
+        val location = withTimeoutOrNull(15_000L) {
+            client.getCurrentLocation(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                CancellationTokenSource().token
+            ).await()
+        } ?: return null
+
+        val lat = location.latitude
+        val lng = location.longitude
+        if (!lat.isFinite() || !lng.isFinite()) return null
+        if (lat !in -90.0..90.0 || lng !in -180.0..180.0) return null
+        if (!location.hasAccuracy() || !location.accuracy.isFinite() ||
+            location.accuracy <= 0f || location.accuracy > 50f
+        ) return null
+
+        val edadNanos = android.os.SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos
+        if (edadNanos < 0L || edadNanos > 30_000_000_000L) return null
+
+        "${lat}, ${lng}"
+    } catch (e: SecurityException) {
+        null
+    } catch (e: Exception) {
+        null
+    }
 }
 
 fun getStatusColor(estado: String): Color {
@@ -585,7 +615,16 @@ fun MatrizFullFormDialog(
                 )
                 LaunchedEffect(buscandoUbicacion) {
                     if (buscandoUbicacion) {
-                        ubicacion = obtenerUbicacionActual(context) ?: ubicacion
+                        val actual = obtenerUbicacionActual(context)
+                        if (actual != null) {
+                            ubicacion = actual
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "No se obtuvo una ubicación reciente y precisa. Activa la ubicación y vuelve a intentarlo.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                         buscandoUbicacion = false
                     }
                 }
@@ -627,7 +666,16 @@ fun MatrizFullFormDialog(
                     )
                     LaunchedEffect(buscandoUbicacionLaboral) {
                         if (buscandoUbicacionLaboral) {
-                            domicilioLaboral = obtenerUbicacionActual(context) ?: domicilioLaboral
+                            val actual = obtenerUbicacionActual(context)
+                            if (actual != null) {
+                                domicilioLaboral = actual
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "No se obtuvo una ubicación reciente y precisa. Activa la ubicación y vuelve a intentarlo.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                             buscandoUbicacionLaboral = false
                         }
                     }
