@@ -88,8 +88,14 @@ class MatrizViewModel(
     private fun ordenar(list: List<MatrizEntity>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<MatrizEntity> = when (o) {
         OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending { it.fecha ?: 0L }
         OrdenLista.FECHA_HORA_ANTIGUA -> list.sortedBy { it.fecha ?: Long.MAX_VALUE }
-        OrdenLista.UBICACION_CERCA -> if (miUbicacion == null) list else list.sortedBy { distanciaOrNull(it.ubicacion, miUbicacion) ?: Double.MAX_VALUE }
-        OrdenLista.UBICACION_LEJOS -> if (miUbicacion == null) list else list.sortedByDescending { distanciaOrNull(it.ubicacion, miUbicacion) ?: -1.0 }
+        // Parsear cada ubicación y calcular su distancia una sola vez, no en cada comparación
+        // interna del algoritmo de ordenamiento. Se conserva la posición de coordenadas inválidas.
+        OrdenLista.UBICACION_CERCA -> if (miUbicacion == null) list else list
+            .map { item -> item to (parseLatLngOrden(item.ubicacion)?.let { distanciaKm(miUbicacion, it) } ?: Double.MAX_VALUE) }
+            .sortedBy { it.second }.map { it.first }
+        OrdenLista.UBICACION_LEJOS -> if (miUbicacion == null) list else list
+            .map { item -> item to (parseLatLngOrden(item.ubicacion)?.let { distanciaKm(miUbicacion, it) } ?: -1.0) }
+            .sortedByDescending { it.second }.map { it.first }
         OrdenLista.ALFABETICO_AZ -> list.sortedBy { it.nombre.lowercase() }
         OrdenLista.ALFABETICO_ZA -> list.sortedByDescending { it.nombre.lowercase() }
         OrdenLista.ORIGINAL -> list
