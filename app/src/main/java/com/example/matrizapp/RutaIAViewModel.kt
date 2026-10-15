@@ -194,9 +194,7 @@ class RutaIAViewModel(
         val idFinal = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
         val semana = item.diasAtraso?.let { diasAtrasoASemana(it).toString() } ?: ""
         val requisito = (item.pagoRequerido ?: item.saldoAtraso)?.let { "%,.0f".format(it) } ?: ""
-        // Las coordenadas de Ruta IA pueden venir de geocodificación; no son GPS confirmado.
-        // No copiar ninguna ubicación al registro de Matriz sin acción explícita del usuario.
-        val ubicacion: String? = null
+        // Las coordenadas de Ruta IA no se copian a Matriz sin acción explícita del usuario.
         val ahora = System.currentTimeMillis()
         val hora = java.text.SimpleDateFormat("HH:mm", java.util.Locale("es", "MX")).format(java.util.Date(ahora))
         val nuevo = MatrizEntity(
@@ -209,7 +207,7 @@ class RutaIAViewModel(
             ref2 = "",
             observaciones = "Alta automática desde Ruta IA al marcar visitado",
             estado = "",
-            ubicacion = ubicacion,
+            ubicacion = null,
             imagenUrl = null,
             imagenUrl2 = null,
             fecha = ahora,
@@ -275,12 +273,10 @@ class RutaIAViewModel(
     fun prefillMatrizDesdeParada(item: RutaIAEntity): MatrizEntity {
         val semana = item.diasAtraso?.let { diasAtrasoASemana(it).toString() } ?: ""
         val requisito = (item.pagoRequerido ?: item.saldoAtraso)?.let { "%,.0f".format(it) } ?: ""
-        // El formulario de Matriz no hereda coordenadas de Ruta IA: el usuario decide
-        // si captura GPS con el botón de ubicación o introduce/busca una dirección.
-        val ubicacion: String? = null
+        // El formulario no hereda coordenadas de Ruta IA; la ubicación se elige allí.
         return MatrizEntity(
             id = "", nombre = item.nombre.trim().uppercase(java.util.Locale.ROOT), semana = semana, requisito = requisito,
-            numTT = "", ref1 = "", ref2 = "", observaciones = null, estado = "", ubicacion = ubicacion,
+            numTT = "", ref1 = "", ref2 = "", observaciones = null, estado = "", ubicacion = null,
             imagenUrl = null, imagenUrl2 = null, fecha = System.currentTimeMillis(), hora = null, ruta = null,
             folioP = item.cu, isDirty = false
         )
