@@ -77,8 +77,12 @@ class RutaIAViewModel(
         viewModelScope.launch { filtroDao.guardar(RutaIAFiltroEntity(id = 1, criteriosOrden = serializarCriteriosRutaIA(_criterios.value))) }
     }
 
-    fun refrescarUbicacion() {
-        viewModelScope.launch { parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it } }
+    fun refrescarUbicacion(onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val ubicacion = parseLatLngOrden(obtenerUbicacionActual(context))
+            if (ubicacion != null) _ubicacionActual.value = ubicacion
+            onResult(ubicacion != null)
+        }
     }
 
     fun importarJson(uri: Uri, configuracion: FiltrosRutaIA, onResult: (Boolean, String?, List<String>) -> Unit) {
