@@ -539,9 +539,19 @@ fun Sem6NuevoRegistroDialog(viewModel: Sem6ViewModel, onDismiss: () -> Unit, onC
         }
     }
 
+    // Solo captura GPS tras pulsar el botón. Si la lectura falla, conserva la ubicación previa.
     LaunchedEffect(buscandoUbicacion) {
         if (buscandoUbicacion) {
-            ubicacion = obtenerUbicacionActual(context) ?: ubicacion
+            val actual = obtenerUbicacionActual(context)
+            if (actual != null) {
+                ubicacion = actual
+            } else {
+                android.widget.Toast.makeText(
+                    context,
+                    "GPS impreciso o sin señal reciente. La ubicación anterior se conserva; intenta de nuevo.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
             buscandoUbicacion = false
         }
     }
