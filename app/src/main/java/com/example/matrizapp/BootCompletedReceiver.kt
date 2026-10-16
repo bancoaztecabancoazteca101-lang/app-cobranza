@@ -25,6 +25,8 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 // Bloques de llamadas automáticas: AlarmManager pierde todas sus alarmas al
                 // reiniciar, igual que las de Retorno — se vuelven a programar aquí mismo.
                 LlamadaAutomaticaScheduler(context.applicationContext, db.bloqueHorarioDao()).reprogramarTodos()
+                // Seguimiento Por Día mantiene sus alarmas independientes y se repone tras reinicio/actualización.
+                SeguimientoPorDiaScheduler.programar(context.applicationContext)
                 // Limpieza diaria de Ruta IA: misma razón, se pierde con el reinicio.
                 programarLimpiezaRutaIA(context.applicationContext)
                 // Limpieza diaria de la oferta de descuento: misma razón, se pierde con el reinicio.
