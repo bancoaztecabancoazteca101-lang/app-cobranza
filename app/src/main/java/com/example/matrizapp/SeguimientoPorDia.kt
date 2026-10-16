@@ -227,8 +227,7 @@ object SeguimientoPorDiaScheduler {
             val pending = PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             am.cancel(pending)
         }
-        WorkManager.getInstance(context).cancelUniqueWork("seguimiento_por_dia_sms")
-        WorkManager.getInstance(context).cancelUniqueWork("seguimiento_por_dia_llamadas")
+        WorkManager.getInstance(context).cancelUniqueWork("seguimiento_por_dia_cola")
     }
 
     private fun programarCanal(context: Context, canal: String, hora: Int, minuto: Int) {
@@ -260,7 +259,7 @@ class SeguimientoPorDiaAlarmReceiver : BroadcastReceiver() {
             .setInputData(workDataOf("canal_seguimiento" to canal))
             .addTag("seguimiento_por_dia")
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(nombre, ExistingWorkPolicy.REPLACE, request)
+        WorkManager.getInstance(context).enqueueUniqueWork("seguimiento_por_dia_cola", ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         // Programa la siguiente ejecución diaria de este canal. El otro canal conserva su propio horario.
         val prefs = preferenciasSeguimiento(context)
         val activo = if (canal == "SMS") prefs.getBoolean(KEY_SMS_SEGUIMIENTO, false) else prefs.getBoolean(KEY_LLAMADAS_SEGUIMIENTO, false)
@@ -281,6 +280,7 @@ class SeguimientoPorDiaAlarmReceiver : BroadcastReceiver() {
 class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val canal = inputData.getString("canal_seguimiento") ?: return Result.failure()
+        if (canal == "LLAMADAS") promoverSeguimientoEnPrimerPlano()
         val container = (applicationContext as MainApplication).container
         val prefs = preferenciasSeguimiento(applicationContext)
         val cartucho = prefs.getInt(KEY_CARTUCHO_SEGUIMIENTO, 1).coerceIn(1, 3)
@@ -332,5 +332,39 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
             }
         }
         return Result.success()
+    }
+
+    private suspend fun promoverSeguimientoEnPrimerPlano() {
+        try {
+            val ctx = applicationContext
+            val channelId = "seguimiento_por_dia"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val manager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                if (manager.getNotificationChannel(channelId) == null) {
+                    manager.createNotificationChannel(android.app.NotificationChannel(
+                        channelId, "Seguimiento Por Día", android.app.NotificationManager.IMPORTANCE_LOW
+                    ))
+                }
+            }
+            val notification = androidx.core.app.NotificationCompat.Builder(ctx, channelId)
+                .setSmallIcon(android.R.drawable.sym_action_call)
+                .setContentTitle("Seguimiento Por Día")
+                .setContentText("Procesando llamadas del cartucho seleccionado")
+                .setOngoing(true)
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+                .build()
+            val foregroundInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                androidx.work.ForegroundInfo(
+                    7310,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else androidx.work.ForegroundInfo(7310, notification)
+            setForeground(foregroundInfo)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Si Android no permite promover en este momento, no se aborta el seguimiento.
+        }
     }
 }
