@@ -204,7 +204,7 @@ fun SeguimientoPorDiaScreen() {
 
 object SeguimientoPorDiaScheduler {
     fun programar(context: Context) {
-        cancelar(context)
+        cancelarAlarmas(context)
         val prefs = preferenciasSeguimiento(context)
         val sms = prefs.getBoolean(KEY_SMS_SEGUIMIENTO, false)
         val llamadas = prefs.getBoolean(KEY_LLAMADAS_SEGUIMIENTO, false)
@@ -213,6 +213,14 @@ object SeguimientoPorDiaScheduler {
     }
 
     fun cancelar(context: Context) {
+        preferenciasSeguimiento(context).edit()
+            .putBoolean(KEY_SMS_SEGUIMIENTO, false)
+            .putBoolean(KEY_LLAMADAS_SEGUIMIENTO, false)
+            .apply()
+        cancelarAlarmas(context)
+    }
+
+    private fun cancelarAlarmas(context: Context) {
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         listOf(8101, 8102).forEach { requestCode ->
             val intent = Intent(context, SeguimientoPorDiaAlarmReceiver::class.java)
@@ -288,21 +296,39 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         val plantillaDao = container.database.plantillaSmsDao()
         val vistos = mutableSetOf<String>()
         for (registro in registros) {
+            // Releer estado justo antes de cada cliente: si fue pagado después de formar la lista, se omite.
             val actual = matrizDao.getById(registro.id) ?: continue
             if (esPagado(actual.estado)) continue
-            val telefono = actual.numTT.trim()
-            if (telefono.length < 7 || !vistos.add(ultimos10Digitos(telefono))) continue
-            if (canal == "SMS") {
-                if (!SmsHelper.tienePermisos(applicationContext)) return Result.failure()
-                val sem = actual.semana.trim().toIntOrNull()?.coerceIn(1, 5) ?: 1
-                val variante = container.database.contactoLogDao().contarTotalContactos(actual.id)
-                SmsHelper.enviarSms(applicationContext, config.simSms, telefono, MensajesCobranza.paraTT(plantillaDao, actual.nombre, actual.requisito, sem, variante))
-            } else if (canal == "LLAMADAS") {
-                if (!CallHelper.tienePermisos(applicationContext)) return Result.failure()
-                CallHelper.realizarLlamada(applicationContext, config.simSeleccionada, telefono, ocultarNumero = config.ocultarNumero)
-                kotlinx.coroutines.delay(2_000)
-                CallHelper.esperarFinOForzarColgar(applicationContext, (config.duracionMaximaLlamada * 1_000L - 2_000L).coerceAtLeast(1_000L))
-                kotlinx.coroutines.delay(config.segundosPausaEntreLlamadas * 1_000L)
+            val sem = actual.semana.trim().toIntOrNull()?.coerceIn(1, 5) ?: 1
+            val variante = container.database.contactoLogDao().contarTotalContactos(actual.id)
+            val contactos = buildList {
+                actual.numTT.trim().takeIf { it.filter(Char::isDigit).length >= 7 }?.let { add(it to true) }
+                listOf(actual.ref1, actual.ref2, actual.ref3.orEmpty(), actual.ref4.orEmpty())
+                    .map { it.trim() }
+                    .filter { it.filter(Char::isDigit).length >= 7 }
+                    .forEach { add(it to false) }
+            }.distinctBy { ultimos10Digitos(it.first) }
+                .filter { vistos.add(ultimos10Digitos(it.first)) }
+
+            for ((telefono, esTitular) in contactos) {
+                // El estado se consulta de nuevo antes de cada envío/llamada, incluso dentro del mismo registro.
+                val estadoFresco = matrizDao.getById(actual.id)?.estado ?: continue
+                if (esPagado(estadoFresco)) break
+                if (canal == "SMS") {
+                    if (!SmsHelper.tienePermisos(applicationContext)) return Result.failure()
+                    val mensaje = if (esTitular) {
+                        MensajesCobranza.paraTT(plantillaDao, actual.nombre, actual.requisito, sem, variante)
+                    } else {
+                        MensajesCobranza.paraReferencia(plantillaDao, actual.nombre, sem, variante)
+                    }
+                    SmsHelper.enviarSms(applicationContext, config.simSms, telefono, mensaje)
+                } else if (canal == "LLAMADAS") {
+                    if (!CallHelper.tienePermisos(applicationContext)) return Result.failure()
+                    CallHelper.realizarLlamada(applicationContext, config.simSeleccionada, telefono, ocultarNumero = config.ocultarNumero)
+                    kotlinx.coroutines.delay(2_000)
+                    CallHelper.esperarFinOForzarColgar(applicationContext, (config.duracionMaximaLlamada * 1_000L - 2_000L).coerceAtLeast(1_000L))
+                    kotlinx.coroutines.delay(config.segundosPausaEntreLlamadas * 1_000L)
+                }
             }
         }
         return Result.success()
