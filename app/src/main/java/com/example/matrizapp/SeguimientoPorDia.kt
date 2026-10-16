@@ -255,7 +255,7 @@ class SeguimientoPorDiaAlarmReceiver : BroadcastReceiver() {
         if (modo !in setOf(MODO_COMBINADO, MODO_SMS, MODO_LLAMADAS)) return
         val minuto = leerHorariosSeguimiento(context).getOrNull(slot) ?: return
         val request = OneTimeWorkRequestBuilder<SeguimientoPorDiaWorker>()
-            .setInputData(workDataOf("modo_seguimiento" to modo)).addTag("seguimiento_por_dia").build()
+            .setInputData(workDataOf("modo_seguimiento" to modo, "slot_seguimiento" to slot, "cantidad_slots" to leerHorariosSeguimiento(context).size)).addTag("seguimiento_por_dia").build()
         WorkManager.getInstance(context).enqueueUniqueWork(WORK_SEGUIMIENTO, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         SeguimientoPorDiaScheduler.programarSlot(context, slot, minuto, true)
     }
@@ -280,8 +280,12 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         val plantillaDao = container.database.plantillaSmsDao()
         val contactoExtraDao = container.database.contactoExtraDao()
         val vistos = mutableSetOf<String>()
+        val slot = inputData.getInt("slot_seguimiento", 0)
+        val cantidadSlots = inputData.getInt("cantidad_slots", 1).coerceAtLeast(1)
+        // Cada horario atiende una parte estable de los registros: los siguientes horarios no vuelven a llamar al cartucho completo.
+        val registrosDelHorario = registros.filter { Math.floorMod(it.id.hashCode(), cantidadSlots) == slot }
 
-        for (registro in registros) {
+        for (registro in registrosDelHorario) {
             val actual = matrizDao.getById(registro.id) ?: continue
             if (esPagado(actual.estado)) continue
             val sem = actual.semana.trim().toIntOrNull()?.takeIf { it in 1..5 } ?: continue
