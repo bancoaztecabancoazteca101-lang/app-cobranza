@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -94,6 +95,7 @@ private fun finAyerSeguimiento(): Long {
 private fun textoHoraSeguimiento(minutoDia: Int): String =
     String.format(Locale.ROOT, "%02d:%02d", minutoDia / 60, minutoDia % 60)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SeguimientoPorDiaScreen() {
     val context = LocalContext.current
@@ -185,7 +187,7 @@ fun SeguimientoPorDiaScreen() {
                 OutlinedButton(onClick = { horarios.removeAt(index) }, enabled = horarios.size > 1) { Text("Quitar") }
             }
         }
-        OutlinedButton(Modifier.fillMaxWidth(), enabled = horarios.size < MAX_HORARIOS_SEGUIMIENTO, onClick = {
+        OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = horarios.size < MAX_HORARIOS_SEGUIMIENTO, onClick = {
             val disponible = (0..1439).firstOrNull { it !in horarios }
             if (disponible != null) {
                 horarios.add(disponible)
@@ -194,8 +196,8 @@ fun SeguimientoPorDiaScreen() {
             }
         }) { Text("Agregar horario") }
         Text("Los registros pagados se excluyen y el estado se revalida antes de cada contacto. Los horarios normales de llamadas no se modifican.", style = MaterialTheme.typography.bodySmall)
-        Button(Modifier.fillMaxWidth(), enabled = horarios.isNotEmpty() && !cargando, onClick = { guardarYProgramar() }) { Text("Guardar y programar") }
-        OutlinedButton(Modifier.fillMaxWidth(), onClick = {
+        Button(modifier = Modifier.fillMaxWidth(), enabled = horarios.isNotEmpty() && !cargando, onClick = { guardarYProgramar() }) { Text("Guardar y programar") }
+        OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
             SeguimientoPorDiaScheduler.cancelar(context)
             mensaje = "Se canceló la programación de Seguimiento Por Día."
         }) { Text("Cancelar programación") }
