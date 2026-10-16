@@ -391,6 +391,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.SmsStatus.route) { SmsStatusScreen(onBack = { navController.popBackStack() }) }
                             composable(Screen.Llamadas.route) { CallScreen(callVm) }
                             composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
+                            composable(Screen.SeguimientoPorDia.route) { SeguimientoPorDiaScreen() }
                             composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
                             composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm, searchQuery) }
                             composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }
@@ -420,6 +421,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object SmsStatus : Screen("sms_status", "SMS por Status APP", Icons.Default.Sms)
     object Llamadas : Screen("llamadas", "Llamadas", Icons.Default.Call)
     object BloquesLlamada : Screen("bloques_llamada", "Bloques de horario", Icons.Default.Schedule)
+    object SeguimientoPorDia : Screen("seguimiento_por_dia", "Seguimiento Por Día", Icons.Default.CalendarToday)
     object PlantillasSms : Screen("plantillas_sms", "Plantillas de SMS", Icons.Default.Message)
     object RutaIA : Screen("ruta_ia", "Ruta IA", Icons.Default.Route)
     object Diagnostico : Screen("diagnostico", "Diagnóstico", Icons.Default.BugReport)
