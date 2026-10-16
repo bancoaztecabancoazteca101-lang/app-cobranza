@@ -316,6 +316,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
                 if (esPagado(estadoFresco)) break
                 if (canal == "SMS") {
                     if (!SmsHelper.tienePermisos(applicationContext)) return Result.failure()
+                    if (!NumeroContactadoGuard.reservarSms(applicationContext, telefono)) continue
                     val mensaje = if (esTitular) {
                         MensajesCobranza.paraTT(plantillaDao, actual.nombre, actual.requisito, sem, variante)
                     } else {
@@ -324,6 +325,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
                     SmsHelper.enviarSms(applicationContext, config.simSms, telefono, mensaje)
                 } else if (canal == "LLAMADAS") {
                     if (!CallHelper.tienePermisos(applicationContext)) return Result.failure()
+                    if (!NumeroContactadoGuard.reservar(applicationContext, telefono)) continue
                     CallHelper.realizarLlamada(applicationContext, config.simSeleccionada, telefono, ocultarNumero = config.ocultarNumero)
                     kotlinx.coroutines.delay(2_000)
                     CallHelper.esperarFinOForzarColgar(applicationContext, (config.duracionMaximaLlamada * 1_000L - 2_000L).coerceAtLeast(1_000L))
