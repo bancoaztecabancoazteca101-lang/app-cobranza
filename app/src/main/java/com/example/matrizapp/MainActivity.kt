@@ -440,7 +440,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
  * en cuál hoja/pantalla estás (Matriz, Filtro Fecha, Pase, etc.), cosa que antes no se mostraba. */
 fun screenTitleFor(route: String): String = listOf(
     Screen.Matriz, Screen.PaseCartera, Screen.Solicitud, Screen.FiltroFecha, Screen.FiltroSemanal, Screen.Filtrar,
-    Screen.Control, Screen.Ubi, Screen.Mapa, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada,
+    Screen.Control, Screen.Ubi, Screen.Mapa, Screen.Sem6, Screen.Sms, Screen.SmsStatus, Screen.Llamadas, Screen.BloquesLlamada, Screen.SeguimientoPorDia,
     Screen.PlantillasSms, Screen.RutaIA, Screen.Diagnostico, Screen.ExportarMatriz, Screen.Backup, Screen.Penalizacion,
     Screen.Comision, Screen.Avance, Screen.BolsaGerencia
 ).find { it.route == route }?.title ?: ""
