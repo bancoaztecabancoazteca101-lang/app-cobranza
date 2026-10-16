@@ -299,12 +299,12 @@ internal suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matri
     val subIdSms = config.simSms // línea independiente para SMS -- puede ser distinta a la de llamadas
     // Solo en corridas reales (yaContactados != null): el botón de prueba no pasa por el guard.
     val ttLibre = yaContactados == null || r.numTT.isBlank() || NumeroContactadoGuard.reservar(context, r.numTT)
-    if (r.numTT.isNotBlank() && ttLibre && estadoActual?.invoke()?.let { esPagado(it) } != true) {
+    if (r.numTT.isNotBlank() && ttLibre && (estadoActual == null || estadoActual.invoke()?.let { !esPagado(it) } == true)) {
         resumen.appendLine("• Llamada + SMS normal a TT (${r.numTT})")
         yaContactados?.add(ultimos10Digitos(r.numTT))
         llamarSilenciadoYEsperar(context, subIdLlamada, r.numTT, config)
         huboLlamada = true
-        val titularSiguePendiente = estadoActual?.invoke()?.let { !esPagado(it) } ?: true
+        val titularSiguePendiente = if (estadoActual == null) true else estadoActual.invoke()?.let { !esPagado(it) } == true
         val smsTtOk = titularSiguePendiente && smsPermitido(r.numTT)
         if (smsTtOk) SmsHelper.enviarSms(context, subIdSms, r.numTT, MensajesCobranza.paraTT(plantillaDao, r.nombre, r.requisito, sem, variante))
         else resumen.appendLine("• SMS a TT omitido: ese número ya recibió un SMS automático hace menos de 30 min")
@@ -312,7 +312,7 @@ internal suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matri
         // solo al titular -- nunca a Ref1/Ref2 (ver el forEach de telefonosReferencia abajo,
         // que no la toca). Si no hay descuentoPago/descuentoAhorro capturados hoy, no manda nada.
         val oferta = MensajesCobranza.ofertaDescuento(r.descuentoPago, r.descuentoAhorro)
-        if (oferta != null && smsTtOk && estadoActual?.invoke()?.let { !esPagado(it) } != false) {
+        if (oferta != null && smsTtOk && (estadoActual == null || estadoActual.invoke()?.let { !esPagado(it) } == true)) {
             SmsHelper.enviarSms(context, subIdSms, r.numTT, oferta)
             resumen.appendLine("• Oferta de descuento SÍ enviada (pago=${r.descuentoPago}, ahorro=${r.descuentoAhorro})")
         } else {
@@ -340,12 +340,12 @@ internal suspend fun procesarClienteLlamadaAutomatica(context: Context, r: Matri
         .filter { yaContactados == null || NumeroContactadoGuard.reservar(context, it) } // no repetir al mismo número en 15 min, por cualquier camino
     yaContactados?.addAll(telefonosReferencia.map { ultimos10(it) })
     telefonosReferencia.forEach { tel ->
-        if (estadoActual?.invoke()?.let { esPagado(it) } == true) return resumen.toString().trim()
+        if (estadoActual != null && estadoActual.invoke()?.let { !esPagado(it) } != true) return resumen.toString().trim()
         if (huboLlamada) delay(config.segundosPausaEntreLlamadas * 1_000L)
         llamarSilenciadoYEsperar(context, subIdLlamada, tel, config)
         huboLlamada = true
         if (estadoActual?.invoke()?.let { esPagado(it) } == true) return resumen.toString().trim()
-        if (smsPermitido(tel) && estadoActual?.invoke()?.let { !esPagado(it) } != false) SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
+        if (smsPermitido(tel) && (estadoActual == null || estadoActual.invoke()?.let { !esPagado(it) } == true)) SmsHelper.enviarSms(context, subIdSms, tel, MensajesCobranza.paraReferencia(plantillaDao, r.nombre, sem, variante))
     }
     if (telefonosReferencia.isNotEmpty()) resumen.appendLine("• Llamada + SMS de referencia a ${telefonosReferencia.size} número(s): ${telefonosReferencia.joinToString(", ")}")
     else resumen.appendLine("• Sin referencias con número válido (Ref1-Ref4 / contactos extra)")
