@@ -105,6 +105,9 @@ fun SeguimientoPorDiaScreen() {
     val horarios = remember { mutableStateListOf<Int>().apply { addAll(leerHorariosSeguimiento(context)) } }
     var totalRegistros by remember { mutableIntStateOf(0) }
     var totalPendientes by remember { mutableIntStateOf(0) }
+    var totalMatrizAyer by remember { mutableIntStateOf(0) }
+    var totalConCartucho by remember { mutableIntStateOf(0) }
+    var totalSinCartucho by remember { mutableIntStateOf(0) }
     var cargando by remember { mutableStateOf(false) }
     var mensaje by remember { mutableStateOf<String?>(null) }
     val fechaAyer = remember { SimpleDateFormat("EEEE d 'de' MMMM", Locale("es", "MX")).format(Date(inicioAyerSeguimiento())) }
@@ -113,18 +116,35 @@ fun SeguimientoPorDiaScreen() {
         cargando = true
         try {
             val container = (context.applicationContext as MainApplication).container
+            val inicioAyer = inicioAyerSeguimiento()
+            val finAyer = finAyerSeguimiento()
+            val matrizDao = container.database.matrizDao()
+            val todos = withContext(Dispatchers.IO) { matrizDao.getAllMatriz().first() }
+            val matrizAyer = todos.filter { registro ->
+                val fecha = registro.fecha
+                fecha != null && fecha >= inicioAyer && fecha < finAyer &&
+                    !registro.estado.equals("PASE", ignoreCase = true)
+            }
             val visitas = withContext(Dispatchers.IO) {
-                container.database.visitaMapaDao().getVisitasSemana(inicioAyerSeguimiento(), finAyerSeguimiento()).first()
+                container.database.visitaMapaDao().getVisitasSemana(inicioAyer, finAyer).first()
             }
-            val ids = visitas.filter { it.cartucho == cartucho }.mapNotNull { it.matrizId }.toSet()
-            val registros = withContext(Dispatchers.IO) {
-                container.database.matrizDao().getAllMatriz().first().filter { it.id in ids }
-            }
+            val idsConCartucho = visitas.mapNotNull { it.matrizId }.toSet()
+            val idsCartuchoSeleccionado = visitas.filter { it.cartucho == cartucho }.mapNotNull { it.matrizId }.toSet()
+            val registros = matrizAyer.filter { it.id in idsCartuchoSeleccionado }
+            totalMatrizAyer = matrizAyer.size
+            totalConCartucho = matrizAyer.count { it.id in idsConCartucho }
+            totalSinCartucho = (matrizAyer.size - totalConCartucho).coerceAtLeast(0)
             totalRegistros = registros.size
             totalPendientes = registros.count { !esPagado(it.estado) }
+            if (totalSinCartucho > 0 && registros.isEmpty()) {
+                mensaje = "Hay registros de ayer en Matriz sin cartucho guardado. No se asignan automáticamente para evitar contactar al grupo equivocado."
+            } else if (registros.isEmpty() && matrizAyer.isNotEmpty()) {
+                mensaje = "Hay registros de ayer en Matriz, pero ninguno tiene asignado el cartucho $cartucho."
+            }
         } catch (_: Exception) {
             totalRegistros = 0; totalPendientes = 0
-            mensaje = "No se pudo consultar el cartucho del día anterior."
+            totalMatrizAyer = 0; totalConCartucho = 0; totalSinCartucho = 0
+            mensaje = "No se pudo consultar Matriz y el historial de cartuchos del día anterior."
         } finally { cargando = false }
     }
 
@@ -157,7 +177,10 @@ fun SeguimientoPorDiaScreen() {
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(if (cargando) "Consultando registros…" else "Registros encontrados: $totalRegistros")
+                Text(if (cargando) "Consultando registros…" else "Registros de ayer en Matriz: $totalMatrizAyer")
+                Text("Registros con cartucho guardado: $totalConCartucho")
+                Text("Registros sin cartucho identificado: $totalSinCartucho")
+                Text("En Cartucho $cartucho: $totalRegistros")
                 Text("Pendientes después de excluir pagados: $totalPendientes")
                 Text("El estado pagado se vuelve a comprobar antes de contactar.", style = MaterialTheme.typography.bodySmall)
             }
