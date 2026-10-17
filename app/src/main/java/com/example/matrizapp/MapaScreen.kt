@@ -174,20 +174,10 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
     val fin = remember(inicio) { sumarDiasMapa(inicio, 7) }
     val historial by remember(inicio) { visitaDao.getVisitasSemana(inicio, fin) }.collectAsState(initial = emptyList())
     val cartuchosDia by remember(inicio) { visitaDao.observarCartuchosSemana(inicio, fin) }.collectAsState(initial = emptyList())
-    // Consulta liviana: solo los registros de esta semana con coordenadas (no la lista completa de Matriz).
-    val registros by remember(inicio) { matrizDao.observarMatrizEnRango(inicio, fin) }.collectAsState(initial = emptyList())
-    // Visitas de la semana = TODOS los registros de cada día tal como los muestra Filtro Fecha (fecha dentro
-    // de ese día, status distinto de PASE) + el historial guardado. Si un registro ya está en el historial se
-    // usa esa copia (conserva su cartucho); si no, sale con cartucho 1.
-    val visitas = remember(registros, historial, inicio) {
-        val delDia = registros.mapNotNull { m ->
-            val f = m.fecha ?: return@mapNotNull null
-            if (f < inicio || f >= fin || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
-            val u = m.ubicacion ?: return@mapNotNull null
-            VisitaMapaEntity("M:${m.id}", inicioDelDia(f), m.nombre, u, m.id, cartucho = 1, timestamp = f)
-        }
-        (historial + delDia).distinctBy { it.clave to it.fechaDia }
-    }
+    // El historial persistido del Mapa es la única fuente válida para cartucho y visitas.
+    // No reconstruir puntos desde Matriz: Matriz no almacena el cartucho y asignarles cartucho 1
+    // inventaba una clasificación que Seguimiento por Día no podía reproducir.
+    val visitas = historial
     // Por defecto se ve el DÍA DE HOY; "Toda la semana" junta todos los días con su color.
     var diaSel by remember(inicio) { mutableStateOf<Int?>(dias.indexOf(inicioDelDia()).takeIf { it >= 0 }) }
     // Estado en un holder: solo la tarjeta lo LEE, así tocar un punto no recompone el mapa ni los demás puntos.
@@ -198,12 +188,14 @@ fun MapaScreen(matrizDao: MatrizDao, visitaDao: VisitaMapaDao, onOpenMatriz: (St
         visitas.mapNotNull { v -> latLngMapa(v.ubicacion)?.let { v to it } }
             .distinctBy { (v, ll) -> Triple(v.fechaDia, Math.round(ll.latitude * 1e5), Math.round(ll.longitude * 1e5)) }
     }
-    val cuentaPorDia = remember(puntos, dias) { dias.map { d -> puntos.count { it.first.fechaDia == d } } }
+    // Contar registros del historial, no pines únicos: varios clientes pueden compartir coordenadas GPS.
+    val cuentaPorDia = remember(visitas, dias) { dias.map { d -> visitas.count { it.fechaDia == d } } }
     val diaSeleccionado = diaSel?.let { dias[it] }
     val cartuchoActivo = diaSeleccionado?.let { d -> cartuchosDia.firstOrNull { it.fechaDia == d }?.cartuchoActivo } ?: 1
-    val conteoCartuchos = remember(puntos, diaSeleccionado) {
+    // Los conteos por cartucho se hacen por registro persistido, no por coordenadas GPS deduplicadas.
+    val conteoCartuchos = remember(visitas, diaSeleccionado) {
         if (diaSeleccionado == null) emptyMap()
-        else puntos.filter { it.first.fechaDia == diaSeleccionado }.groupingBy { it.first.cartucho }.eachCount()
+        else visitas.filter { it.fechaDia == diaSeleccionado }.groupingBy { it.cartucho }.eachCount()
     }
     val visitasActivo = conteoCartuchos[cartuchoActivo] ?: 0
     val scope = rememberCoroutineScope()
