@@ -117,6 +117,9 @@ fun SeguimientoPorDiaScreen() {
     var modo by remember { mutableStateOf(prefs.getString(KEY_MODO_SEGUIMIENTO, MODO_COMBINADO) ?: MODO_COMBINADO) }
     val horarios = remember { mutableStateListOf<Int>().apply { addAll(leerHorariosSeguimiento(context)) } }
     var totalRegistros by remember { mutableIntStateOf(0) }
+    var totalIdsCartucho by remember { mutableIntStateOf(0) }
+    var listadoVerificacion by remember { mutableStateOf<List<VisitaMapaEntity>>(emptyList()) }
+    var estadosPorId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var totalPendientes by remember { mutableIntStateOf(0) }
     var totalMatrizAyer by remember { mutableIntStateOf(0) }
     var totalConCartucho by remember { mutableIntStateOf(0) }
@@ -140,6 +143,8 @@ fun SeguimientoPorDiaScreen() {
             val visitas = withContext(Dispatchers.IO) {
                 container.database.visitaMapaDao().getVisitasSemana(inicioAyer, finAyer).first()
             }
+            listadoVerificacion = visitas
+            estadosPorId = todos.associate { it.id to it.estado }
             val idsConCartucho = visitas.mapNotNull { it.matrizId }.toSet()
             val idsCartuchoSeleccionado = visitas.filter { it.cartucho == cartucho }.mapNotNull { it.matrizId }.toSet()
             // El historial determina el número de visitas; buscar por ID evita que getAllMatriz()
@@ -150,7 +155,10 @@ fun SeguimientoPorDiaScreen() {
             totalMatrizAyer = matrizAyer.size
             totalConCartucho = idsConCartucho.size
             totalSinCartucho = matrizAyer.count { it.id !in idsConCartucho }
-            totalRegistros = idsCartuchoSeleccionado.size
+            // Separar filas reales del historial de IDs únicos que se pueden contactar.
+            // Así la lista permite auditar cualquier diferencia sin ocultar filas.
+            totalRegistros = visitas.count { it.cartucho == cartucho }
+            totalIdsCartucho = idsCartuchoSeleccionado.size
             totalPendientes = registrosHistorial.count { !esPagado(it.estado) }
             if (totalSinCartucho > 0 && registrosHistorial.isEmpty()) {
                 mensaje = "Hay registros de ayer en Matriz sin cartucho guardado. No se asignan automáticamente para evitar contactar al grupo equivocado."
@@ -160,6 +168,7 @@ fun SeguimientoPorDiaScreen() {
         } catch (_: Exception) {
             totalRegistros = 0; totalPendientes = 0
             totalMatrizAyer = 0; totalConCartucho = 0; totalSinCartucho = 0
+            totalIdsCartucho = 0; listadoVerificacion = emptyList(); estadosPorId = emptyMap()
             mensaje = "No se pudo consultar Matriz y el historial de cartuchos del día anterior."
         } finally { cargando = false }
     }
@@ -196,9 +205,38 @@ fun SeguimientoPorDiaScreen() {
                 Text(if (cargando) "Consultando registros…" else "Registros de ayer en Matriz: $totalMatrizAyer")
                 Text("Registros identificados en el historial: $totalConCartucho")
                 Text("Registros de ayer sin cartucho identificado: $totalSinCartucho")
-                Text("En Cartucho $cartucho: $totalRegistros")
+                Text("Filas del historial en Cartucho $cartucho: $totalRegistros")
+                Text("Clientes con ID único para seguimiento: $totalIdsCartucho")
                 Text("Pendientes (excluye solo Pagado): $totalPendientes")
                 Text("El estado pagado se vuelve a comprobar antes de contactar.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        val filasCartucho = listadoVerificacion.filter { it.cartucho == cartucho }.sortedBy { it.timestamp }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Listado manual para verificar · Cartucho $cartucho", style = MaterialTheme.typography.titleMedium)
+                Text("Fuente: historial persistido del Mapa. Cada fila muestra el nombre y la clave/ID guardados; no se reclasifica por la fecha actual de Matriz.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                    val fechaHora = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("es", "MX"))
+                    val contenido = buildString {
+                        append("Seguimiento por Día - Cartucho $cartucho\\n")
+                        append("Filas historial: ${filasCartucho.size}\\n")
+                        append("Nombre | ID Matriz | Clave historial | Estado actual | Cartucho | Fecha/hora\\n")
+                        filasCartucho.forEachIndexed { i, v ->
+                            append("${i + 1}. ${v.nombre} | ${v.matrizId ?: "(sin ID)"} | ${v.clave} | ${v.matrizId?.let { estadosPorId[it] } ?: "(sin registro Matriz)"} | ${v.cartucho} | ${fechaHora.format(Date(v.timestamp))}\\n")
+                        }
+                    }
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Listado cartucho $cartucho", contenido))
+                    mensaje = "Listado copiado. Pégalo en el chat para comparar los nombres e IDs."
+                }) { Text("Copiar listado completo") }
+                filasCartucho.forEachIndexed { index, visita ->
+                    Divider()
+                    Text("${index + 1}. ${visita.nombre}", style = MaterialTheme.typography.bodyMedium)
+                    Text("ID Matriz: ${visita.matrizId ?: "sin ID"} · Clave: ${visita.clave}", style = MaterialTheme.typography.bodySmall)
+                    Text("Estado actual: ${visita.matrizId?.let { estadosPorId[it] } ?: "sin registro Matriz"} · Cartucho guardado: ${visita.cartucho}", style = MaterialTheme.typography.bodySmall)
+                }
+                if (filasCartucho.isEmpty()) Text("No hay filas del historial para este cartucho y fecha.")
             }
         }
         Text("Modalidad", style = MaterialTheme.typography.titleMedium)
