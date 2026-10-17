@@ -365,6 +365,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         var huboFalloSms = false
 
         for (registro in registrosDelHorario) {
+            if (prefs.getString(KEY_MODO_SEGUIMIENTO, "") != modo) return Result.success()
             val actual = matrizDao.getById(registro.id) ?: continue
             if (esPagado(actual.estado)) continue
             val sem = actual.semana.trim().toIntOrNull()?.takeIf { it in 1..5 } ?: continue
@@ -395,7 +396,12 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
                     val marcaReserva = NumeroContactadoGuard.reservarSmsConMarca(applicationContext, telefono) ?: continue
                     val mensaje = if (esTitular) MensajesCobranza.paraTT(plantillaDao, actual.nombre, actual.requisito, sem, variante)
                     else MensajesCobranza.paraReferencia(plantillaDao, actual.nombre, sem, variante)
-                    if (esPagado(matrizDao.getById(actual.id)?.estado ?: continue)) {
+                    val estadoAntesDeEnviar = matrizDao.getById(actual.id)?.estado
+                    if (estadoAntesDeEnviar == null) {
+                        NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
+                        continue
+                    }
+                    if (esPagado(estadoAntesDeEnviar)) {
                         NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
                         break
                     }
