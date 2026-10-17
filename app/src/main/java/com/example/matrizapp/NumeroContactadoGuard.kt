@@ -25,7 +25,9 @@ object NumeroContactadoGuard {
         if (ultimo != 0L && ahora - ultimo < ventanaMs) return false
         val ed = prefs.edit()
         prefs.all.forEach { (k, v) -> if (v is Long && ahora - v > PODA_MS) ed.remove(k) }
-        ed.putLong(clave, ahora).apply()
+        // Persistir antes de iniciar la llamada: si Android mata el proceso, la reserva
+        // debe seguir existiendo para evitar una llamada duplicada al reintentar.
+        if (!ed.putLong(clave, ahora).commit()) return false
         return true
     }
 
