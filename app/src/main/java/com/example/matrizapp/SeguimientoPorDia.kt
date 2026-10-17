@@ -325,13 +325,16 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
     override suspend fun doWork(): Result {
         val modo = inputData.getString("modo_seguimiento") ?: return Result.failure()
         if (modo !in setOf(MODO_COMBINADO, MODO_SMS, MODO_LLAMADAS)) return Result.failure()
+        val prefs = preferenciasSeguimiento(applicationContext)
+        // Si el usuario canceló o cambió la modalidad después de que sonó la alarma, no ejecutar
+        // una tarea antigua que quedó esperando en la cola.
+        if (prefs.getString(KEY_MODO_SEGUIMIENTO, "") != modo) return Result.success()
         // Validar todos los permisos requeridos antes de empezar. En modo combinado no se
         // debe llamar primero y descubrir después que no puede completar la parte SMS.
         if (modo != MODO_LLAMADAS && !SmsHelper.tienePermisos(applicationContext)) return Result.failure()
         if (modo != MODO_SMS && !CallHelper.tienePermisos(applicationContext)) return Result.failure()
         if (modo != MODO_SMS) promoverSeguimientoEnPrimerPlano()
         val container = (applicationContext as MainApplication).container
-        val prefs = preferenciasSeguimiento(applicationContext)
         val cartucho = prefs.getInt(KEY_CARTUCHO_SEGUIMIENTO, 1).coerceIn(1, 3)
         val diaObjetivo = inputData.getLong(EXTRA_DIA_SEGUIMIENTO, inicioDelDia())
         val (inicioAyer, finAyer) = rangoAyerParaDiaSeguimiento(diaObjetivo)
