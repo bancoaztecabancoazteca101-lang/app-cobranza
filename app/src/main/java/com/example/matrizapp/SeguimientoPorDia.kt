@@ -219,11 +219,11 @@ fun SeguimientoPorDiaScreen() {
                 OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
                     val fechaHora = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("es", "MX"))
                     val contenido = buildString {
-                        append("Seguimiento por Día - Cartucho $cartucho\\n")
-                        append("Filas historial: ${filasCartucho.size}\\n")
-                        append("Nombre | ID Matriz | Clave historial | Estado actual | Cartucho | Fecha/hora\\n")
+                        append("Seguimiento por Día - Cartucho $cartucho\n")
+                        append("Filas historial: ${filasCartucho.size}\n")
+                        append("Nombre | ID Matriz | Clave historial | Estado actual | Cartucho | Fecha/hora\n")
                         filasCartucho.forEachIndexed { i, v ->
-                            append("${i + 1}. ${v.nombre} | ${v.matrizId ?: "(sin ID)"} | ${v.clave} | ${v.matrizId?.let { estadosPorId[it] } ?: "(sin registro Matriz)"} | ${v.cartucho} | ${fechaHora.format(Date(v.timestamp))}\\n")
+                            append("${i + 1}. ${v.nombre} | ${v.matrizId ?: "(sin ID)"} | ${v.clave} | ${v.matrizId?.let { estadosPorId[it] } ?: "(sin registro Matriz)"} | ${v.cartucho} | ${fechaHora.format(Date(v.timestamp))}\n")
                         }
                     }
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
