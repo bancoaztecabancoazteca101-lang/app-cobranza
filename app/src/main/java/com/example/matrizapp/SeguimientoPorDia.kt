@@ -142,13 +142,16 @@ fun SeguimientoPorDiaScreen() {
             }
             val idsConCartucho = visitas.mapNotNull { it.matrizId }.toSet()
             val idsCartuchoSeleccionado = visitas.filter { it.cartucho == cartucho }.mapNotNull { it.matrizId }.toSet()
-            // El historial determina las visitas del cartucho aunque la fecha actual de Matriz cambie.
-            val registros = todos.filter { it.id in idsCartuchoSeleccionado }
+            // El historial determina el número de visitas; buscar por ID evita que getAllMatriz()
+            // oculte una visita por sus filtros generales de nombre.
+            val registrosHistorial = withContext(Dispatchers.IO) {
+                idsCartuchoSeleccionado.mapNotNull { id -> matrizDao.getById(id) }
+            }
             totalMatrizAyer = matrizAyer.size
-            totalConCartucho = todos.count { it.id in idsConCartucho }
+            totalConCartucho = idsConCartucho.size
             totalSinCartucho = matrizAyer.count { it.id !in idsConCartucho }
-            totalRegistros = registros.size
-            totalPendientes = registros.count { !esPagado(it.estado) }
+            totalRegistros = idsCartuchoSeleccionado.size
+            totalPendientes = registrosHistorial.count { !esPagado(it.estado) }
             if (totalSinCartucho > 0 && registros.isEmpty()) {
                 mensaje = "Hay registros de ayer en Matriz sin cartucho guardado. No se asignan automáticamente para evitar contactar al grupo equivocado."
             } else if (registros.isEmpty() && matrizAyer.isNotEmpty()) {
@@ -359,7 +362,9 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         // El historial del Mapa fija el día y cartucho de la visita. No volver a filtrar por
         // la fecha actual de Matriz: si después se edita esa fecha, no debe borrarse la visita histórica.
         // PASE también cuenta y puede recibir seguimiento; solo Pagado queda excluido del contacto.
-        val registros = matrizDao.getAllMatriz().first().filter { registro -> registro.id in ids }
+        // Consultar por ID, no mediante getAllMatriz(): esa consulta general excluye ciertos
+        // nombres y podría dejar fuera una visita válida que sí figura en el historial del Mapa.
+        val registros = ids.mapNotNull { id -> matrizDao.getById(id) }
         if (registros.isEmpty()) return Result.success()
         val config = container.database.configuracionAutomatizacionDao().obtenerOSembrar()
         val logDao = container.database.contactoLogDao()
