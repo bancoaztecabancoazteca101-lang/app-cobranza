@@ -256,7 +256,10 @@ object SeguimientoPorDiaScheduler {
         val hoy = inicioDelDia()
         horarios.forEachIndexed { index, minutoDia ->
             val diaGuardado = prefs.getLong(KEY_DIA_SLOT_PREFIX + index, 0L)
-            val diaObjetivo = if (preservarCohortePendiente && diaGuardado > 0L) diaGuardado else hoy
+            // No conservar cohortes vencidas tras varios días apagado: si el slot quedó
+            // guardado en una fecha anterior a hoy, el próximo disparo debe volver a procesar AYER.
+            // Se conserva hoy o una fecha futura para no mezclar los slots que siguen pendientes.
+            val diaObjetivo = if (preservarCohortePendiente && diaGuardado >= hoy) diaGuardado else hoy
             // Si un horario ya pasó, se ejecuta lo antes posible manteniendo su día objetivo;
             // no se empuja a mañana ni se mezcla la cohorte con la de otra fecha.
             programarSlot(context, index, minutoDia, diaObjetivo)
