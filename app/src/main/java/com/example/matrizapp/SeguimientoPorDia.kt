@@ -152,7 +152,7 @@ fun SeguimientoPorDiaScreen() {
         prefs.edit().putInt(KEY_CARTUCHO_SEGUIMIENTO, cartucho).putString(KEY_MODO_SEGUIMIENTO, modo).apply()
         guardarHorariosSeguimiento(context, horarios.toList())
         SeguimientoPorDiaScheduler.programar(context)
-        mensaje = "Configuración guardada. Se programaron \${horarios.size} horario(s) independientes de los bloques normales."
+        mensaje = "Configuración guardada. Se programaron ${horarios.size} horario(s) independientes de los bloques normales."
     }
 
     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -196,7 +196,7 @@ fun SeguimientoPorDiaScreen() {
         horarios.forEachIndexed { index, minutoDia ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.material3.Icon(Icons.Default.Schedule, contentDescription = null)
-                Text("Horario \${index + 1}", modifier = Modifier.weight(1f))
+                Text("Horario ${index + 1}", modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = {
                     TimePickerDialog(context, { _, h, m ->
                         val nuevo = h * 60 + m
