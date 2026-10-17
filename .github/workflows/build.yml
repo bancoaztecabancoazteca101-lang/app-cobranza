@@ -116,3 +116,16 @@ jobs:
           make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Las ramas de trabajo deben entregar un APK instalable sin modificar el enlace estable de main.
+      - name: Upload APKs as workflow artifact (ramas de trabajo)
+        if: always() && env.BUILD_FAILED != 'true' && github.ref_name != 'main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Matriz-APK-${{ github.ref_name }}-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/optimizado/*.apk
+          if-no-files-found: error
+          retention-days: 14
