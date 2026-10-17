@@ -152,9 +152,9 @@ fun SeguimientoPorDiaScreen() {
             totalSinCartucho = matrizAyer.count { it.id !in idsConCartucho }
             totalRegistros = idsCartuchoSeleccionado.size
             totalPendientes = registrosHistorial.count { !esPagado(it.estado) }
-            if (totalSinCartucho > 0 && registros.isEmpty()) {
+            if (totalSinCartucho > 0 && registrosHistorial.isEmpty()) {
                 mensaje = "Hay registros de ayer en Matriz sin cartucho guardado. No se asignan automáticamente para evitar contactar al grupo equivocado."
-            } else if (registros.isEmpty() && matrizAyer.isNotEmpty()) {
+            } else if (registrosHistorial.isEmpty() && matrizAyer.isNotEmpty()) {
                 mensaje = "Hay registros de ayer en Matriz, pero ninguno tiene asignado el cartucho $cartucho."
             }
         } catch (_: Exception) {
@@ -365,7 +365,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         // Consultar por ID, no mediante getAllMatriz(): esa consulta general excluye ciertos
         // nombres y podría dejar fuera una visita válida que sí figura en el historial del Mapa.
         val registros = ids.mapNotNull { id -> matrizDao.getById(id) }
-        if (registros.isEmpty()) return Result.success()
+        if (registrosHistorial.isEmpty()) return Result.success()
         val config = container.database.configuracionAutomatizacionDao().obtenerOSembrar()
         val logDao = container.database.contactoLogDao()
         val plantillaDao = container.database.plantillaSmsDao()
