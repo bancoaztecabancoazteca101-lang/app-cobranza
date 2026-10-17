@@ -8,7 +8,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -121,35 +123,48 @@ class FiltrarViewModel(
     ) { todos, extras, solicitudes ->
         val agregados = extras.map { it.clienteId to it.nombreOrigen }.toSet()
         calcularFiltrar(todos.filter { val f = it.fecha; f != null && f in inicioDeHoy()..finDeHoy() }, agregados, solicitudes)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private fun calcularFiltrar(
         todos: List<MatrizEntity>,
         agregados: Set<Pair<String, String>>,
         solicitudes: List<SolicitudEntity>
     ): List<FiltrarItem> {
-        // Coordenadas ya parseadas una sola vez para no repetir el parseo por cada comparación.
-        val coords = todos.associateWith { parseLatLngOrden(it.ubicacion) }
+        // Parsear coordenadas una sola vez por registro.
+        val coords = todos.associate { it.id to parseLatLngOrden(it.ubicacion) }
 
-        fun cercanosDe(item: MatrizEntity, limite: Int): List<Pair<MatrizEntity, Double>> {
-            val miCoord = coords[item] ?: return emptyList()
-            return todos.asSequence()
-                .filter { it.id != item.id }
-                .mapNotNull { otro -> coords[otro]?.let { otro to distanciaKm(miCoord, it) * 1000.0 } }
-                .filter { (_, metros) -> metros <= RADIO_CERCANOS_METROS }
-                .sortedBy { (_, metros) -> metros }
-                .take(limite)
-                .toList()
+        // Construir relaciones de cercanía en una pasada por cada par no ordenado. La distancia
+        // se calcula una sola vez y se añade a ambos titulares; se conserva el radio exacto de
+        // 10 m y luego se ordena cada lista por distancia como antes.
+        val cercanosPorId = todos.associate { it.id to mutableListOf<Pair<MatrizEntity, Double>>() }
+        for (i in todos.indices) {
+            val primero = todos[i]
+            val coordPrimero = coords[primero.id] ?: continue
+            for (j in i + 1 until todos.size) {
+                val segundo = todos[j]
+                val coordSegundo = coords[segundo.id] ?: continue
+                val metros = distanciaKm(coordPrimero, coordSegundo) * 1000.0
+                if (metros <= RADIO_CERCANOS_METROS) {
+                    cercanosPorId.getValue(primero.id).add(segundo to metros)
+                    cercanosPorId.getValue(segundo.id).add(primero to metros)
+                }
+            }
         }
+        cercanosPorId.values.forEach { vecinos -> vecinos.sortBy { it.second } }
 
-        // Solicitudes con coordenadas GPS válidas, parseadas una sola vez. Un registro de Matriz
-        // "viene de solicitud" si su ubicación cae a <= RADIO_CERCANOS_METROS (10 m) de alguna.
-        val solicitudesConCoord = solicitudes.mapNotNull { sol -> parseLatLngOrden(sol.ubicacionRaw)?.let { sol to it } }
+        fun cercanosDe(item: MatrizEntity, limite: Int): List<Pair<MatrizEntity, Double>> =
+            cercanosPorId[item.id].orEmpty().take(limite)
 
-        fun solicitudesDe(item: MatrizEntity): List<SolicitudCoincide> {
-            val miCoord = coords[item] ?: return emptyList()
-            return solicitudesConCoord
-                .map { (sol, c) -> sol to distanciaKm(miCoord, c) * 1000.0 }
+        // Las solicitudes también se parsean una sola vez y las coincidencias se calculan una
+        // sola vez por registro de Matriz; se conserva el mismo umbral, orden y redondeo.
+        val solicitudesConCoord = solicitudes.mapNotNull { sol ->
+            parseLatLngOrden(sol.ubicacionRaw)?.let { sol to it }
+        }
+        val solicitudesPorId = todos.associate { item ->
+            val miCoord = coords[item.id]
+            item.id to if (miCoord == null) emptyList() else solicitudesConCoord
+                .map { (sol, coordSolicitud) -> sol to distanciaKm(miCoord, coordSolicitud) * 1000.0 }
                 .filter { (_, metros) -> metros <= RADIO_CERCANOS_METROS }
                 .sortedBy { (_, metros) -> metros }
                 .map { (sol, metros) -> SolicitudCoincide(sol.id, sol.nombre, metros.toInt()) }
@@ -158,15 +173,12 @@ class FiltrarViewModel(
         val candidatos = todos.filter { item ->
             val manual = item.estado.trim().equals("Filtrar", ignoreCase = true)
             if (manual) return@filter true
-            // Coincide con una solicitud por coordenadas: entra a Filtrar siempre (aunque esté en
-            // zona unidad o no tenga vecinos), porque la coincidencia con la solicitud es específica.
-            if (solicitudesDe(item).isNotEmpty()) return@filter true
-            // Antes solo calificaba el miembro de id menor del grupo (para no repetir tarjeta
-            // por grupo); ahora, a petición de Diego, la relación es mutua: cualquier miembro
-            // con 1 a MAX_VECINOS_AUTOMATICO vecinos a <=10m califica y sale con su propia
-            // tarjeta, así el cercano aparece "de ida y vuelta" (ej. Jesús <-> María).
+            // Una coincidencia específica con Solicitud sigue teniendo prioridad y no depende
+            // de zona unidad ni del número de vecinos.
+            if (solicitudesPorId[item.id].orEmpty().isNotEmpty()) return@filter true
             val vecinos = cercanosDe(item, MAX_VECINOS_AUTOMATICO + 1)
-            vecinos.isNotEmpty() && vecinos.size <= MAX_VECINOS_AUTOMATICO && !estaEnZonaUnidad(coords[item])
+            vecinos.isNotEmpty() && vecinos.size <= MAX_VECINOS_AUTOMATICO &&
+                !estaEnZonaUnidad(coords[item.id])
         }
         if (candidatos.isEmpty()) return emptyList()
 
@@ -182,9 +194,9 @@ class FiltrarViewModel(
             FiltrarItem(
                 id = item.id, nombre = item.nombre, estado = item.estado,
                 imagen = item.imagenUrl, ubicacion = item.ubicacion, cercanos = cercanos,
-                original = item, solicitudes = solicitudesDe(item)
+                original = item, solicitudes = solicitudesPorId[item.id].orEmpty()
             )
-        }.sortedByDescending { it.solicitudes.isNotEmpty() } // los que vienen de solicitud primero (orden estable)
+        }.sortedByDescending { it.solicitudes.isNotEmpty() } // conserva orden estable en cada grupo
     }
 
     /** Confirma sumar los Ref1/Ref2 de un cercano (encontrado por Filtrar) como contacto extra

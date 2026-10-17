@@ -30,14 +30,17 @@ fun FiltrarScreen(viewModel: FiltrarViewModel, searchQuery: String = "") {
     }
     val allItems by viewModel.items.collectAsState()
     var soloSolicitud by remember { mutableStateOf(false) }
-    val items = remember(allItems, searchQuery, soloSolicitud) {
-        val base = if (soloSolicitud) allItems.filter { it.solicitudes.isNotEmpty() } else allItems
-        if (searchQuery.isBlank()) base else base.filter { item ->
-            val q = searchQuery.trim()
-            coincideBusqueda(item.nombre, q) ||
-                item.cercanos.any { coincideBusqueda(it.nombre, q) || coincideBusqueda(it.numTT, q) } ||
-                item.solicitudes.any { coincideBusqueda(it.nombre, q) }
+    // Reutiliza el índice de búsqueda compartido de Matriz: normaliza nombres/teléfonos una vez
+    // por actualización de datos y busca en segundo plano al cambiar el texto.
+    val buscados = rememberItemsFiltrados(allItems, searchQuery) { item ->
+        buildList {
+            add(item.nombre)
+            item.cercanos.forEach { add(it.nombre); add(it.numTT) }
+            item.solicitudes.forEach { add(it.nombre) }
         }
+    }
+    val items = remember(buscados, soloSolicitud) {
+        if (soloSolicitud) buscados.filter { it.solicitudes.isNotEmpty() } else buscados
     }
     LaunchedEffect(agregarAutomaticamente, allItems) {
         if (agregarAutomaticamente && allItems.isNotEmpty()) {

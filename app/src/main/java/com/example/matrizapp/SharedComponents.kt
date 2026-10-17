@@ -28,10 +28,13 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import kotlinx.coroutines.sync.withPermit
 import java.util.Locale
@@ -39,12 +42,39 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 val ESTADOS_MATRIZ = listOf("APP", "Retorno", "Pagado", "PASE", "FILTRAR", "Mano")
 
+/**
+ * Obtiene una ubicación actual para capturar domicilios, no una ubicación antigua de caché.
+ * Solo acepta coordenadas finitas, dentro del rango geográfico, con precisión declarada
+ * de hasta 30 m y una lectura de antigüedad máxima de 30 s. El llamador conserva el valor
+ * anterior cuando devuelve null; nunca se reemplaza una ubicación guardada por una falla.
+ */
 suspend fun obtenerUbicacionActual(context: android.content.Context): String? {
     return try {
         val client = LocationServices.getFusedLocationProviderClient(context)
-        val location = client.lastLocation.await() ?: return null
-        "${location.latitude}, ${location.longitude}"
-    } catch (e: SecurityException) { null } catch (e: Exception) { null }
+        val location = withTimeoutOrNull(10_000L) {
+            client.getCurrentLocation(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                CancellationTokenSource().token
+            ).await()
+        } ?: return null
+
+        val lat = location.latitude
+        val lng = location.longitude
+        if (!lat.isFinite() || !lng.isFinite()) return null
+        if (lat !in -90.0..90.0 || lng !in -180.0..180.0) return null
+        if (!location.hasAccuracy() || !location.accuracy.isFinite() ||
+            location.accuracy <= 0f || location.accuracy > 30f
+        ) return null
+
+        val edadNanos = android.os.SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos
+        if (edadNanos < 0L || edadNanos > 30_000_000_000L) return null
+
+        "${lat}, ${lng}"
+    } catch (e: SecurityException) {
+        null
+    } catch (e: Exception) {
+        null
+    }
 }
 
 fun getStatusColor(estado: String): Color {
@@ -382,7 +412,7 @@ fun MatrizFullFormDialog(
     var diasApertura by remember { mutableStateOf(item?.diasApertura ?: "") }
     var buscandoUbicacionLaboral by remember { mutableStateOf(false) }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
-    var buscandoUbicacion by remember { mutableStateOf(esNuevo && prefill?.ubicacion.isNullOrBlank()) }
+    var buscandoUbicacion by remember { mutableStateOf(false) }
     var activePhotoSlot by remember { mutableStateOf(1) }
     // Buscar domicilio escribiendo la dirección (sin necesidad de estar en el sitio): se
     // geocodifica el texto igual que en Ruta IA y se llena el campo con "lat,lng".
@@ -585,7 +615,16 @@ fun MatrizFullFormDialog(
                 )
                 LaunchedEffect(buscandoUbicacion) {
                     if (buscandoUbicacion) {
-                        ubicacion = obtenerUbicacionActual(context) ?: ubicacion
+                        val actual = obtenerUbicacionActual(context)
+                        if (actual != null) {
+                            ubicacion = actual
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "No se obtuvo una ubicación reciente y precisa. Activa la ubicación y vuelve a intentarlo.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                         buscandoUbicacion = false
                     }
                 }
@@ -627,7 +666,16 @@ fun MatrizFullFormDialog(
                     )
                     LaunchedEffect(buscandoUbicacionLaboral) {
                         if (buscandoUbicacionLaboral) {
-                            domicilioLaboral = obtenerUbicacionActual(context) ?: domicilioLaboral
+                            val actual = obtenerUbicacionActual(context)
+                            if (actual != null) {
+                                domicilioLaboral = actual
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "No se obtuvo una ubicación reciente y precisa. Activa la ubicación y vuelve a intentarlo.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                             buscandoUbicacionLaboral = false
                         }
                     }
@@ -1267,7 +1315,7 @@ fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista, Pair<Doub
                                 val ubic = parseLatLngOrden(obtenerUbicacionActual(context))
                                 buscandoUbicacion = false
                                 if (ubic == null) {
-                                    Toast.makeText(context, "No se pudo obtener tu ubicación actual (revisa el GPS)", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "GPS impreciso o sin señal reciente. Intenta de nuevo.", Toast.LENGTH_SHORT).show()
                                 } else {
                                     onOrdenChange(opcion, ubic)
                                 }
@@ -1323,7 +1371,7 @@ fun FiltroFechaOrdenButton(
                                 val ubic = parseLatLngOrden(obtenerUbicacionActual(context))
                                 buscandoUbicacion = false
                                 if (ubic == null) {
-                                    Toast.makeText(context, "No se pudo obtener tu ubicación actual (revisa el GPS)", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "GPS impreciso o sin señal reciente. Intenta de nuevo.", Toast.LENGTH_SHORT).show()
                                 } else {
                                     onOrdenChange(opcion, ubic)
                                 }
@@ -1651,8 +1699,28 @@ fun rememberTodosMatriz(): List<MatrizEntity> {
 @Composable
 fun rememberCoincidenciasUbicacion(coordenadas: String?, excluirId: String?): List<CoincidenciaUbicacion> {
     val todos = rememberTodosMatriz()
-    return produceState(emptyList<CoincidenciaUbicacion>(), coordenadas, excluirId, todos) {
-        value = withContext(Dispatchers.Default) { buscarCoincidenciasUbicacion(coordenadas, todos, excluirId) }
+    // Las coordenadas de Matriz no cambian mientras se edita el campo de ubicación.
+    // Parsearlas solo cuando cambia la lista evita repetir trabajo por cada ajuste del GPS.
+    val coordenadasRegistros = remember(todos) {
+        todos.mapNotNull { registro ->
+            parseLatLngOrden(registro.ubicacion)?.let { registro to it }
+        }
+    }
+    return produceState(emptyList<CoincidenciaUbicacion>(), coordenadas, excluirId, coordenadasRegistros) {
+        value = withContext(Dispatchers.Default) {
+            val origen = parseLatLngOrden(coordenadas)
+            if (origen == null) emptyList()
+            else coordenadasRegistros.asSequence()
+                .filter { (registro, _) -> registro.id != excluirId }
+                .mapNotNull { (registro, punto) ->
+                    val metros = distanciaKm(origen, punto) * 1000.0
+                    if (metros <= RADIO_MISMA_UBICACION_M) {
+                        CoincidenciaUbicacion(registro.id, registro.nombre, metros.toInt())
+                    } else null
+                }
+                .sortedBy { it.distanciaM }
+                .toList()
+        }
     }.value
 }
 

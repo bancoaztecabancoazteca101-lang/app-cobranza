@@ -80,6 +80,8 @@ fun parseLatLngOrden(raw: String?): Pair<Double, Double>? {
     if (partes.size != 2) return null
     val lat = partes[0].toDoubleOrNull() ?: return null
     val lng = partes[1].toDoubleOrNull() ?: return null
+    if (!lat.isFinite() || !lng.isFinite()) return null
+    if (lat !in -90.0..90.0 || lng !in -180.0..180.0) return null
     return lat to lng
 }
 
