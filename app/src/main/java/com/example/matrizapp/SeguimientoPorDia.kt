@@ -117,7 +117,8 @@ fun SeguimientoPorDiaScreen() {
     var modo by remember { mutableStateOf(prefs.getString(KEY_MODO_SEGUIMIENTO, MODO_COMBINADO) ?: MODO_COMBINADO) }
     val horarios = remember { mutableStateListOf<Int>().apply { addAll(leerHorariosSeguimiento(context)) } }
     var totalRegistros by remember { mutableIntStateOf(0) }
-    var totalPendientes by remember { mutableIntStateOf(0) }    var totalMatrizAyer by remember { mutableIntStateOf(0) }
+    var totalPendientes by remember { mutableIntStateOf(0) }
+    var totalMatrizAyer by remember { mutableIntStateOf(0) }
     var totalConCartucho by remember { mutableIntStateOf(0) }
     var totalSinCartucho by remember { mutableIntStateOf(0) }
     var cargando by remember { mutableStateOf(false) }
