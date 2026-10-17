@@ -362,6 +362,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         if (cantidadSlots != leerHorariosSeguimiento(applicationContext).size || slot !in 0 until cantidadSlots) return Result.success()
         // Cada horario atiende una parte estable de los registros: los siguientes horarios no vuelven a llamar al cartucho completo.
         val registrosDelHorario = registros.filter { Math.floorMod(it.id.hashCode(), cantidadSlots) == slot }
+        var huboFalloSms = false
 
         for (registro in registrosDelHorario) {
             val actual = matrizDao.getById(registro.id) ?: continue
@@ -391,11 +392,21 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
                 if (esPagado(estadoFresco)) break
                 if (modo == MODO_SMS) {
                     if (!SmsHelper.tienePermisos(applicationContext)) return Result.failure()
-                    if (!NumeroContactadoGuard.reservarSms(applicationContext, telefono)) continue
+                    val marcaReserva = NumeroContactadoGuard.reservarSmsConMarca(applicationContext, telefono) ?: continue
                     val mensaje = if (esTitular) MensajesCobranza.paraTT(plantillaDao, actual.nombre, actual.requisito, sem, variante)
                     else MensajesCobranza.paraReferencia(plantillaDao, actual.nombre, sem, variante)
-                    if (esPagado(matrizDao.getById(actual.id)?.estado ?: continue)) break
-                    SmsHelper.enviarSms(applicationContext, config.simSms, telefono, mensaje)
+                    if (esPagado(matrizDao.getById(actual.id)?.estado ?: continue)) {
+                        NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
+                        break
+                    }
+                    if (!SmsHelper.enviarSms(applicationContext, config.simSms, telefono, mensaje)) {
+                        // Un rechazo de SmsManager no debe dejar el número bloqueado 30 min ni
+                        // tratarse como envío exitoso. Se reintenta el Worker sin duplicar los
+                        // SMS que sí fueron aceptados por el sistema.
+                        NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
+                        huboFalloSms = true
+                        android.util.Log.e("SeguimientoPorDia", "SmsManager rechazó un SMS automático (teléfono terminado en ${telefono.filter { it.isDigit() }.takeLast(4)})")
+                    }
                 } else {
                     if (!CallHelper.tienePermisos(applicationContext)) return Result.failure()
                     if (!NumeroContactadoGuard.reservar(applicationContext, telefono)) continue
@@ -404,6 +415,11 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
                     delay(config.segundosPausaEntreLlamadas * 1_000L)
                 }
             }
+        }
+        if (huboFalloSms) {
+            // WorkManager reintentará con backoff. Los envíos ya aceptados siguen protegidos por
+            // NumeroContactadoGuard; solo se vuelven a intentar los números cuya reserva se liberó.
+            return if (runAttemptCount < 2) Result.retry() else Result.failure()
         }
         return Result.success()
     }
