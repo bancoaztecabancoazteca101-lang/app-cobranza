@@ -114,9 +114,13 @@ suspend fun VisitaMapaDao.registrarVisitaHoy(clave: String, nombre: String, ubic
         val hoy = inicioDelDia()
         asegurarCartuchoDia(hoy)
         val cartucho = getCartuchoActivo(hoy) ?: 1
-        registrar(VisitaMapaEntity(clave, hoy, nombre, ubicacionValida, matrizId, cartucho))
+        // REPLACE permite corregir el cartucho de una fila que hubiera sido registrada
+        // automáticamente por una versión anterior y ahora sí fue editada/visitada.
+        reemplazar(VisitaMapaEntity(clave, hoy, nombre, ubicacionValida, matrizId, cartucho))
         borrarAnteriores(hoy - 120L * 24 * 60 * 60 * 1000) // se conservan ~4 meses
-    } catch (_: Exception) { }
+    } catch (e: Exception) {
+        android.util.Log.e("VisitaMapa", "No se pudo guardar el historial de visita de Matriz ID=$matrizId", e)
+    }
 }
 
 /** Guarda en el historial del Mapa TODOS los registros de hoy (los mismos que muestra Filtro Fecha:
@@ -139,7 +143,9 @@ suspend fun VisitaMapaDao.registrarRegistrosDeHoy(items: List<MatrizEntity>) {
             VisitaMapaEntity("M:${m.id}", hoy, m.nombre, ubicacionValida, m.id, cartucho)
         }
         if (nuevos.isNotEmpty()) registrarVarias(nuevos)
-    } catch (_: Exception) { }
+    } catch (e: Exception) {
+        android.util.Log.e("VisitaMapa", "No se pudo completar el registro automático de visitas de hoy", e)
+    }
 }
 
 @Dao
