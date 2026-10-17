@@ -236,7 +236,8 @@ fun SeguimientoPorDiaScreen() {
             SeguimientoPorDiaScheduler.cancelar(context)
             mensaje = "Se canceló la programación de Seguimiento Por Día."
         }) { Text("Cancelar programación") }
-        mensaje?.let { Text(it, style = MaterialTheme.typography.bodySmall) }    }
+        mensaje?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    }
 }
 
 object SeguimientoPorDiaScheduler {
