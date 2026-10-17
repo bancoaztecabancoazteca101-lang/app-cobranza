@@ -376,17 +376,19 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
 
         for (registro in registrosDelHorario) {
             if (prefs.getString(KEY_MODO_SEGUIMIENTO, "") != modo) return Result.success()
+            if (modo != MODO_LLAMADAS && !SmsHelper.tienePermisos(applicationContext)) return Result.failure()
+            if (modo != MODO_SMS && !CallHelper.tienePermisos(applicationContext)) return Result.failure()
             val actual = matrizDao.getById(registro.id) ?: continue
-            if (esPagado(actual.estado)) continue
+            if (esPagado(actual.estado) || actual.estado.equals("PASE", ignoreCase = true)) continue
             val sem = actual.semana.trim().toIntOrNull()?.takeIf { it in 1..5 } ?: continue
             val variante = logDao.contarTotalContactos(actual.id)
             if (modo == MODO_COMBINADO) {
                 val fresco = matrizDao.getById(actual.id) ?: continue
-                if (esPagado(fresco.estado)) continue
+                if (esPagado(fresco.estado) || fresco.estado.equals("PASE", ignoreCase = true)) continue
                 procesarClienteLlamadaAutomatica(
                     applicationContext, fresco, sem, config, logDao, plantillaDao,
                     contactoExtraDao, vistos, variante
-                ) { matrizDao.getById(actual.id)?.estado }
+                ) { matrizDao.getById(actual.id)?.estado?.takeUnless { it.equals("PASE", ignoreCase = true) } }
                 continue
             }
             val telefonos = buildList {
@@ -400,7 +402,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
 
             for ((telefono, esTitular) in telefonos) {
                 val estadoFresco = matrizDao.getById(actual.id)?.estado ?: continue
-                if (esPagado(estadoFresco)) break
+                if (esPagado(estadoFresco) || estadoFresco.equals("PASE", ignoreCase = true)) break
                 if (modo == MODO_SMS) {
                     if (!SmsHelper.tienePermisos(applicationContext)) return Result.failure()
                     val marcaReserva = NumeroContactadoGuard.reservarSmsConMarca(applicationContext, telefono) ?: continue
@@ -411,7 +413,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
                         NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
                         continue
                     }
-                    if (esPagado(estadoAntesDeEnviar)) {
+                    if (esPagado(estadoAntesDeEnviar) || estadoAntesDeEnviar.equals("PASE", ignoreCase = true)) {
                         NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
                         break
                     }
