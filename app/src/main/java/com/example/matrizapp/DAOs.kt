@@ -134,7 +134,7 @@ suspend fun VisitaMapaDao.registrarRegistrosDeHoy(items: List<MatrizEntity>) {
         val cartucho = getCartuchoActivo(hoy) ?: 1
         val nuevos = items.mapNotNull { m ->
             val f = m.fecha ?: return@mapNotNull null
-            if (f < hoy || f >= finHoy || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
+            if (f < hoy || f >= finHoy) return@mapNotNull null
             // Guardar también registros sin GPS: no se mostrarán como punto en el mapa, pero
             // sí estarán disponibles para seguimiento por día y cartucho.
             val p = m.ubicacion?.split(",")?.map { it.trim() }
