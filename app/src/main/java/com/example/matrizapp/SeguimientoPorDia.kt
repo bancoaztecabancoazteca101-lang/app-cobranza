@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -233,7 +234,7 @@ fun SeguimientoPorDiaScreen() {
                     mensaje = "Listado copiado. Pégalo en el chat para comparar los nombres e IDs."
                 }) { Text("Copiar listado completo") }
                 filasCartucho.forEachIndexed { index, visita ->
-                    Divider()
+                    HorizontalDivider()
                     Text("${index + 1}. ${visita.nombre}", style = MaterialTheme.typography.bodyMedium)
                     Text("ID Matriz: ${visita.matrizId ?: "sin ID"} · Clave: ${visita.clave}", style = MaterialTheme.typography.bodySmall)
                     Text("Estado actual: ${visita.matrizId?.let { estadosPorId[it] } ?: "sin registro Matriz"} · Cartucho guardado: ${visita.cartucho}", style = MaterialTheme.typography.bodySmall)
