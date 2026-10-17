@@ -365,7 +365,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         // Consultar por ID, no mediante getAllMatriz(): esa consulta general excluye ciertos
         // nombres y podría dejar fuera una visita válida que sí figura en el historial del Mapa.
         val registros = ids.mapNotNull { id -> matrizDao.getById(id) }
-        if (registrosHistorial.isEmpty()) return Result.success()
+        if (registros.isEmpty()) return Result.success()
         val config = container.database.configuracionAutomatizacionDao().obtenerOSembrar()
         val logDao = container.database.contactoLogDao()
         val plantillaDao = container.database.plantillaSmsDao()
