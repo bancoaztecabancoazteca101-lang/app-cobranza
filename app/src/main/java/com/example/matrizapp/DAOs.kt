@@ -114,9 +114,9 @@ suspend fun VisitaMapaDao.registrarVisitaHoy(clave: String, nombre: String, ubic
         val hoy = inicioDelDia()
         asegurarCartuchoDia(hoy)
         val cartucho = getCartuchoActivo(hoy) ?: 1
-        // REPLACE permite corregir el cartucho de una fila que hubiera sido registrada
-        // automáticamente por una versión anterior y ahora sí fue editada/visitada.
-        reemplazar(VisitaMapaEntity(clave, hoy, nombre, ubicacionValida, matrizId, cartucho))
+        // IGNORE conserva una asignación manual de cartucho que ya exista para este punto.
+        // Las filas importadas nuevas ya no se crean automáticamente como visitas desde el ViewModel.
+        registrar(VisitaMapaEntity(clave, hoy, nombre, ubicacionValida, matrizId, cartucho))
         borrarAnteriores(hoy - 120L * 24 * 60 * 60 * 1000) // se conservan ~4 meses
     } catch (e: Exception) {
         android.util.Log.e("VisitaMapa", "No se pudo guardar el historial de visita de Matriz ID=$matrizId", e)
