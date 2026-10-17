@@ -59,6 +59,7 @@ private const val MODO_SMS = "SMS"
 private const val MODO_LLAMADAS = "LLAMADAS"
 private const val WORK_SEGUIMIENTO = "seguimiento_por_dia_cola"
 private const val EXTRA_SLOT_SEGUIMIENTO = "slot_seguimiento"
+private const val EXTRA_DIA_SEGUIMIENTO = "dia_objetivo_seguimiento"
 private const val SLOT_BASE_SEGUIMIENTO = 8200
 private const val MAX_HORARIOS_SEGUIMIENTO = 20
 
@@ -90,6 +91,17 @@ private fun finAyerSeguimiento(): Long {
     c.set(Calendar.HOUR_OF_DAY, 0); c.set(Calendar.MINUTE, 0)
     c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
     return c.timeInMillis
+}
+
+/** Devuelve el rango del día anterior a la fecha local planificada para una alarma. */
+private fun rangoAyerParaDiaSeguimiento(diaObjetivo: Long): Pair<Long, Long> {
+    val fin = Calendar.getInstance().apply {
+        timeInMillis = diaObjetivo
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }
+    val inicio = (fin.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
+    return inicio.timeInMillis to fin.timeInMillis
 }
 
 private fun textoHoraSeguimiento(minutoDia: Int): String =
@@ -272,7 +284,14 @@ object SeguimientoPorDiaScheduler {
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             if (siguienteDia || timeInMillis <= ahora.timeInMillis) add(Calendar.DAY_OF_YEAR, 1)
         }
-        val intent = Intent(context, SeguimientoPorDiaAlarmReceiver::class.java).putExtra(EXTRA_SLOT_SEGUIMIENTO, slot)
+        val diaProgramado = Calendar.getInstance().apply {
+            timeInMillis = disparo.timeInMillis
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val intent = Intent(context, SeguimientoPorDiaAlarmReceiver::class.java)
+            .putExtra(EXTRA_SLOT_SEGUIMIENTO, slot)
+            .putExtra(EXTRA_DIA_SEGUIMIENTO, diaProgramado)
         val pending = PendingIntent.getBroadcast(context, SLOT_BASE_SEGUIMIENTO + slot, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, disparo.timeInMillis, pending)
@@ -288,8 +307,15 @@ class SeguimientoPorDiaAlarmReceiver : BroadcastReceiver() {
         val modo = prefs.getString(KEY_MODO_SEGUIMIENTO, "") ?: ""
         if (modo !in setOf(MODO_COMBINADO, MODO_SMS, MODO_LLAMADAS)) return
         val minuto = leerHorariosSeguimiento(context).getOrNull(slot) ?: return
+        val diaObjetivo = intent.getLongExtra(EXTRA_DIA_SEGUIMIENTO, inicioDelDia())
+        val cantidadSlotsActual = leerHorariosSeguimiento(context).size
         val request = OneTimeWorkRequestBuilder<SeguimientoPorDiaWorker>()
-            .setInputData(workDataOf("modo_seguimiento" to modo, "slot_seguimiento" to slot, "cantidad_slots" to leerHorariosSeguimiento(context).size)).addTag("seguimiento_por_dia").build()
+            .setInputData(workDataOf(
+                "modo_seguimiento" to modo,
+                "slot_seguimiento" to slot,
+                "cantidad_slots" to cantidadSlotsActual,
+                EXTRA_DIA_SEGUIMIENTO to diaObjetivo
+            )).addTag("seguimiento_por_dia").build()
         WorkManager.getInstance(context).enqueueUniqueWork(WORK_SEGUIMIENTO, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         SeguimientoPorDiaScheduler.programarSlot(context, slot, minuto, true)
     }
@@ -307,8 +333,8 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         val container = (applicationContext as MainApplication).container
         val prefs = preferenciasSeguimiento(applicationContext)
         val cartucho = prefs.getInt(KEY_CARTUCHO_SEGUIMIENTO, 1).coerceIn(1, 3)
-        val inicioAyer = inicioAyerSeguimiento()
-        val finAyer = finAyerSeguimiento()
+        val diaObjetivo = inputData.getLong(EXTRA_DIA_SEGUIMIENTO, inicioDelDia())
+        val (inicioAyer, finAyer) = rangoAyerParaDiaSeguimiento(diaObjetivo)
         val visitas = container.database.visitaMapaDao().getVisitasSemana(inicioAyer, finAyer).first()
             .filter { it.cartucho == cartucho }
         val ids = visitas.mapNotNull { it.matrizId }.toSet()
@@ -328,6 +354,9 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         val vistos = mutableSetOf<String>()
         val slot = inputData.getInt("slot_seguimiento", 0)
         val cantidadSlots = inputData.getInt("cantidad_slots", 1).coerceAtLeast(1)
+        // Si cambió el número de horarios después de encolar esta tarea, descartarla: la nueva
+        // programación ya asignará los clientes con la distribución actualizada.
+        if (cantidadSlots != leerHorariosSeguimiento(applicationContext).size || slot !in 0 until cantidadSlots) return Result.success()
         // Cada horario atiende una parte estable de los registros: los siguientes horarios no vuelven a llamar al cartucho completo.
         val registrosDelHorario = registros.filter { Math.floorMod(it.id.hashCode(), cantidadSlots) == slot }
 
