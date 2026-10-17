@@ -117,8 +117,7 @@ fun SeguimientoPorDiaScreen() {
     var modo by remember { mutableStateOf(prefs.getString(KEY_MODO_SEGUIMIENTO, MODO_COMBINADO) ?: MODO_COMBINADO) }
     val horarios = remember { mutableStateListOf<Int>().apply { addAll(leerHorariosSeguimiento(context)) } }
     var totalRegistros by remember { mutableIntStateOf(0) }
-    var totalPendientes by remember { mutableIntStateOf(0) }
-    var totalMatrizAyer by remember { mutableIntStateOf(0) }
+    var totalPendientes by remember { mutableIntStateOf(0) }    var totalMatrizAyer by remember { mutableIntStateOf(0) }
     var totalConCartucho by remember { mutableIntStateOf(0) }
     var totalSinCartucho by remember { mutableIntStateOf(0) }
     var cargando by remember { mutableStateOf(false) }
@@ -135,8 +134,7 @@ fun SeguimientoPorDiaScreen() {
             val todos = withContext(Dispatchers.IO) { matrizDao.getAllMatriz().first() }
             val matrizAyer = todos.filter { registro ->
                 val fecha = registro.fecha
-                fecha != null && fecha >= inicioAyer && fecha < finAyer &&
-                    !registro.estado.equals("PASE", ignoreCase = true)
+                fecha != null && fecha >= inicioAyer && fecha < finAyer
             }
             val visitas = withContext(Dispatchers.IO) {
                 container.database.visitaMapaDao().getVisitasSemana(inicioAyer, finAyer).first()
@@ -194,7 +192,7 @@ fun SeguimientoPorDiaScreen() {
                 Text("Registros con cartucho guardado: $totalConCartucho")
                 Text("Registros sin cartucho identificado: $totalSinCartucho")
                 Text("En Cartucho $cartucho: $totalRegistros")
-                Text("Pendientes después de excluir pagados: $totalPendientes")
+                Text("Pendientes (excluye solo Pagado): $totalPendientes")
                 Text("El estado pagado se vuelve a comprobar antes de contactar.", style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -231,14 +229,13 @@ fun SeguimientoPorDiaScreen() {
                 horarios.clear(); horarios.addAll(ordenados)
             }
         }) { Text("Agregar horario") }
-        Text("Los registros pagados se excluyen y el estado se revalida antes de cada contacto. Los horarios normales de llamadas no se modifican.", style = MaterialTheme.typography.bodySmall)
+        Text("Solo los registros Pagado se excluyen y el estado se revalida antes de cada contacto. Los horarios normales de llamadas no se modifican.", style = MaterialTheme.typography.bodySmall)
         Button(modifier = Modifier.fillMaxWidth(), enabled = horarios.isNotEmpty() && !cargando, onClick = { guardarYProgramar() }) { Text("Guardar y programar") }
         OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
             SeguimientoPorDiaScheduler.cancelar(context)
             mensaje = "Se canceló la programación de Seguimiento Por Día."
         }) { Text("Cancelar programación") }
-        mensaje?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-    }
+        mensaje?.let { Text(it, style = MaterialTheme.typography.bodySmall) }    }
 }
 
 object SeguimientoPorDiaScheduler {
@@ -356,12 +353,10 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         val ids = visitas.mapNotNull { it.matrizId }.toSet()
         if (ids.isEmpty()) return Result.success()
         val matrizDao = container.database.matrizDao()
-        // La fecha de Matriz también debe corresponder a ayer; el historial de mapa por sí solo no basta.
-        val registros = matrizDao.getAllMatriz().first().filter { registro ->
-            registro.id in ids && registro.fecha != null &&
-                registro.fecha >= inicioAyer && registro.fecha < finAyer &&
-                !registro.estado.equals("PASE", ignoreCase = true)
-        }
+        // El historial del Mapa fija el día y cartucho de la visita. No volver a filtrar por
+        // la fecha actual de Matriz: si después se edita esa fecha, no debe borrarse la visita histórica.
+        // PASE también cuenta y puede recibir seguimiento; solo Pagado queda excluido del contacto.
+        val registros = matrizDao.getAllMatriz().first().filter { registro -> registro.id in ids }
         if (registros.isEmpty()) return Result.success()
         val config = container.database.configuracionAutomatizacionDao().obtenerOSembrar()
         val logDao = container.database.contactoLogDao()
@@ -382,16 +377,16 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
             if (modo != MODO_LLAMADAS && !SmsHelper.tienePermisos(applicationContext)) return Result.failure()
             if (modo != MODO_SMS && !CallHelper.tienePermisos(applicationContext)) return Result.failure()
             val actual = matrizDao.getById(registro.id) ?: continue
-            if (esPagado(actual.estado) || actual.estado.equals("PASE", ignoreCase = true)) continue
+            if (esPagado(actual.estado)) continue
             val sem = actual.semana.trim().toIntOrNull()?.takeIf { it in 1..5 } ?: continue
             val variante = logDao.contarTotalContactos(actual.id)
             if (modo == MODO_COMBINADO) {
                 val fresco = matrizDao.getById(actual.id) ?: continue
-                if (esPagado(fresco.estado) || fresco.estado.equals("PASE", ignoreCase = true)) continue
+                if (esPagado(fresco.estado)) continue
                 procesarClienteLlamadaAutomatica(
                     applicationContext, fresco, sem, config, logDao, plantillaDao,
                     contactoExtraDao, vistos, variante
-                ) { matrizDao.getById(actual.id)?.estado?.takeUnless { it.equals("PASE", ignoreCase = true) } }
+                ) { estado -> estado?.takeUnless { esPagado(it) } }
                 continue
             }
             val telefonos = buildList {
@@ -405,7 +400,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
 
             for ((telefono, esTitular) in telefonos) {
                 val estadoFresco = matrizDao.getById(actual.id)?.estado ?: continue
-                if (esPagado(estadoFresco) || estadoFresco.equals("PASE", ignoreCase = true)) break
+                if (esPagado(estadoFresco)) break
                 if (modo == MODO_SMS) {
                     if (!SmsHelper.tienePermisos(applicationContext)) return Result.failure()
                     val marcaReserva = NumeroContactadoGuard.reservarSmsConMarca(applicationContext, telefono) ?: continue
@@ -416,7 +411,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
                         NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
                         continue
                     }
-                    if (esPagado(estadoAntesDeEnviar) || estadoAntesDeEnviar.equals("PASE", ignoreCase = true)) {
+                    if (esPagado(estadoAntesDeEnviar)) {
                         NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
                         break
                     }
