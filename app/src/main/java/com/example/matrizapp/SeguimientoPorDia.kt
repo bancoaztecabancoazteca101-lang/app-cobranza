@@ -233,7 +233,16 @@ object SeguimientoPorDiaScheduler {
         cancelarAlarmas(context)
         val modo = preferenciasSeguimiento(context).getString(KEY_MODO_SEGUIMIENTO, MODO_COMBINADO) ?: MODO_COMBINADO
         if (modo !in setOf(MODO_COMBINADO, MODO_SMS, MODO_LLAMADAS)) return
-        leerHorariosSeguimiento(context).forEachIndexed { index, minutoDia -> programarSlot(context, index, minutoDia, false) }
+        val horarios = leerHorariosSeguimiento(context)
+        // Un solo conjunto de horarios debe trabajar sobre la misma cohorte de ayer.
+        // Si al guardar ya pasó alguno, mover TODOS a mañana evita mezclar en una misma
+        // programación clientes de dos días distintos.
+        val ahora = Calendar.getInstance()
+        val minutoActual = ahora.get(Calendar.HOUR_OF_DAY) * 60 + ahora.get(Calendar.MINUTE)
+        val moverTodosAManana = horarios.any { it <= minutoActual }
+        horarios.forEachIndexed { index, minutoDia ->
+            programarSlot(context, index, minutoDia, moverTodosAManana)
+        }
     }
 
     fun cancelar(context: Context) {
@@ -290,6 +299,10 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
     override suspend fun doWork(): Result {
         val modo = inputData.getString("modo_seguimiento") ?: return Result.failure()
         if (modo !in setOf(MODO_COMBINADO, MODO_SMS, MODO_LLAMADAS)) return Result.failure()
+        // Validar todos los permisos requeridos antes de empezar. En modo combinado no se
+        // debe llamar primero y descubrir después que no puede completar la parte SMS.
+        if (modo != MODO_LLAMADAS && !SmsHelper.tienePermisos(applicationContext)) return Result.failure()
+        if (modo != MODO_SMS && !CallHelper.tienePermisos(applicationContext)) return Result.failure()
         if (modo != MODO_SMS) promoverSeguimientoEnPrimerPlano()
         val container = (applicationContext as MainApplication).container
         val prefs = preferenciasSeguimiento(applicationContext)
