@@ -40,6 +40,15 @@ jobs:
           gradle-version: '8.4'
           cache-disabled: true
 
+      # Evita que las tres variantes acumulen demasiados procesos/daemons en el runner.
+      - name: Limitar memoria y concurrencia de Gradle
+        run: |
+          {
+            echo 'org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8'
+            echo 'org.gradle.workers.max=2'
+            echo 'org.gradle.parallel=false'
+          } >> gradle.properties
+
       - name: Build Debug APK
         run: |
           # main publica SOLO la build release (sin R8, probada) como app-debug.apk (el enlace de siempre).
