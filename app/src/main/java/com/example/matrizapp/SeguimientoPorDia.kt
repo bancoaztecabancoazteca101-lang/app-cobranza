@@ -388,8 +388,9 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
                 if (esPagado(fresco.estado)) continue
                 procesarClienteLlamadaAutomatica(
                     applicationContext, fresco, sem, config, logDao, plantillaDao,
-                    contactoExtraDao, vistos, variante
-                ) , estadoActual = { matrizDao.getById(fresco.id)?.estado }
+                    contactoExtraDao, vistos, variante,
+                    estadoActual = { matrizDao.getById(fresco.id)?.estado }
+                )
                 continue
             }
             val telefonos = buildList {
