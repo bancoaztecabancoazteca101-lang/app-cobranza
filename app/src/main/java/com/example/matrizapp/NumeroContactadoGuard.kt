@@ -49,4 +49,33 @@ object NumeroContactadoGuard {
         ed.putLong(clave, ahora).commit() // commit: queda guardado antes de enviar, aunque el proceso muera
         return true
     }
+
+    /**
+     * Reserva SMS y devuelve la marca temporal exacta de esta reserva.
+     * Permite liberar solo la reserva propia si SmsManager rechaza el envío,
+     * sin borrar una reserva más reciente de otro flujo.
+     */
+    @Synchronized
+    fun reservarSmsConMarca(context: Context, numero: String, ventanaMs: Long = VENTANA_SMS_MS): Long? {
+        val clave = ultimos10Digitos(numero)
+        if (clave.isEmpty()) return null
+        val prefs = context.getSharedPreferences(PREFS_SMS, Context.MODE_PRIVATE)
+        val ahora = System.currentTimeMillis()
+        val ultimo = prefs.getLong(clave, 0L)
+        if (ultimo != 0L && ahora - ultimo < ventanaMs) return null
+        val ed = prefs.edit()
+        prefs.all.forEach { (k, v) -> if (v is Long && ahora - v > PODA_MS) ed.remove(k) }
+        if (!ed.putLong(clave, ahora).commit()) return null
+        return ahora
+    }
+
+    @Synchronized
+    fun liberarReservaSms(context: Context, numero: String, marca: Long) {
+        val clave = ultimos10Digitos(numero)
+        if (clave.isEmpty()) return
+        val prefs = context.getSharedPreferences(PREFS_SMS, Context.MODE_PRIVATE)
+        if (prefs.getLong(clave, 0L) == marca) {
+            prefs.edit().remove(clave).commit()
+        }
+    }
 }
