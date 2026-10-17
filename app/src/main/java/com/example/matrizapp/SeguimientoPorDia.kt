@@ -142,10 +142,11 @@ fun SeguimientoPorDiaScreen() {
             }
             val idsConCartucho = visitas.mapNotNull { it.matrizId }.toSet()
             val idsCartuchoSeleccionado = visitas.filter { it.cartucho == cartucho }.mapNotNull { it.matrizId }.toSet()
-            val registros = matrizAyer.filter { it.id in idsCartuchoSeleccionado }
+            // El historial determina las visitas del cartucho aunque la fecha actual de Matriz cambie.
+            val registros = todos.filter { it.id in idsCartuchoSeleccionado }
             totalMatrizAyer = matrizAyer.size
-            totalConCartucho = matrizAyer.count { it.id in idsConCartucho }
-            totalSinCartucho = (matrizAyer.size - totalConCartucho).coerceAtLeast(0)
+            totalConCartucho = todos.count { it.id in idsConCartucho }
+            totalSinCartucho = matrizAyer.count { it.id !in idsConCartucho }
             totalRegistros = registros.size
             totalPendientes = registros.count { !esPagado(it.estado) }
             if (totalSinCartucho > 0 && registros.isEmpty()) {
@@ -190,8 +191,8 @@ fun SeguimientoPorDiaScreen() {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(if (cargando) "Consultando registros…" else "Registros de ayer en Matriz: $totalMatrizAyer")
-                Text("Registros con cartucho guardado: $totalConCartucho")
-                Text("Registros sin cartucho identificado: $totalSinCartucho")
+                Text("Registros identificados en el historial: $totalConCartucho")
+                Text("Registros de ayer sin cartucho identificado: $totalSinCartucho")
                 Text("En Cartucho $cartucho: $totalRegistros")
                 Text("Pendientes (excluye solo Pagado): $totalPendientes")
                 Text("El estado pagado se vuelve a comprobar antes de contactar.", style = MaterialTheme.typography.bodySmall)
