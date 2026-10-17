@@ -39,6 +39,85 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 val ESTADOS_MATRIZ = listOf("APP", "Retorno", "Pagado", "PASE", "FILTRAR", "Mano")
 
+/** Ubicación leída del GPS con su error estimado en metros. */
+data class UbicacionGps(val coordenadas: String, val precisionM: Float) {
+    val aceptable: Boolean get() = precisionM <= PRECISION_ACEPTABLE_M
+}
+const val PRECISION_BUENA_M = 25f      // con esta precisión se deja de esperar
+const val PRECISION_ACEPTABLE_M = 35f  // hasta aquí se guarda sin avisar
+
+/** Lee el GPS "de verdad" para GUARDAR la coordenada de un cliente. `obtenerUbicacionActual` usa la última ubicación
+ *  conocida del teléfono (puede tener minutos y estar a cientos de metros): sirve para ordenar por cercanía, no para
+ *  guardar una dirección. Aquí se piden lecturas nuevas con la mejor precisión, se espera hasta [tiempoMaxMs] a que el
+ *  error baje a [PRECISION_BUENA_M] y se devuelve la mejor lectura obtenida con su precisión. */
+@android.annotation.SuppressLint("MissingPermission")
+suspend fun obtenerUbicacionPrecisa(context: android.content.Context, tiempoMaxMs: Long = 12_000L): UbicacionGps? {
+    val client = LocationServices.getFusedLocationProviderClient(context)
+    var mejor: android.location.Location? = null
+    val peticion = com.google.android.gms.location.LocationRequest.Builder(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, 1_000L)
+        .setMinUpdateIntervalMillis(500L).setMaxUpdates(20).build()
+    var callback: com.google.android.gms.location.LocationCallback? = null
+    try {
+        kotlinx.coroutines.withTimeoutOrNull(tiempoMaxMs) {
+            suspendCancellableCoroutine<Unit> { cont ->
+                val cb = object : com.google.android.gms.location.LocationCallback() {
+                    override fun onLocationResult(resultado: com.google.android.gms.location.LocationResult) {
+                        for (l in resultado.locations) {
+                            if (!l.hasAccuracy()) continue
+                            val actual = mejor
+                            if (actual == null || l.accuracy < actual.accuracy) mejor = l
+                            if (l.accuracy <= PRECISION_BUENA_M && cont.isActive) cont.resume(Unit) {}
+                        }
+                    }
+                }
+                callback = cb
+                client.requestLocationUpdates(peticion, cb, android.os.Looper.getMainLooper())
+                cont.invokeOnCancellation { client.removeLocationUpdates(cb) }
+            }
+        }
+    } catch (e: SecurityException) {
+        return null
+    } catch (e: Exception) {
+        // se usa lo que se haya alcanzado a leer
+    } finally {
+        callback?.let { try { client.removeLocationUpdates(it) } catch (_: Exception) { } }
+    }
+    // Si no llegó ninguna lectura nueva, se acepta la última conocida SOLO si es reciente (menos de 20 s).
+    if (mejor == null) {
+        try {
+            val ultima = client.lastLocation.await()
+            if (ultima != null && ultima.hasAccuracy() &&
+                (android.os.SystemClock.elapsedRealtimeNanos() - ultima.elapsedRealtimeNanos) < 20_000_000_000L) mejor = ultima
+        } catch (_: Exception) { }
+    }
+    return mejor?.let { UbicacionGps("${it.latitude}, ${it.longitude}", it.accuracy) }
+}
+
+/** Captura la ubicación para un registro y AVISA la precisión. Nunca pisa una coordenada buena ya guardada con una
+ *  lectura mala: devuelve la coordenada que se debe quedar en el registro. */
+suspend fun capturarUbicacionRegistro(context: android.content.Context, actual: String?): String? {
+    val r = obtenerUbicacionPrecisa(context)
+    val tieneBuena = parseLatLngOrden(actual) != null
+    return when {
+        r == null -> {
+            Toast.makeText(context, "No se pudo obtener el GPS. Revisa que esté activo y sal al aire libre.", Toast.LENGTH_LONG).show()
+            actual
+        }
+        r.aceptable -> {
+            Toast.makeText(context, "Ubicación guardada (±${r.precisionM.toInt()} m)", Toast.LENGTH_SHORT).show()
+            r.coordenadas
+        }
+        tieneBuena -> {
+            Toast.makeText(context, "GPS impreciso (±${r.precisionM.toInt()} m): se conservó la ubicación anterior. Intenta de nuevo al aire libre.", Toast.LENGTH_LONG).show()
+            actual
+        }
+        else -> {
+            Toast.makeText(context, "Ubicación guardada con poca precisión (±${r.precisionM.toInt()} m). Conviene repetirla al aire libre.", Toast.LENGTH_LONG).show()
+            r.coordenadas
+        }
+    }
+}
+
 suspend fun obtenerUbicacionActual(context: android.content.Context): String? {
     return try {
         val client = LocationServices.getFusedLocationProviderClient(context)
@@ -585,7 +664,7 @@ fun MatrizFullFormDialog(
                 )
                 LaunchedEffect(buscandoUbicacion) {
                     if (buscandoUbicacion) {
-                        ubicacion = obtenerUbicacionActual(context) ?: ubicacion
+                        ubicacion = capturarUbicacionRegistro(context, ubicacion) ?: ubicacion
                         buscandoUbicacion = false
                     }
                 }
@@ -627,7 +706,7 @@ fun MatrizFullFormDialog(
                     )
                     LaunchedEffect(buscandoUbicacionLaboral) {
                         if (buscandoUbicacionLaboral) {
-                            domicilioLaboral = obtenerUbicacionActual(context) ?: domicilioLaboral
+                            domicilioLaboral = capturarUbicacionRegistro(context, domicilioLaboral) ?: domicilioLaboral
                             buscandoUbicacionLaboral = false
                         }
                     }

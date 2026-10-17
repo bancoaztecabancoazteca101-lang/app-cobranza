@@ -183,7 +183,8 @@ class RutaIAViewModel(
                 // de arrastrar la coordenada geocodificada por texto (imprecisa, ver fix del 24/09/2026).
                 // Si no hay fix de GPS disponible (permiso denegado, sin señal), cae de vuelta a la
                 // coordenada geocodificada como antes.
-                val ubicacionGps = parseLatLngOrden(obtenerUbicacionActual(context))
+                // GPS fresco y con precisión (máx. 8 s de espera); si el error es mayor a 60 m se descarta y se usa la coordenada geocodificada.
+                val ubicacionGps = parseLatLngOrden(obtenerUbicacionPrecisa(context, 8_000L)?.takeIf { it.precisionM <= 60f }?.coordenadas)
                 val idMatriz = darDeAltaEnMatriz(item, ubicacionGps)
                 rutaIADao.marcarAltaEnMatriz(item.id, idMatriz)
             }

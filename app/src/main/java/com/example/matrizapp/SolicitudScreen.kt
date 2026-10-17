@@ -309,7 +309,7 @@ fun SolicitudFullFormDialog(
     var buscandoUbicacion by remember { mutableStateOf(false) }
     LaunchedEffect(buscandoUbicacion) {
         if (buscandoUbicacion) {
-            ubicacion = obtenerUbicacionActual(context) ?: ubicacion
+            ubicacion = capturarUbicacionRegistro(context, ubicacion) ?: ubicacion
             buscandoUbicacion = false
         }
     }
