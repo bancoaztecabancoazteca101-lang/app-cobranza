@@ -294,12 +294,20 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         val container = (applicationContext as MainApplication).container
         val prefs = preferenciasSeguimiento(applicationContext)
         val cartucho = prefs.getInt(KEY_CARTUCHO_SEGUIMIENTO, 1).coerceIn(1, 3)
-        val visitas = container.database.visitaMapaDao().getVisitasSemana(inicioAyerSeguimiento(), finAyerSeguimiento()).first()
+        val inicioAyer = inicioAyerSeguimiento()
+        val finAyer = finAyerSeguimiento()
+        val visitas = container.database.visitaMapaDao().getVisitasSemana(inicioAyer, finAyer).first()
             .filter { it.cartucho == cartucho }
         val ids = visitas.mapNotNull { it.matrizId }.toSet()
         if (ids.isEmpty()) return Result.success()
         val matrizDao = container.database.matrizDao()
-        val registros = matrizDao.getAllMatriz().first().filter { it.id in ids }
+        // La fecha de Matriz también debe corresponder a ayer; el historial de mapa por sí solo no basta.
+        val registros = matrizDao.getAllMatriz().first().filter { registro ->
+            registro.id in ids && registro.fecha != null &&
+                registro.fecha >= inicioAyer && registro.fecha < finAyer &&
+                !registro.estado.equals("PASE", ignoreCase = true)
+        }
+        if (registros.isEmpty()) return Result.success()
         val config = container.database.configuracionAutomatizacionDao().obtenerOSembrar()
         val logDao = container.database.contactoLogDao()
         val plantillaDao = container.database.plantillaSmsDao()
