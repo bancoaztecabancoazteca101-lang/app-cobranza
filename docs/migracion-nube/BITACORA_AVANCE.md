@@ -30,3 +30,13 @@
 5. Registrar archivos y commits modificados, resultados reales de compilación/pruebas y fallas pendientes.
 6. No marcar tareas como completadas sin evidencia.
 7. Mantener el inventario y el plan actualizados con cualquier decisión nueva del usuario.
+
+
+### 2026-10-18 — Comparación inicial de nube e inventario ampliado
+- Se volvió a leer el plan, la bitácora y el código de referencia de entidades, base Room, repositorio y SyncWorker.kt.
+- Se añadió comparación inicial entre Firestore, Realtime Database y Supabase con documentación oficial de los proveedores.
+- Recomendación actual: prototipo aislado de Firestore por el soporte offline Android; comparar con Supabase si el modelo relacional y reportes requieren SQL. **Proveedor de producción aún no seleccionado.**
+- Se amplió el inventario por grupos y se registraron bloqueos antes de producción.
+- No se modificó código de la app ni configuración cloud. No se ejecutó build ni se generó APK.
+- Pendiente: inventario fila por fila de todas las entidades/SharedPreferences/scripts y validación de consumidores externos, triggers y datos de producción.
+- main: no modificado.
