@@ -40,3 +40,11 @@
 - No se modificó código de la app ni configuración cloud. No se ejecutó build ni se generó APK.
 - Pendiente: inventario fila por fila de todas las entidades/SharedPreferences/scripts y validación de consumidores externos, triggers y datos de producción.
 - main: no modificado.
+
+
+### 2026-10-18 — Inventario Room por tabla
+- Se inspeccionó AppDatabase.kt: Room está en DB_VERSION 37 y declara 22 entidades.
+- Se enumeraron tablas, claves y campos principales en el plan maestro; se identificaron además preferencias operativas/técnicas que deben separarse y auditarse.
+- Se verificaron riesgos adicionales para automatización: logs de contacto y guardas anti-repetición locales pueden permitir duplicación entre teléfonos si se trasladan sin una clave global/idempotente.
+- El inventario sigue abierto: falta seguir cada entidad hasta sus pantallas, ViewModels, DAOs, escrituras y lectores externos; también falta validar datos de producción y scripts/triggers instalados.
+- Solo documentación modificada; no se tocó código, Firebase/Cloud ni main. Sin build ni APK.
