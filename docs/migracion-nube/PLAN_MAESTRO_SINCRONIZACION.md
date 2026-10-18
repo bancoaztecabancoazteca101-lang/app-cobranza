@@ -176,3 +176,52 @@ La revisión del código confirma que el inventario debe contemplar, como mínim
 ## 12. Siguiente entregable de auditoría
 
 Antes de implementar, producir un inventario fila por fila con: entidad/clave, campos, pantalla y flujo que la modifica, DAO/Repository/Worker, ubicación actual, escritor externo, consumidor, regla de conflicto, tratamiento de bajas, plan de importación, validación y recuperación. Después documentar el resultado del piloto de proveedor y pedir revisión técnica de Claude/Gemini antes de abrir una rama de implementación.
+
+
+## 13. Inventario por tabla Room verificada en AppDatabase.kt (DB_VERSION 37)
+
+Se identificaron 22 entidades declaradas en la base de Room de la revisión. La lista siguiente refleja el código actual, no una decisión de dejar datos locales. Todos los campos operativos deberán estar disponibles de forma global. Los campos técnicos de sincronización se conservarán como metadatos o se sustituirán por un mecanismo equivalente validado.
+
+| Entidad / tabla | Clave actual | Campos o datos principales identificados | Uso y tratamiento para nube |
+|---|---|---|---|
+| MatrizEntity / matriz_table | id (String) | nombre, semana, requisito, numTT, referencias 1–4, observaciones, estado, ubicación, imágenes, fecha/hora, ruta, folio, descuentos, día de pago, domicilio laboral, días de atraso/apertura, montoCobrado, isDirty/lastSync | Registro principal. Incluir campos hoy ausentes de Sheets; versión y conflicto por campo. |
+| TicketPagoEntity / ticket_pago_table | id (String) | fecha, nombre, CU, monto | Evento financiero idempotente; no sumar el mismo ticket dos veces en dispositivos distintos. |
+| PaseEntity / pase_cartera_table | id (String) | campos de Matriz, origenMatrizId, contiene, capitales, estado | Copia de cartera que actualmente se edita aparte; conservar relación y documentar si el origen se sincroniza o no. |
+| SolicitudEntity / solicitud_table | id (String) | nombre, número, sucursal, ubicación raw, hasta cuatro imágenes, referencias, observaciones, audio, estado, gestor, fecha/hora | Compartir registro y referencias multimedia durables. |
+| FiltroFechaEntity / filtro_fecha_table | id (String) | nombre, estado, observaciones, numTT, fecha/hora, imagen, referencias, ubicación, requisito | Compartir estados y cambios; eliminar limpieza sin acuse. |
+| FiltrarEntity / filtrar_table | id (String) | nombre, semana, requerido, numTT, referencias, observaciones, estado, ubicación, imagen, fecha/hora | Auditar si es proyección de Matriz o registro independiente; evitar dos fuentes editables. |
+| ControlEntity / control_table | semana (String) | requerido, lastSync | Compartir por semana; definir si es dato introducido o cálculo. |
+| BloqueHorarioEntity / bloques_horario_table | id autogenerado | hora, minuto, activo | Configuración de horarios de llamadas; un único calendario global y cambios auditables. |
+| ContactoLogEntity / contacto_log_table | id autogenerado | clienteId, fechaDia, bloqueIndex, timestamp | Registro de acciones para no repetir llamadas/SMS/catch-up entre teléfonos; retención y deduplicación global. |
+| PlantillaSmsEntity / plantilla_sms_table | id autogenerado; índice único tipo+semana+slot | tipo, semana, slot, texto | Plantillas funcionales compartidas; evitar que cada teléfono rote/edite con estado distinto. |
+| ConfiguracionAutomatizacionEntity / config_automatizacion_table | id (por defecto 1) | simSeleccionada, ocultarNumero, pausa entre llamadas, duración máxima, simSms | Ajustes funcionales de automatización compartidos según instrucción; revisar si las SIM son específicas del hardware y modelar esa excepción como configuración de dispositivo, no dato de cliente. |
+| ReglaSemanaEntity / regla_semana_table | semana (Int) | offsets, catchupActivo | Reglas semanales compartidas; controlar concurrencia de ejecución. |
+| RutaIAEntity / ruta_ia_table | id (String) | nombre, CU, dirección, colonia/CP, días atraso, pago requerido, saldo, lat/lng, orden, esNuevo, match Matriz, fechaDia, estado, fotoOrigenUrl, isDirty/lastSync | Compartir cambios por registro, no reemplazar toda la ruta desde un teléfono. |
+| RutaIAFiltroEntity / ruta_ia_filtro_table | id (Int, normalmente 1) | criteriosOrden | Preferencia funcional compartida; resolver cambios concurrentes. |
+| CanalPagoEntity / canal_pago_table | id (String) | nombre, empresa, dirección, lat/lng, lastSync | Catálogo común con versión de origen y estrategia de actualización. |
+| ContactoExtraEntity / contacto_extra_table | id autogenerado; índice clienteId | clienteId, teléfono, nombreOrigen, fechaAgregado | Compartir referencias extra; clave lógica clienteId+teléfono para no duplicar. |
+| VelocidadEntity / velocidad_table | id (String) | rk, plan100, total, reque36, monto36, cuPase, capital, diasOp, lastUpdate | Compartir o recalcular de forma consistente; documentar periodo y fuente de cada valor. |
+| ComisionEntity / comision_table | id (String) | momento12, indirecta12, momento3, indirecta3, momento46, indirecta46, momento79, indirecta79, meta, lastUpdate | Compartir valores de cálculo/configuración con periodo y versión. |
+| BolsaGerenciaEntity / bolsa_gerencia_table | id (String) | cobranzaGerencia, cumplimientoPlan, montoBase, numeroGestores, cobranza1a9Gestor, cobranza1a9Gerencia, lastUpdate | Compartir o recalcular con regla común; no permitir cifras divergentes por dispositivo. |
+| VisitaMapaEntity / visita_mapa_table | clave + fechaDia | nombre, ubicación, matrizId, cartucho, timestamp | Evento compartido idempotente; definir la identidad de una visita y cómo corregir una visita equivocada. |
+| CartuchoDiaEntity / cartucho_dia_table | fechaDia | cartuchoActivo | Selección por fecha compartida; regla de conflicto si dos dispositivos la cambian. |
+| Sem6RegistroEntity / sem6_registro_table | hoja + id | nombre, semana, requisito, CU, ubicación, imagen, colonia, visitas, última visita, numTT, contiene, susceptible, observaciones, capital, abono | Compartir cambios, altas y bajas; reemplazar deleted_ids locales por tombstones globales. |
+
+### Preferencias y estado fuera de Room identificados
+
+Estos datos no son entidades Room y requieren inventario separado. La presencia de un valor en SharedPreferences no basta para decidir que deba compartirse: debe determinarse si representa negocio compartido o un estado estrictamente técnico del dispositivo. La instrucción del usuario exige compartir los valores operativos.
+
+| Almacén/clave identificada | Función actual | Tratamiento objetivo |
+|---|---|---|
+| SharedPreferences sem6_cache: data, timestamp, deleted_ids por hoja | Caché Sem6 y registro local de IDs borrados | Sincronizar registros y bajas globales; mantener caché local reconstruible. |
+| sms_status_config: enabled_statuses, sender_enabled, subscriptionId, sent_events, baseline_* | Selección de estados SMS y control de eventos | Separar configuración de negocio compartida de subscriptionId/estado técnico de SIM; deduplicar envíos por ID global de acción. |
+| numero_contactado_guard y numero_sms_guard | Ventanas anti-repetición de llamadas/SMS | Cambiar a guard global/idempotencia para impedir que varios teléfonos contacten al mismo cliente en la misma ventana. |
+| Preferencias de NotificacionesHelper para retornos: ids, historial, ids_matriz | Evitar duplicar alarmas locales | Mantener alarmas locales derivadas, pero la fuente del evento/estado de retorno debe ser global. |
+| Preferencias de BackupManager: versión, último respaldo local/Drive, aviso de downgrade | Operación técnica del respaldo | Permanecen locales si solo describen ese dispositivo; los archivos de respaldo deben seguir siendo recuperables y coordinados. |
+| Preferencias adicionales no enumeradas todavía | No se ha terminado la búsqueda de todos los consumidores | Completar búsqueda de SharedPreferences, DataStore, archivos privados, alarmas, servicios y claves de configuración. |
+
+### Estado del inventario
+- **Verificado:** 22 entidades en la anotación @Database de AppDatabase.kt, con DB_VERSION 37.
+- **Verificado:** ContactoExtraEntity se declara en ContactoExtra.kt y aparece en la lista de entidades de Room; su tabla no debe omitirse.
+- **Pendiente:** inventario campo por campo de las entidades adicionales y sus DAO/ViewModels, todas las claves de preferencias, preferencias de SIM por dispositivo, configuración de seguimiento por día, scripts externos y consumidores vivos de Sheets/Drive.
+- **Pendiente:** comprobar si el esquema de producción coincide con el commit revisado; no se dispone desde esta auditoría de una copia de la base local de cada teléfono ni acceso confirmado al contenido vivo de Sheets/Drive.
