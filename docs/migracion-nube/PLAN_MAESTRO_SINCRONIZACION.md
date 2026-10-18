@@ -117,3 +117,62 @@ Antes del piloto, definir quién puede leer/escribir los datos compartidos, aute
 - **Confirmado por el usuario:** todos los datos operativos deben ser globales/compartidos; no hay datos operativos exclusivos de un teléfono.
 - **Confirmado como objetivo:** sincronización automática al volver la conexión; base cloud como fuente principal y Sheets secundario durante transición.
 - **Pendiente:** proveedor cloud, esquema definitivo, política de conflictos por entidad, autenticación/permisos y plan de corte.
+
+
+## 10. Comparación técnica de candidatos (evaluación inicial, 2026-10-18)
+
+Esta comparación no es una contratación ni una elección irreversible. Debe validarse con un piloto, medición del volumen real y revisión de reglas de seguridad y costes.
+
+| Criterio | Cloud Firestore | Firebase Realtime Database | Supabase (PostgreSQL) |
+|---|---|---|---|
+| Datos offline en Android | SDK mantiene caché y sincroniza al volver la red; persistencia habilitada por defecto | Cola de escrituras y persistencia en disco disponibles; hay que habilitar persistencia | No asumir sincronización offline automática equivalente; conservar Room + outbox y programar sincronizador propio |
+| Modelo de datos | Documentos/colecciones; requiere modelar relaciones y consultas | Árbol JSON; relaciones y consultas complejas requieren diseño adicional | Relacional SQL; se adapta mejor a relaciones, reportes y consultas de cruce |
+| Conflictos | Para varias escrituras al mismo documento, la documentación describe “última escritura gana”; no usarlo como política universal | La cola/reconexión ayuda, pero las operaciones/estructura necesitan reglas de conflicto propias | Reglas de conflicto y transacciones se diseñan en SQL/API; la app necesita cola idempotente |
+| Tiempo real | Escucha cambios en documentos/consultas | Escucha cambios en rutas de datos | Realtime disponible, sujeto al diseño y límites del plan |
+| Trabajo de integración | Potencialmente menor para el primer piloto Android offline | Potencialmente bajo para sincronización sencilla, mayor al modelar relaciones | Mayor trabajo inicial para outbox/sync offline; ventaja de SQL y restricciones relacionales |
+| Coste y límites | Depende de lecturas, escrituras, almacenamiento, tráfico y región; calcular con telemetría del piloto | Depende de almacenamiento y tráfico; calcular con volumen y frecuencia reales | Plan Free limitado y puede pausar proyectos inactivos; Pro aparece desde USD 25/mes en la página consultada. Revisar condiciones vigentes antes de decidir |
+| Riesgo principal para Matriz | Conflictos si varios teléfonos editan el mismo documento; coste por patrón de lecturas; reglas de seguridad mal configuradas | Estructura menos cómoda para reportes relacionales y cambios parciales entre módulos | La sincronización offline no se obtiene solo por añadir el SDK; hay que construirla y probarla |
+
+### Referencias oficiales consultadas
+- Firestore offline en Android y política de última escritura gana: https://firebase.google.com/docs/firestore/manage-data/enable-offline
+- Realtime Database offline, persistencia y cola de escrituras: https://firebase.google.com/docs/database/android/offline-capabilities
+- Supabase precios y cuotas: https://supabase.com/pricing
+- Supabase facturación/uso: https://supabase.com/docs/guides/platform/billing-on-supabase
+
+### Recomendación provisional
+1. **No seleccionar proveedor de producción todavía.**
+2. Hacer una prueba de concepto aislada con Firestore porque ofrece persistencia offline integrada en Android y sincronización al recuperar red; el SDK por sí solo no resuelve los conflictos de negocio de Matriz.
+3. Comparar esa prueba contra un pequeño prototipo de Supabase + Room/outbox si los cruces relacionales, reportes y consistencia de datos resultan prioritarios. Realtime Database queda como alternativa si domina la sincronización simple en tiempo real, pero no es el primer candidato para todo el modelo de Matriz.
+4. No considerar el piloto aprobado hasta simular edición simultánea, borrado, desconexión prolongada, reinicio, fallo parcial y reconciliación con Sheets. Revisar coste real antes del corte.
+
+## 11. Inventario técnico ampliado y pendientes de verificación
+
+La revisión del código confirma que el inventario debe contemplar, como mínimo, estos grupos. Todos los datos operativos se consideran compartidos por instrucción del usuario; la etiqueta “local” describe la implementación actual, no una excepción autorizada.
+
+| Grupo de datos | Evidencia en el código revisado | Trabajo requerido |
+|---|---|---|
+| Entidades Room principales | Entities.kt, AppDatabase.kt, DAOs.kt | Enumerar cada entidad, claves, campos, índices, relaciones y DAO; documentar tabla por tabla |
+| Migraciones locales | AppDatabase.kt, versión 37 | Conservar historial y datos de todas las versiones soportadas; ensayar migración sobre copias de bases reales |
+| Operaciones pendientes | flags isDirty, workers y métodos markAsClean | Inventariar cada mutación y exigir acuse verificable antes de limpiar |
+| Preferencias de negocio | SharedPreferences, incluidos sem6_cache y configuración de automatización | Listar claves y consumidores; migrar valores funcionales y diferenciar solo cachés técnicas documentadas |
+| Bajas | métodos eliminarRegistro, DAO deletes, deleted_ids_* | Rastrear cada borrado y crear tombstone global con ID/versión; evitar resurrección al refrescar |
+| Efectos externos | SMS, llamadas, notificaciones, People API, Apps Script | Registrar operaciones enviadas, evitar ejecución duplicada por varios teléfonos y separar “dato sincronizado” de “acción ejecutada” |
+| Multimedia | Drive, ClientImageSyncWorker, fotos y audios | Inventariar origen, ruta, MIME, hash/tamaño, propietario lógico y consumidores; migrar referencia y archivo sin romper offline |
+| Hojas y scripts externos | Constants.kt, AppsScript/, firebase-apps-script/ y scripts externos descritos por el usuario | Identificar todos los escritores/lectores, triggers instalados, cuentas y hojas de destino; confirmar los consumidores de CONTACTOS y Contac_Subir antes de retirar procesos |
+| Reportes/catálogos | Control, canales de pago, velocidad, comisión, bolsa de gerencia | Definir claves por periodo/zona y si son datos editables o proyecciones calculadas |
+| Dispositivos | registro de dispositivos/FCM | Separar identidad del dispositivo, identidad de usuario y autorización; no usar un Android ID como única identidad de usuario |
+| Respaldo/restauración | BackupManager, Room + WAL/SHM, Drive | Ensayar restauración completa y reconciliación con nube; mantener respaldo anterior hasta aceptación firmada |
+| Cachés y derivados | resultados calculados y cachés locales | Documentar origen de verdad y regla de reconstrucción; si contienen un valor operativo, compartirlo o justificar explícitamente su derivación |
+
+### Riesgos que bloquean la migración de producción
+- Las escrituras a Sheets en varios flujos se realizan campo por campo y el método updateSheetCell no expone resultado; hace falta distinguir escritura parcial, fila no encontrada y éxito.
+- Ruta IA se reemplaza como lista completa; dos dispositivos pueden pisarse.
+- El borrado local de Pase y las marcas locales de Semana 6 no prueban una baja global.
+- montoCobrado, tickets y el cambio de estado asociado necesitan una operación idempotente para no contar dos veces un pago.
+- Contactos extra se usan en flujos de llamadas/SMS, pero no se demostró sincronización global.
+- Los scripts externos pueden seguir escribiendo a Sheets aun después de que la app cambie; no retirar el puente sin identificar y reemplazar esos consumidores.
+- No se ha inspeccionado una copia de producción de Room, el contenido actual de Sheets/Drive, los triggers instalados ni los costes/volúmenes reales. No afirmar que el inventario está cerrado hasta verificarlo.
+
+## 12. Siguiente entregable de auditoría
+
+Antes de implementar, producir un inventario fila por fila con: entidad/clave, campos, pantalla y flujo que la modifica, DAO/Repository/Worker, ubicación actual, escritor externo, consumidor, regla de conflicto, tratamiento de bajas, plan de importación, validación y recuperación. Después documentar el resultado del piloto de proveedor y pedir revisión técnica de Claude/Gemini antes de abrir una rama de implementación.
