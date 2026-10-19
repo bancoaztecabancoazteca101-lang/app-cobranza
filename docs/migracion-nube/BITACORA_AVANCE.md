@@ -48,3 +48,11 @@
 - Se verificaron riesgos adicionales para automatización: logs de contacto y guardas anti-repetición locales pueden permitir duplicación entre teléfonos si se trasladan sin una clave global/idempotente.
 - El inventario sigue abierto: falta seguir cada entidad hasta sus pantallas, ViewModels, DAOs, escrituras y lectores externos; también falta validar datos de producción y scripts/triggers instalados.
 - Solo documentación modificada; no se tocó código, Firebase/Cloud ni main. Sin build ni APK.
+
+
+### 2026-10-19 — Trazabilidad de datos hasta el worker
+- Se rastrearon DAOs y ViewModels principales y se compararon con SyncWorker y SheetsRepository.
+- Confirmado: el worker envía actualmente Matriz, Filtro Fecha, Pase, Ruta IA y Solicitud. `refreshAll()` también refresca Filtrar y Control, pero esto no prueba que los cambios locales de esos conjuntos se envíen.
+- Se documentó que tickets, visitas, cartucho diario, Semana 6, contactos extra y ajustes de automatización carecen de envío global verificado en SyncWorker.
+- Riesgos de prioridad: Ruta IA reemplaza lista completa; filtro fecha puede limpiar dirty sin acuse fiable; borrados locales y guards de SMS/llamada no protegen entre dispositivos.
+- La rama documental se actualizó; código y configuración de producción sin cambios. No se ejecutó build ni se generó APK.
