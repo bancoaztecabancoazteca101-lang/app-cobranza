@@ -264,3 +264,45 @@ La presencia de un DAO o de un método `getDirtyItems()` no demuestra que el pro
 3. P1: prototipo con Matriz, pago/ticket, visita, contactos extra y Semana 6, porque son flujos con impacto operativo y hoy tienen cobertura parcial/local.
 4. P1: piloto en dos teléfonos con edición concurrente y desconexión/reconexión; reconciliar con Sheets sin borrar filas ni duplicar acciones.
 5. P2: migrar configuraciones/catálogos/reportes y scripts externos; retirar puente de Sheets solo tras pruebas de equivalencia y recuperación.
+
+
+## 15. Segunda pasada de preferencias y automatización (2026-10-19)
+
+La lectura directa de SmsStatusWorker.kt, FiltrarScreen.kt, NumeroContactadoGuard.kt, NotificacionesHelper.kt, Sem6.kt, CartuchoAviso.kt y LlamadaAutomatica.kt confirmó estos almacenes adicionales:
+
+| Preferencia | Uso actual | Tratamiento propuesto |
+|---|---|---|
+| automatizacion_prefs: activa, catchup_activa | Interruptores generales de llamadas automáticas y catchup | Estado funcional compartido/auditable; la ejecución debe coordinarse globalmente para que no todos los teléfonos llamen. |
+| filtrar_contactos: agregar_automaticamente | Activa altas automáticas de contactos extra desde Filtrar | Definir alcance global o por operador; los contactos extra resultantes sí deben sincronizarse. |
+| sms_status_config: enabled_statuses, sender_enabled, subscriptionId, sent_events, baseline_*, message_template | Estados elegibles, activación, SIM, plantilla y deduplicación local de SMS | Estados/plantilla: configuración funcional a compartir según política. subscriptionId: local a cada teléfono. sent_events y baseline: sustituir por registro global idempotente. |
+| numero_contactado_guard / numero_sms_guard | Bloqueos por número durante 15/30 minutos | No son barrera global: sustituir/complementar con reserva atómica en nube, expiración y resultado de la acción. |
+| retornos_programados: ids, historial, ids_matriz | Alarmas locales ya programadas | Estado técnico reconstruible, no dato de negocio compartido. |
+| retornos_confirmados: ids fechados | Confirmación de retorno hoy en el dispositivo | El evento de negocio debe quedar en el registro compartido; la alarma/notificación sigue local. |
+| cartucho_aviso | Evita notificación repetida de cambio de cartucho | Preferencia de notificación local; CartuchoDiaEntity sigue requiriendo sincronización global. |
+| sem6_interna: importado_v1 | Evita repetir importación inicial Sem6 | Marcador técnico local; no prueba que los datos Sem6 estén sincronizados. |
+| client_image_store | Índice local de archivos de imagen | Mantener caché/rutas locales; sincronizar contenido y metadatos con ID remoto estable. |
+| multi_device_notifications | Token FCM e identificador de instalación | Identidad técnica por dispositivo, separada de la base operativa. |
+| pase_import_gcr | Estado usado durante importación de Pase de Cartera | Pendiente rastrear cada clave y consumidor antes de clasificar. |
+
+### Riesgos confirmados en llamadas y SMS
+
+- AutomatizacionPrefs controla scheduler, receivers y workers fuera de Room. Migrar solo bloques/reglas/configuración Room no reproduce todo el comportamiento.
+- ContactoLogDao, Mutex y NumeroContactadoGuard protegen dentro del teléfono/proceso, no entre teléfonos. La nube debe reclamar cada acción atómicamente antes de marcar/enviar, con clave idempotente, vencimiento y estados reservado/en curso/completado/fallido.
+- subscriptionId es propio del hardware. Nunca debe copiarse como ID válido de SIM entre teléfonos.
+- Reservar un número no equivale a que la llamada o SMS haya terminado correctamente; deben distinguirse reserva, ejecución y resultado para permitir reintentos seguros.
+
+### Consumidores externos CONTACTOS: búsqueda y límites
+
+- La búsqueda del literal Contac_Subir en el código indexado del repositorio no devolvió coincidencias.
+- La búsqueda de CONTACTOS no identificó un consumidor claro en el código Kotlin indexado.
+- Esto no demuestra que la hoja externa esté sin uso: otros proyectos Apps Script, fórmulas, AppSheet, hojas y triggers instalados pueden no estar versionados en este repositorio.
+- Antes de retirar o cambiar el script “Actualizar contactos”, rastrear en las cuentas externas el ID de la hoja destino, la pestaña CONTACTOS, Contac_Subir y todos los triggers instalados. Los comentarios del script no prueban que un trigger esté activo.
+- No se puede confirmar desde GitHub el contenido vivo de Sheets/Drive ni el estado real de triggers.
+
+### Criterios de aceptación añadidos
+
+1. Dos teléfonos no pueden reclamar y ejecutar la misma acción automática a la vez, incluso si ambos iniciaron un worker.
+2. La SIM seleccionada se valida localmente contra las SIM disponibles.
+3. Bajas y eventos confirmados se comparten como cambios versionados; alarmas, cachés, tokens e índices locales son reconstruibles.
+4. No retirar CONTACTOS ni scripts hasta verificar consumidores y triggers y realizar una prueba reversible con copia.
+5. El inventario de preferencias sigue abierto: falta rastrear todas las claves de pase_import_gcr y los demás usos de preferencias/almacenamiento no cubiertos por esta pasada.
