@@ -306,3 +306,11 @@ La lectura directa de SmsStatusWorker.kt, FiltrarScreen.kt, NumeroContactadoGuar
 3. Bajas y eventos confirmados se comparten como cambios versionados; alarmas, cachés, tokens e índices locales son reconstruibles.
 4. No retirar CONTACTOS ni scripts hasta verificar consumidores y triggers y realizar una prueba reversible con copia.
 5. El inventario de preferencias sigue abierto: falta rastrear todas las claves de pase_import_gcr y los demás usos de preferencias/almacenamiento no cubiertos por esta pasada.
+
+
+## 16. Seguimiento GCR e imágenes offline
+
+- En PaseCarteraViewModel.kt, `pase_import_gcr` guarda valores pendientes de Contiene/Capitales por `matrizId`. `procesarPendientes()` los aplica al registro de Pase cuando existe y luego elimina la preferencia. Es un cambio operativo temporal fuera de Room; debe pasar a una outbox durable y no borrarse antes de confirmar persistencia compartida.
+- ClientImageStore.kt conserva imágenes en `filesDir/matriz_clientes`; `client_image_store` registra `ultima_limpieza`. La clave local de imagen deriva del origen (URL/ruta/URI), así que no sirve como identidad remota permanente. El piloto debe cubrir foto offline, subida fallida/parcial, URL nueva después de subir a Drive, restauración y limpieza de huérfanos sin borrar el único original pendiente.
+- MultiDeviceNotificationManager.kt usa `multi_device_notifications` para `installation_id_fallback`, `device_name` y `enabled`, además del token FCM. Son identidad y preferencias del dispositivo, separadas de los datos de cobranza compartidos.
+- Estos tres archivos quedan revisados para los usos descritos; la búsqueda global de todas las preferencias y de sistemas externos sigue abierta.
