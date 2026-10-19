@@ -56,3 +56,12 @@
 - Se documentó que tickets, visitas, cartucho diario, Semana 6, contactos extra y ajustes de automatización carecen de envío global verificado en SyncWorker.
 - Riesgos de prioridad: Ruta IA reemplaza lista completa; filtro fecha puede limpiar dirty sin acuse fiable; borrados locales y guards de SMS/llamada no protegen entre dispositivos.
 - La rama documental se actualizó; código y configuración de producción sin cambios. No se ejecutó build ni se generó APK.
+
+
+### 2026-10-19 — Preferencias y automatización
+- Se revisaron LlamadaAutomatica.kt, SmsStatusWorker.kt, FiltrarScreen.kt, NumeroContactadoGuard.kt, NotificacionesHelper.kt, Sem6.kt y CartuchoAviso.kt.
+- Se añadieron al plan los almacenes de preferencias detectados y la separación entre estado técnico local (SIM, alarmas, cachés, token del dispositivo) y estado operativo compartido.
+- Los bloqueos locales de llamadas/SMS no coordinan dos teléfonos; la nube necesita reservar cada acción de forma atómica y registrar su resultado.
+- La búsqueda de Contac_Subir y CONTACTOS no halló un consumidor claro en Kotlin dentro del repositorio. Siguen sin verificarse los scripts, hojas y triggers externos.
+- Solo documentación en la rama chatgpt/documentar-migracion-nube; no se modificó código ni main. No se ejecutó build ni se generó APK.
+- Pendiente: rastrear pase_import_gcr y preferencias restantes; verificar consumidores externos y datos reales antes del piloto.
