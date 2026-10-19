@@ -225,3 +225,42 @@ Estos datos no son entidades Room y requieren inventario separado. La presencia 
 - **Verificado:** ContactoExtraEntity se declara en ContactoExtra.kt y aparece en la lista de entidades de Room; su tabla no debe omitirse.
 - **Pendiente:** inventario campo por campo de las entidades adicionales y sus DAO/ViewModels, todas las claves de preferencias, preferencias de SIM por dispositivo, configuración de seguimiento por día, scripts externos y consumidores vivos de Sheets/Drive.
 - **Pendiente:** comprobar si el esquema de producción coincide con el commit revisado; no se dispone desde esta auditoría de una copia de la base local de cada teléfono ni acceso confirmado al contenido vivo de Sheets/Drive.
+
+
+## 14. Trazabilidad de sincronización: pantalla/DAO → Sheets (revisión del código)
+
+La presencia de un DAO o de un método `getDirtyItems()` no demuestra que el proceso de sincronización lo ejecute. La tabla distingue la carga desde Sheets, el envío a Sheets y la persistencia solamente local.
+
+| Datos / flujo | Lectura o edición observada | Envío remoto verificado en SyncWorker | Riesgo/decisión pendiente |
+|---|---|---|---|
+| Matriz | MatrizViewModel → MatrizDao; `isDirty`; `refreshMatriz()` evita reemplazar filas sucias | Sí: `syncMatriz()` actualiza o agrega, sube imágenes y limpia si el registro no cambió durante el envío | Buen patrón parcial de control de edición concurrente; ampliar a campos omitidos y validar resultado de escritura remota. |
+| Solicitud | SolicitudViewModel → SolicitudDao; estado, fotos/audio y `isDirty` | Sí: `syncSolicitud()` actualiza/agrega y procesa multimedia | Probar fallo entre subida multimedia y escritura de fila; bajas no tienen tombstone global confirmado. |
+| Pase de cartera | PaseCarteraViewModel → PaseCarteraDao | Sí: `syncPase()` procesa filas sucias | El borrado descrito solo elimina localmente; el registro puede reaparecer en refresh. |
+| Filtro Fecha | FiltroFechaViewModel y FiltroFechaDao | Sí: `syncFiltroFecha()` | Se observó que la rutina puede marcar limpio aunque no encuentre fila remota y no verifica acuses de `updateSheetCell`; riesgo de perder cambios. |
+| Ruta IA | RutaIAViewModel → RutaIADao | Sí, pero como reemplazo completo de la lista cuando hay cambios | Conflicto crítico: un teléfono puede borrar cambios de otro; `RutaIALimpieza` también puede reemplazar por lista vacía. Cambiar a operaciones por ID/versionado. |
+| Filtrar | FiltrarViewModel usa `MatrizDao.updateGestionLocal()` para guardar gestión y dispara sincronización general; SheetsRepository tiene `getDirtyFiltrarItems()` y `markFiltrarAsClean()` | No se encontró una llamada a `syncFiltrar()` dentro de SyncWorker; `refreshAll()` sí ejecuta `refreshFiltrar()` | Confirmar si Filtrar es proyección de Matriz o datos propios; no asumir que tener métodos dirty significa que se publican. |
+| Control | ControlViewModel calcula requeridos a partir de Matriz; ControlDao tiene filas/flags | No se encontró envío de Control en SyncWorker; `refreshAll()` hace `refreshControl()` | Decidir fuente canónica: cálculo compartido determinista o datos editables remotos. |
+| Tickets de pago | FiltroFechaViewModel → TicketPagoDao; inserción local para evitar doble conteo | No | Sincronizar evento con ID idempotente, referencia al cliente y monto/fecha; deduplicar globalmente y conciliar con estado Pagado. |
+| Visitas / mapa | MatrizViewModel y Flujos de visita → VisitaMapaDao | No | Compartir evento de visita con clave única y política de corrección; hoy la semana del mapa puede variar por teléfono. |
+| Cartucho por día | CartuchoAviso/flujo Matriz → CartuchoDiaDao | No | `fechaDia → cartuchoActivo` necesita fuente global y resolución si dos teléfonos seleccionan distinto. |
+| Semana 6 | Sem6ViewModel/Sem6Generador → Sem6Dao; edición y bajas locales; cache `sem6_cache` | No; métodos antiguos de Sheets existen pero el flujo actual recalcula localmente | Las bajas locales no son bajas globales. Compartir cambios de notas/capital/visitas/estado y tombstones por hoja+ID. |
+| Contactos extra | FiltrarViewModel → ContactoExtraDao; clave lógica clienteId+teléfono | No | El dato alimenta mensajes/llamadas; no sincronizarlo puede generar diferentes destinatarios por teléfono. |
+| Bloques, plantillas y configuración de automatización | BloqueHorarioViewModel, PlantillaSmsViewModel y ConfiguracionAutomatizacionDao | No | Compartir reglas funcionales; separar parámetros que son físicamente propios de cada SIM/teléfono. Evitar que todos los teléfonos ejecuten la misma acción automática. |
+| Reglas semanales y filtro Ruta IA | DAOs `ReglaSemanaDao` y `RutaIAFiltroDao` | No | Sincronizar reglas de negocio y versiones; definir quién puede modificarlas. |
+| Catálogo de canales de pago | CanalPagoDao y método de sincronización de catálogo dedicado | No forma parte de los cinco `sync*` de SyncWorker; tiene un flujo separado de catálogo | Confirmar el programador/activador real, autoría y cómo resolver cambios de usuario frente a reconstrucción del catálogo. |
+| Velocidad, Comisión y Bolsa Gerencia | DAOs de esas entidades; consumidos por vistas/cálculos | No se encontró envío en SyncWorker | Determinar si cada campo es fuente manual o derivado; si es derivado, centralizar fórmula o asegurar cálculo idéntico con mismos datos globales. |
+| Registro de dispositivos/FCM | MultiDeviceNotificationManager y Apps Script | Flujo aparte basado en Google Sheets; no equivale a sincronización de datos de negocio | Mantener separado de la fuente de verdad operativa y revisar autorización de dispositivos. |
+
+### Observaciones transversales verificadas
+- `SheetsRepository.refreshAll()` intenta refrescar Matriz, Pase derivado de Matriz, Solicitud, Filtro Fecha, Filtrar, Control y Ruta IA. Que un conjunto se descargue no significa que sus cambios se publiquen correctamente.
+- `SyncWorker.doWork()` ejecuta envíos para Matriz, Filtro Fecha, Pase, Ruta IA y Solicitud, además de encolar `ClientImageSyncWorker`. No se encontró envío en ese worker para tickets, visitas, cartucho del día, Semana 6, contactos extra, plantillas, bloques, configuración de automatización, reglas semanales, velocidades, comisiones o bolsa de gerencia.
+- `SheetsRepository.updateSheetCell()` no devuelve un resultado de negocio comprobable al llamador; los flujos deben distinguir éxito, fila no encontrada, error de red y escritura parcial antes de borrar el estado pendiente.
+- El guard de llamadas/SMS (`NumeroContactadoGuard`) y los logs de bloque (`ContactoLogDao`) se guardan localmente. Un `Mutex` en un proceso y SharedPreferences por teléfono no impiden que dos teléfonos contacten al mismo cliente simultáneamente. La futura nube necesita reclamar la acción de forma atómica y con expiración/idempotencia antes de iniciar llamada/SMS.
+- Los identificadores autogenerados localmente (ticket, visita, contactos extra, logs) no son suficientes como claves globales: definir UUID/clave de negocio estable antes de importar datos de múltiples teléfonos.
+
+### Prioridad revisada
+1. P0: proteger datos existentes, inventariar todos los escritores externos y crear copia restaurable antes de cualquier importación.
+2. P0: acordar identidad global, esquema de cambios, tombstones, acuse real, idempotencia y reclamación de acciones automáticas.
+3. P1: prototipo con Matriz, pago/ticket, visita, contactos extra y Semana 6, porque son flujos con impacto operativo y hoy tienen cobertura parcial/local.
+4. P1: piloto en dos teléfonos con edición concurrente y desconexión/reconexión; reconciliar con Sheets sin borrar filas ni duplicar acciones.
+5. P2: migrar configuraciones/catálogos/reportes y scripts externos; retirar puente de Sheets solo tras pruebas de equivalencia y recuperación.
