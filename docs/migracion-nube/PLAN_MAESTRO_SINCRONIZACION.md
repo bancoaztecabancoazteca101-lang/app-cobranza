@@ -354,3 +354,12 @@ La búsqueda del literal `getSharedPreferences` en el código indexado encontró
 ### Bloqueo para avanzar a implementación
 
 No iniciar migración real ni desactivar escritores hasta completar: (a) inventario de todos los proyectos y triggers activos; (b) copia/validación de datos en producción; (c) diseño de IDs globales, versiones, tombstones y acuses; (d) prueba paralela de dos o tres teléfonos, incluyendo offline, eliminación, fallo de red y doble envío; (e) restauración desde respaldo. Los hallazgos actuales son del commit `c766bea1ef231e02aa0d091d6cbb1f94b7dd8aa1` y los archivos versionados; no prueban el estado vivo de la cuenta Google.
+
+
+## 18. Revisión de escritores y límites de confirmación
+
+- `RutaIAViewModel.importarJson()` ejecuta `rutaIADao.deleteAll()`, inserta la ruta importada y luego intenta reemplazar por completo la hoja. `actualizarConfiguracion()` también puede volver a escribir la ruta completa. El reemplazo no está limitado al worker; hay múltiples escritores de la misma lista (UI, worker y Apps Script de limpieza). En una arquitectura multiusuario, una ruta compartida de trabajo diario necesita un propietario/versión de lote o un bloqueo por ruta, y el borrado debe ser una operación explícita con versión; no se puede resolver solo con “último escritor gana”.
+- `SheetsRepository.updateSheetCell()` devuelve `Unit`: una llamada sin excepción significa que la solicitud terminó, pero los métodos de nivel superior deben manejar excepciones y confirmar todas las escrituras antes de marcar el registro como limpio. No usar un resultado local de “guardado” como prueba de confirmación de nube.
+- `NormalizarNombresMatriz.gs` modifica solo la columna A desde fila 2 y no agrega/elimina filas. Aun así, cambia valores de negocio y debe ejecutarse solo con copia previa, registro de conteo y confirmación de que no rompe búsquedas/IDs/relaciones.
+- `firebase-apps-script/Code.gs` borra filas individuales del registro de dispositivos y su función `cleanup_` reconstruye toda la pestaña de dispositivos al eliminar duplicados. Es un registro técnico de dispositivos, no debe mezclarse con entidades operativas. La clave de API codificada en el archivo es un hallazgo de seguridad; rotarla y guardar el secreto fuera del código antes de extender el servicio.
+- La ventana de siete días de `sentEvents` solo deduplica notificaciones de retorno dentro de ese período. No puede reutilizarse como libro global de llamadas/SMS ni como garantía de que un mensaje fue entregado o una llamada completada.
