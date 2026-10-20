@@ -82,3 +82,10 @@
 - Se documentó el alcance del script de normalización (columna A) y que el backend FCM reconstruye la pestaña de dispositivos durante limpieza de duplicados.
 - Se señaló que sentEvents de siete días solo deduplica notificaciones y no debe usarse como ledger de llamadas/SMS.
 - Se mantiene la regla de no tocar main ni datos vivos. Solo documentos en la rama de auditoría; sin compilación ni APK.
+
+### 2026-10-19 — Cuarta pasada: consumidores externos y checklist Google
+- Se repitieron búsquedas del repositorio para CONTACTOS, Contac_Subir, activadores de Apps Script y backend de dispositivos. No se localizó Contac_Subir ni un consumidor claro de la pestaña externa CONTACTOS en el código Kotlin indexado.
+- Se aclaró el límite de evidencia: las búsquedas de GitHub no muestran activadores instalados, proyectos externos, fórmulas, AppSheet ni el contenido vivo de Sheets/Drive.
+- Se añadió al plan una lista de verificación de solo lectura para inventariar proyectos, activadores, despliegues, consumidores, scripts OCR/fotos y hojas que limpian datos; también evidencia mínima y criterios para no retirar procesos por suposiciones.
+- No se ejecutó ninguna función de Apps Script ni se modificaron datos/permisos de Google. No se modificó código de la app ni main; no build ni APK.
+- Bloqueo vigente: completar el inventario desde la cuenta propietaria de Google o recibir evidencia verificable de esa cuenta antes de cambiar scripts/triggers o avanzar a un piloto que dependa de su reemplazo.
