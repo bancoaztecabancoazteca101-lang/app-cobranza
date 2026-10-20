@@ -74,3 +74,11 @@
 - El código incluye una API key en el script FCM; documentado como credencial que debe rotarse y guardarse de forma segura antes de ampliar su uso.
 - No se encontró Contac_Subir ni un lector explícito de CONTACTOS en la búsqueda de código. Sigue pendiente verificar los otros proyectos Apps Script, fórmulas, AppSheet y triggers instalados en la cuenta real.
 - Solo documentación en chatgpt/documentar-migracion-nube; sin cambios de app, sin cambios en main, sin build ni APK. La comparación de rama confirma que los archivos añadidos son únicamente los dos documentos de migración.
+
+
+### 2026-10-19 — Escritores concurrentes y confirmación de nube
+- Se confirmó en RutaIAViewModel.kt que la importación borra y recrea toda la ruta local, y luego reemplaza la hoja completa; también existe reemplazo en el worker y limpieza externa. Se documentó que una ruta compartida necesita control de versión/propietario y no solo último escritor.
+- Se revisó SheetsRepository.updateSheetCell(): no devuelve un resultado de negocio; los callers deben esperar todas las escrituras y manejar excepciones antes de marcar limpio.
+- Se documentó el alcance del script de normalización (columna A) y que el backend FCM reconstruye la pestaña de dispositivos durante limpieza de duplicados.
+- Se señaló que sentEvents de siete días solo deduplica notificaciones y no debe usarse como ledger de llamadas/SMS.
+- Se mantiene la regla de no tocar main ni datos vivos. Solo documentos en la rama de auditoría; sin compilación ni APK.
