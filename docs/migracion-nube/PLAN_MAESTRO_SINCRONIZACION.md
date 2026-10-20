@@ -314,3 +314,43 @@ La lectura directa de SmsStatusWorker.kt, FiltrarScreen.kt, NumeroContactadoGuar
 - ClientImageStore.kt conserva imágenes en `filesDir/matriz_clientes`; `client_image_store` registra `ultima_limpieza`. La clave local de imagen deriva del origen (URL/ruta/URI), así que no sirve como identidad remota permanente. El piloto debe cubrir foto offline, subida fallida/parcial, URL nueva después de subir a Drive, restauración y limpieza de huérfanos sin borrar el único original pendiente.
 - MultiDeviceNotificationManager.kt usa `multi_device_notifications` para `installation_id_fallback`, `device_name` y `enabled`, además del token FCM. Son identidad y preferencias del dispositivo, separadas de los datos de cobranza compartidos.
 - Estos tres archivos quedan revisados para los usos descritos; la búsqueda global de todas las preferencias y de sistemas externos sigue abierta.
+
+
+## 17. Tercera pasada: inventario completo de preferencias encontradas y scripts versionados
+
+### Preferencias y almacenes confirmados por búsqueda global
+
+La búsqueda del literal `getSharedPreferences` en el código indexado encontró estos almacenes principales. Es una lista de los resultados disponibles del índice, no una garantía de que el buscador haya devuelto todos los usos:
+
+- `matriz_backup`: `last_local`, `last_drive`, `last_app_version`, `aviso_bajada`. Metadatos técnicos de respaldo por teléfono; conservar el sistema de backup mientras no exista recuperación probada desde la nube.
+- `sms_status_config`: configuración de estados, plantilla, activación, SIM y registro local de eventos. Separar configuración de negocio, hardware local y deduplicación global.
+- `numero_contactado_guard` / `numero_sms_guard`: bloqueo local por número; insuficiente para coordinar tres teléfonos.
+- `sem6_cache`: datos cacheados, fecha de última respuesta y IDs borrados por hoja. La caché es local, pero el borrado debe convertirse en tombstone compartido; de lo contrario otro teléfono/Apps Script puede recrear el registro.
+- `retornos_programados` y `retornos_confirmados`: alarmas por dispositivo frente al evento de negocio. La alarma se reconstruye localmente; la confirmación que cambia el flujo debe registrarse globalmente.
+- `cartucho_aviso`: evita repetir una notificación local; no es la fuente de verdad del cartucho.
+- `automatizacion_prefs`: activación de llamadas/catchup, fuera de Room.
+- `filtrar_contactos`: preferencia de alta automática de contactos.
+- `sem6_interna`: marcador de importación inicial, no confirma sincronización completa.
+- `client_image_store`: marca de limpieza; los archivos están en el almacenamiento privado del teléfono.
+- `pase_import_gcr`: contiene/capitales pendientes, indexados por ID Matriz. Se eliminan al aplicar a Pase; convertir a outbox durable antes de migrar.
+- `multi_device_notifications`: ID fallback, nombre, habilitación y token FCM del dispositivo.
+- `getDefaultSharedPreferences` y DataStore: no se encontraron coincidencias en la búsqueda ejecutada.
+- `BackupManager` mantiene además la base Room y sus archivos WAL/SHM en ZIP. No retirar ni acortar la política de respaldo durante la transición.
+
+### Scripts de Apps Script versionados: comportamiento que puede alterar datos
+
+1. `AppsScript/RutaIA.gs`: `limpiarRutaIA()` vacía el contenido de la hoja `Ruta IA` desde la fila 2. El archivo describe instalación manual de un trigger diario de 4–5 AM, pero el repositorio no confirma que ese trigger esté instalado actualmente. Es un escritor destructivo concurrente que debe pausarse/retirarse solo cuando se compruebe su estado real y la app/nube ya tenga reemplazo.
+2. `AppsScript/SincronizarCanalesPago.gs`: `sincronizarCanalesPago()` ejecuta `hoja.clearContents()` y vuelve a escribir encabezados y catálogo. Su función de configuración borra triggers anteriores del mismo handler y crea uno semanal los lunes a las 3 AM. No equivale a un trigger instalado verificado; la semilla manual debe conservarse como fuente de recuperación.
+3. `firebase-apps-script/Code.gs`: gestiona registros de dispositivos FCM en la pestaña `NotificacionesDispositivos` del mismo spreadsheet. `pollRetornos_` consulta la hoja `Matriz ` y guarda deduplicación temporal `sentEvents` en ScriptProperties por siete días. Este backend es para notificaciones y no sincroniza la base operativa completa. El secreto/API key que aparece en el código debe tratarse como credencial expuesta: rotarlo y moverlo a configuración segura antes de ampliar permisos o migrar el backend; no reutilizarlo como credencial de la nueva base.
+4. `AppsScript/NormalizarNombresMatriz.gs`: herramienta de normalización de nombres; antes de ejecutarla en producción, registrar copia previa y verificar exactamente qué columnas modifica.
+5. En todos los casos, el repositorio describe el código, no el estado actual de los proyectos Apps Script, permisos, despliegues, triggers, propiedades ni contenido real de Sheets.
+
+### Estado de la búsqueda CONTACTOS
+
+- No se encontró `Contac_Subir` ni un lector explícito de la pestaña `CONTACTOS` en los resultados de búsqueda de código del repositorio.
+- El script externo “Actualizar contactos” compartido anteriormente escribe una hoja `CONTACTOS` en otro spreadsheet. No puede darse por obsoleto solo porque el consumidor no aparezca en este repositorio.
+- Acción necesaria fuera del repositorio: revisar en la cuenta propietaria todos los proyectos Apps Script, implementaciones web, activadores instalados, fórmulas, AppSheet y hojas que referencien el ID del spreadsheet destino, la pestaña `CONTACTOS` o `Contac_Subir`. Si no hay acceso a esas cuentas, este punto debe quedar marcado como no verificable, no como resuelto.
+
+### Bloqueo para avanzar a implementación
+
+No iniciar migración real ni desactivar escritores hasta completar: (a) inventario de todos los proyectos y triggers activos; (b) copia/validación de datos en producción; (c) diseño de IDs globales, versiones, tombstones y acuses; (d) prueba paralela de dos o tres teléfonos, incluyendo offline, eliminación, fallo de red y doble envío; (e) restauración desde respaldo. Los hallazgos actuales son del commit `c766bea1ef231e02aa0d091d6cbb1f94b7dd8aa1` y los archivos versionados; no prueban el estado vivo de la cuenta Google.
