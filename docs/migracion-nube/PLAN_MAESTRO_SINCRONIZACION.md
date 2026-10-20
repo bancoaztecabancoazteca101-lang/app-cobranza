@@ -363,3 +363,41 @@ No iniciar migración real ni desactivar escritores hasta completar: (a) inventa
 - `NormalizarNombresMatriz.gs` modifica solo la columna A desde fila 2 y no agrega/elimina filas. Aun así, cambia valores de negocio y debe ejecutarse solo con copia previa, registro de conteo y confirmación de que no rompe búsquedas/IDs/relaciones.
 - `firebase-apps-script/Code.gs` borra filas individuales del registro de dispositivos y su función `cleanup_` reconstruye toda la pestaña de dispositivos al eliminar duplicados. Es un registro técnico de dispositivos, no debe mezclarse con entidades operativas. La clave de API codificada en el archivo es un hallazgo de seguridad; rotarla y guardar el secreto fuera del código antes de extender el servicio.
 - La ventana de siete días de `sentEvents` solo deduplica notificaciones de retorno dentro de ese período. No puede reutilizarse como libro global de llamadas/SMS ni como garantía de que un mensaje fue entregado o una llamada completada.
+
+## 19. Cuarta pasada: límites del repositorio y checklist de auditoría de Google externo
+
+### Resultado de búsqueda repetida en código
+
+- Se buscaron CONTACTOS, Contac_Subir, ScriptApp.newTrigger, NotificacionesDispositivos y registrarReferenciasMatriz en el índice de código de GitHub.
+- Contac_Subir no devolvió coincidencias.
+- CONTACTOS devolvió coincidencias de la palabra genérica “contactos” en Kotlin, pero no se identificó un lector de la pestaña externa CONTACTOS.
+- Se localizaron de nuevo los scripts versionados de sincronización de canales de pago y backend FCM; esto confirma que hay código para crear/eliminar activadores, pero no revela qué activadores están instalados en la cuenta real.
+- El buscador de código cubre la rama predeterminada, no el estado vivo de Google Drive, Sheets ni todos los proyectos Apps Script. Por tanto, el resultado se interpreta como “no localizado en el código indexado”, nunca como “ya no se usa”.
+
+### Checklist para el propietario de Google Workspace/cuenta
+
+Completar con acceso de solo lectura primero. No borrar activadores, no ejecutar funciones y no cambiar permisos durante esta inspección.
+
+1. **Inventariar proyectos Apps Script.** Desde Google Drive y la página de proyectos Apps Script, localizar proyectos ligados al spreadsheet de Matriz y proyectos independientes que lean o escriban hojas de Matriz, CONTACTOS o Contac_Subir. Anotar nombre, ID/URL, propietario, cuenta ejecutora y fecha de última modificación.
+2. **Inventariar activadores instalados.** En cada proyecto, abrir la sección de activadores y registrar función, tipo de evento, periodicidad/hora, propietario y proyecto. Capturar evidencia sin exponer tokens ni secretos. Los comentarios del código no sustituyen esta lista.
+3. **Revisar despliegues y permisos.** Registrar implementaciones web/API activas, quién puede ejecutarlas, servicios avanzados habilitados y permisos OAuth. No copiar credenciales a la bitácora.
+4. **Rastrear CONTACTOS y Contac_Subir.** Buscar el ID del spreadsheet destino y los nombres exactos de las pestañas en proyectos Apps Script, fórmulas de hojas, AppSheet, automatizaciones y otras hojas enlazadas. Registrar por cada consumidor qué columnas lee/escribe y con qué frecuencia.
+5. **Revisar el flujo “Actualizar contactos”.** Confirmar que la hoja fuente es Filtro Fecha, la hoja destino es CONTACTOS, y documentar columnas, normalización de teléfonos, borrado de rangos y horario de ejecución. No asumir que los teléfonos se preservan sin pérdida: el uso de parseInt puede eliminar + o ceros iniciales.
+6. **Revisar scripts de fotos/OCR.** Confirmar si ambos scripts de la carpeta de entrada están activos simultáneamente, qué activadores tienen y cómo resuelven coincidencias ambiguas. Antes de ejecutar, usar una copia y registrar cantidad de archivos, filas afectadas y resultados.
+7. **Revisar hojas destructivas.** Confirmar el estado real de los activadores de RutaIA.gs y SincronizarCanalesPago.gs. Documentar fecha/hora y propietario; no detenerlos hasta contar con respaldo, reemplazo validado y plan de reversión.
+8. **Crear respaldo verificable.** Copiar los spreadsheets implicados, conservar scripts y registrar conteos por pestaña antes de cualquier prueba. Proteger datos personales y no adjuntar contenido completo de clientes a informes públicos.
+9. **Prueba paralela no destructiva.** Solo tras el inventario, preparar una copia aislada para probar la escritura de un registro de prueba, un cambio y una baja lógica; verificar que no se pierdan filas, IDs ni teléfonos. No hacer pruebas de envío real de SMS/llamadas.
+10. **Dictamen de dependencia.** Clasificar cada proceso como Activo confirmado, Inactivo confirmado, Duplicado, No localizado o Pendiente de acceso. “No localizado” nunca autoriza eliminarlo.
+
+### Evidencia mínima para cerrar este bloqueo
+
+- Lista de proyectos Apps Script y sus IDs/propietarios.
+- Lista de activadores instalados por proyecto.
+- Lista de implementaciones y consumidores de CONTACTOS/Contac_Subir.
+- Copias/IDs de las hojas implicadas y conteos previos, sin exportar datos personales al repositorio.
+- Confirmación de quién puede ejecutar las funciones y si existen integraciones externas.
+- Plan de reversión aprobado antes de cambiar o desactivar cualquier proceso.
+
+### Decisión de seguridad
+
+Hasta tener esa evidencia, no retirar CONTACTOS, Contac_Subir, scripts de fotos/OCR ni activadores de limpieza. El código versionado y el buscador de GitHub no bastan para demostrar que un proceso externo es prescindible. Esta revisión permanece en fase documental y de solo lectura.
