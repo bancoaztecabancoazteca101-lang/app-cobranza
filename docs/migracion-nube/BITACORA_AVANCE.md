@@ -65,3 +65,12 @@
 - La búsqueda de Contac_Subir y CONTACTOS no halló un consumidor claro en Kotlin dentro del repositorio. Siguen sin verificarse los scripts, hojas y triggers externos.
 - Solo documentación en la rama chatgpt/documentar-migracion-nube; no se modificó código ni main. No se ejecutó build ni se generó APK.
 - Pendiente: rastrear pase_import_gcr y preferencias restantes; verificar consumidores externos y datos reales antes del piloto.
+
+
+### 2026-10-19 — Tercera pasada: preferencias y scripts
+- La búsqueda global de preferencias añadió al plan el inventario de BackupManager, guardas SMS/llamada, cache/tombstones Sem6, retornos, cartucho, automatización, contactos, GCR, imágenes y registro FCM.
+- Se inspeccionaron los scripts versionados RutaIA.gs, SincronizarCanalesPago.gs y firebase-apps-script/Code.gs.
+- Riesgos confirmados: RutaIA.gs puede vaciar la hoja por trigger diario; SincronizarCanalesPago.gs limpia y reconstruye el catálogo; el backend FCM guarda sentEvents temporalmente en ScriptProperties y solo atiende notificaciones, no sincronización operativa completa.
+- El código incluye una API key en el script FCM; documentado como credencial que debe rotarse y guardarse de forma segura antes de ampliar su uso.
+- No se encontró Contac_Subir ni un lector explícito de CONTACTOS en la búsqueda de código. Sigue pendiente verificar los otros proyectos Apps Script, fórmulas, AppSheet y triggers instalados en la cuenta real.
+- Solo documentación en chatgpt/documentar-migracion-nube; sin cambios de app, sin cambios en main, sin build ni APK. La comparación de rama confirma que los archivos añadidos son únicamente los dos documentos de migración.
