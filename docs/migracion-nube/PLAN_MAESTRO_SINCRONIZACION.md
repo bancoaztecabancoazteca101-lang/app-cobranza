@@ -430,3 +430,43 @@ Esta pasada vuelve a inspeccionar el código de referencia `c766bea1ef231e02aa0d
 ### Límite de esta pasada
 
 Se inspeccionaron directamente `AppDatabase.kt`, `Entities.kt`, `DAOs.kt`, `SyncWorker.kt` y la documentación de la rama. No se modificó lógica Kotlin, scripts de producción ni datos de Google. No se ejecutó Gradle, pruebas ni generación de APK. La auditoría de todas las entidades/campos y de los sistemas externos sigue abierta.
+
+
+## 21. Sexta pasada — inventario de esquema de 22 entidades Room (2026-10-20)
+
+Referencia inspeccionada: `c766bea1ef231e02aa0d091d6cbb1f94b7dd8aa1`. `AppDatabase.kt` declara 22 entidades y `DB_VERSION = 37`. La tabla siguiente inventaría las claves y campos visibles; no afirma que ya se hayan rastreado todos los escritores, lectores y consumidores externos de cada campo.
+
+| # | Entidad / tabla | Clave Room | Campos almacenados | Cobertura conocida y requisito |
+|---:|---|---|---|---|
+| 1 | `MatrizEntity / matriz_table` | id | nombre, semana, requisito, numTT, ref1–ref4, observaciones, estado, ubicación, imágenes 1–2, fecha, hora, ruta, folioP, descuentoPago, descuentoAhorro, diaPago, domicilioLaboral, diasAtraso, diasApertura, montoCobrado; isDirty, lastSync | SyncWorker envía subconjunto a Sheets. Definir destino cloud para cada campo, incluidos los ausentes en A:P. |
+| 2 | `TicketPagoEntity / ticket_pago_table` | id | fecha, nombre, CU, monto | No se halló envío en SyncWorker. Requiere ID idempotente y conciliación con monto/estado pagado. |
+| 3 | `PaseEntity / pase_cartera_table` | id | campos de cliente tipo Matriz, origenMatrizId, contiene, capitales; isDirty, lastSync | Envío parcial a Sheets; preservar vínculo con Matriz y propagar bajas. |
+| 4 | `SolicitudEntity / solicitud_table` | id | nombre, número, sucursal, ubicacionRaw, imágenes 1–4, referencias, observaciones, audioUrl, estado, gestorAsignado, fechaHora; isDirty, lastSync | SyncWorker envía datos y multimedia; limpiar pendiente solo tras confirmar todas las escrituras. |
+| 5 | `FiltroFechaEntity / filtro_fecha_table` | id | nombre, estado, observaciones, numTT, fecha, hora, imagenUrl, ref1, ref2, ubicación, req; isDirty, lastSync | SyncWorker parcial. P0: se marca limpio incluso cuando no encuentra la fila remota. |
+| 6 | `FiltrarEntity / filtrar_table` | id | nombre, semana, requerido, numTT, referencias, observaciones, estado, ubicación, imagen, fecha, hora; isDirty, lastSync | refreshAll descarga; no se halló envío en SyncWorker. Investigar otros escritores. |
+| 7 | `ControlEntity / control_table` | semana | requerido, lastSync | refreshAll descarga; no se halló envío en SyncWorker. Definir si es dato manual o cálculo. |
+| 8 | `CanalPagoEntity / canal_pago_table` | id | nombre, empresa, dirección, lat, lng, lastSync | Flujo separado de catálogo. Confirmar fuente canónica y permisos de edición. |
+| 9 | `VelocidadEntity / velocidad_table` | id=1 | rk, plan100, total, reque36, monto36, cuPase, capital, diasOp, lastUpdate | Sin envío demostrado en SyncWorker; distinguir entradas manuales de derivados. |
+| 10 | `ComisionEntity / comision_table` | id=1 | momento12, indirecta12, momento3, indirecta3, momento46, indirecta46, momento79, indirecta79, meta, lastUpdate | Sin envío demostrado; definir ámbito, periodo y conflicto. |
+| 11 | `BolsaGerenciaEntity / bolsa_gerencia_table` | id=1 | cobranzaGerencia, cumplimientoPlan, montoBase, numeroGestores, cobranza1a9Gestor, cobranza1a9Gerencia, lastUpdate | Sin envío demostrado; determinar origen de cada valor. |
+| 12 | `VisitaMapaEntity / visita_mapa_table` | clave+fechaDia | nombre, ubicación, matrizId, cartucho, timestamp | Local en flujo auditado; requiere evento global idempotente. |
+| 13 | `CartuchoDiaEntity / cartucho_dia_table` | fechaDia | cartuchoActivo | Sin envío demostrado; resolver selecciones distintas para el mismo día. |
+| 14 | `Sem6RegistroEntity / sem6_registro_table` | hoja+id | nombre, sem, req, CU, ubicación, imagenUrl, colonia, visitas, ultimaFechaVisita, numTT, seContiene, susceptible, observaciones, capital, abono | Principalmente local en flujo revisado; compartir cambios y tombstones de bajas. |
+| 15 | `BloqueHorarioEntity / bloques_horario_table` | id autogenerado | hora, minuto, activo | Sin sincronización global demostrada. Compartir reglas; no copiar alarmas locales. |
+| 16 | `ContactoLogEntity / contacto_log_table` | id autogenerado | clienteId, fechaDia, bloqueIndex, timestamp | Log local con limpieza de entradas antiguas. No sirve como ledger global para evitar dobles contactos. |
+| 17 | `PlantillaSmsEntity / plantilla_sms_table` | id autogenerado; índice único tipo+semana+slot | tipo, semana, slot, texto | Sin sincronización global demostrada. Usar clave lógica estable al importar plantillas. |
+| 18 | `ConfiguracionAutomatizacionEntity / config_automatizacion_table` | id=1 | simSeleccionada, ocultarNumero, segundosPausaEntreLlamadas, duracionMaximaLlamada, simSms | Sin sincronización global demostrada. Los índices SIM son propios de cada teléfono y no se copian como valores válidos a otro. |
+| 19 | `ReglaSemanaEntity / regla_semana_table` | semana | offsets, catchupActivo | Sin sincronización global demostrada; reglas compartidas requieren ejecución coordinada globalmente. |
+| 20 | `RutaIAEntity / ruta_ia_table` | id | nombre, CU, dirección, coloniaCp, diasAtraso, pagoRequerido, saldoAtraso, lat/lng, orden, esNuevo, cuMatrizMatch, fechaDia, estado, fotoOrigenUrl; isDirty, lastSync | SyncWorker reemplaza la hoja completa y luego limpia la lista. P0: versiones y cambios por registro para evitar pisado entre teléfonos. |
+| 21 | `RutaIAFiltroEntity / ruta_ia_filtro_table` | id=1 | criteriosOrden | Sin sincronización global demostrada. Definir si es configuración compartida o por usuario. |
+| 22 | `ContactoExtraEntity / contacto_extra_table` | id autogenerado | clienteId, telefono, nombreOrigen, fechaAgregado | Sin sincronización global demostrada. Clave lógica clienteId+teléfono; afecta destinatarios de llamadas/SMS. |
+
+### Conclusiones y límites de esta pasada
+
+- La lista cubre las 22 entidades declaradas en Room, pero el rastreo de escritores/lectores por campo sigue abierto.
+- SyncWorker intenta enviar Matriz, Pase, Ruta IA, Solicitud y Filtro Fecha; también encola la sincronización de imágenes. Filtrar y Control se descargan mediante refreshAll, lo que no demuestra envío de sus cambios.
+- IDs autogenerados locales de visitas/logs/contactos/plantillas no bastan para fusionar varias bases. Definir ID global o clave lógica idempotente antes de importar.
+- isDirty/lastSync/lastUpdate son metadatos locales; la nube necesita versión, outbox durable y acuse real.
+- Configuración de negocio debe separarse de SIM, alarmas y estado técnico del teléfono. Una regla compartida no debe hacer que todos los teléfonos ejecuten la misma llamada/SMS; hace falta una reserva atómica global.
+- Se inspeccionaron AppDatabase.kt, Entities.kt, DAOs.kt, SyncWorker.kt, SheetsRepository.kt, BloqueHorarioData.kt, ContactoLog.kt, PlantillaSms.kt, ConfiguracionAutomatizacion.kt, RutaIA.kt y ContactoExtra.kt en el commit indicado.
+- No se modificó Kotlin, cloud, Apps Script ni datos de producción. No se ejecutaron build, pruebas ni APK. La verificación de Sheets/Drive y triggers requiere evidencia de solo lectura de la cuenta propietaria.
