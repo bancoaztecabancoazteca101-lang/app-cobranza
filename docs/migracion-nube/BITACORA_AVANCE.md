@@ -89,3 +89,15 @@
 - Se añadió al plan una lista de verificación de solo lectura para inventariar proyectos, activadores, despliegues, consumidores, scripts OCR/fotos y hojas que limpian datos; también evidencia mínima y criterios para no retirar procesos por suposiciones.
 - No se ejecutó ninguna función de Apps Script ni se modificaron datos/permisos de Google. No se modificó código de la app ni main; no build ni APK.
 - Bloqueo vigente: completar el inventario desde la cuenta propietaria de Google o recibir evidencia verificable de esa cuenta antes de cambiar scripts/triggers o avanzar a un piloto que dependa de su reemplazo.
+
+
+### 2026-10-20 — Quinta pasada: verificación de rama y confirmaciones
+
+- Se consultó GitHub directamente: `main` y la rama documental comparten como base `c766bea1ef231e02aa0d091d6cbb1f94b7dd8aa1`; la comparación reportó la rama documental 17 commits por delante, 0 por detrás, y únicamente los dos documentos de migración añadidos. No hay código Kotlin modificado en el diff de esa rama.
+- Se releyeron `AppDatabase.kt`, `Entities.kt`, `DAOs.kt` y `SyncWorker.kt` en el commit de referencia.
+- Hallazgo reproducido: `syncFiltroFecha()` llama a `markFiltroFechaAsClean()` aun cuando no encuentra la fila remota (índice -1); esto puede borrar el estado pendiente sin envío.
+- Hallazgo reproducido: `syncRutaIA()` reemplaza la lista remota completa cuando hay al menos un registro dirty y después marca limpios todos los elementos locales de la lista. Requiere control de versión/propietario, manejo del resultado y política de conflicto antes de migrar.
+- Se confirmó que Matriz tiene campos operativos no representados por la proyección actual de Sheets; deben permanecer en el inventario global y recibir una decisión de esquema, no descartarse por ser locales.
+- El plan maestro recibió la sección 20 con evidencia, prioridades y límites de esta pasada.
+- Solo documentación modificada en `chatgpt/documentar-migracion-nube`; no se tocó `main`, Kotlin, Apps Script ni datos vivos de Google. No se ejecutó build, pruebas ni APK.
+- Siguiente tarea: completar matriz campo por campo para las 22 entidades y separar explícitamente evidencia del repositorio de evidencia que solo puede aportar la cuenta propietaria de Google.
