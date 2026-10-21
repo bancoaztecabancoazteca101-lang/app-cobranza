@@ -401,3 +401,32 @@ Completar con acceso de solo lectura primero. No borrar activadores, no ejecutar
 ### Decisión de seguridad
 
 Hasta tener esa evidencia, no retirar CONTACTOS, Contac_Subir, scripts de fotos/OCR ni activadores de limpieza. El código versionado y el buscador de GitHub no bastan para demostrar que un proceso externo es prescindible. Esta revisión permanece en fase documental y de solo lectura.
+
+
+## 20. Quinta pasada: comprobación directa de las confirmaciones de sincronización (2026-10-20)
+
+Esta pasada vuelve a inspeccionar el código de referencia `c766bea1ef231e02aa0d091d6cbb1f94b7dd8aa1`. No modifica la aplicación y no verifica el estado vivo de Google Sheets.
+
+### Hallazgos reproducidos en el código
+
+1. **Filtro Fecha — se limpia aunque la fila remota no exista.** En `SyncWorker.syncFiltroFecha()`, el índice se busca por ID en la columna M. Las escrituras de estado/hora solo ocurren dentro de `if (idx != -1)`, pero `markFiltroFechaAsClean(item.id)` se ejecuta fuera de esa condición. Por tanto, una fila no encontrada puede quedar limpia localmente sin haber sido enviada. Este es un fallo de confirmación, no una hipótesis. La corrección futura debe mantener la operación pendiente ante fila ausente, fallo parcial o error de red y registrar el motivo para recuperación.
+
+2. **Ruta IA — reemplazo de lista y limpieza global de pendientes.** `SyncWorker.syncRutaIA()` comprueba si existe al menos un elemento dirty; luego obtiene toda la lista, llama a `reemplazarRutaIAEnSheet(items)` y marca limpios todos los IDs de esa lista. La operación de hoja completa no representa cambios independientes por registro. Antes de migrar, hay que definir propietario/versión de la ruta y el resultado verificable de la escritura; no se debe marcar todo limpio si el reemplazo falla o si la lista remota fue modificada concurrentemente.
+
+3. **Matriz — la proyección a Sheets no cubre todos los campos de Room.** La entidad contiene campos que el propio código identifica como locales/no presentes en la hoja, entre ellos `ref3`, `ref4`, `diaPago`, `domicilioLaboral`, `diasAtraso`, `diasApertura` y `montoCobrado`; también contiene descuentos. El flujo observado de `syncMatriz()` escribe un subconjunto de columnas de Sheets y no demuestra la persistencia remota de esos campos. Como todos los datos operativos deben compartirse, cada campo necesita una decisión explícita de esquema/migración; no se autoriza excluirlo solo por ser local hoy.
+
+4. **Método de escritura de Sheets — falta un acuse de negocio.** `SheetsRepository.updateSheetCell()` no devuelve un resultado que indique fila actualizada, operación rechazada o escritura parcial. Los callers deben manejar excepciones y comprobar todas las operaciones antes de limpiar `isDirty`; el diseño cloud debe usar un acuse explícito del destino canónico.
+
+5. **La rama documental sigue aislada.** La comparación GitHub de `main...chatgpt/documentar-migracion-nube` informó 17 commits ahead, 0 behind y solo dos archivos añadidos en el diff: este plan y la bitácora. El punto común es `c766bea1ef231e02aa0d091d6cbb1f94b7dd8aa1`. Esta comprobación no equivale a una compilación ni a pruebas funcionales.
+
+### Acciones obligatorias derivadas
+
+- Prioridad P0: especificar pruebas para fila ausente, error de red, escritura parcial y edición local concurrente durante el envío.
+- Prioridad P0: impedir que `markAsClean` borre cambios hechos después de tomar la copia que se está enviando; condicionar el acuse a identidad/versión del cambio.
+- Prioridad P0: definir IDs estables, versión de ruta y política de conflicto para Ruta IA antes de sustituir la escritura completa.
+- Prioridad P1: completar el inventario campo por campo de las 22 entidades, incluidos campos sin representación en Sheets, y asociar cada uno con escritor, lector, regla de conflicto y estrategia de migración.
+- Bloqueo externo sin cambio: no se puede verificar desde GitHub el contenido vivo de Sheets/Drive, los triggers instalados ni todos los proyectos Apps Script. Requiere evidencia de solo lectura de la cuenta propietaria.
+
+### Límite de esta pasada
+
+Se inspeccionaron directamente `AppDatabase.kt`, `Entities.kt`, `DAOs.kt`, `SyncWorker.kt` y la documentación de la rama. No se modificó lógica Kotlin, scripts de producción ni datos de Google. No se ejecutó Gradle, pruebas ni generación de APK. La auditoría de todas las entidades/campos y de los sistemas externos sigue abierta.
