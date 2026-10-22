@@ -63,10 +63,19 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
     private suspend fun syncFiltroFecha() {
         repository.getDirtyFiltroFechaItems().forEach { item ->
             val idx = repository.findRowIndexById(Constants.SHEET_FILTRO, item.id, "M")
-            if (idx != -1) {
-                repository.updateSheetCell(Constants.SHEET_FILTRO, "H", idx, item.estado)
-                repository.updateSheetCell(Constants.SHEET_FILTRO, "N", idx, item.hora)
+            // No marcar como sincronizado si el ID no aparece en Sheets: puede ser un
+            // fallo de lectura o una fila que todavía no se ha creado. Mantener el dirty
+            // permite reintentar en el siguiente ciclo en lugar de perder el cambio local.
+            if (idx == -1) {
+                throw IllegalStateException(
+                    "No se encontró el registro ${item.id} en ${Constants.SHEET_FILTRO}; se conserva pendiente"
+                )
             }
+
+            // updateSheetCell propaga errores de la API; solo limpiamos dirty si ambas
+            // escrituras terminan correctamente.
+            repository.updateSheetCell(Constants.SHEET_FILTRO, "H", idx, item.estado)
+            repository.updateSheetCell(Constants.SHEET_FILTRO, "N", idx, item.hora)
             repository.markFiltroFechaAsClean(item.id)
         }
     }
