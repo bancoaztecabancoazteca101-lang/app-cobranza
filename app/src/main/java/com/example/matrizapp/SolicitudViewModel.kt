@@ -276,7 +276,20 @@ class SolicitudViewModel(
         viewModelScope.launch {
             _deleteInProgress.value = true
             try {
-                repository.deleteRowById(Constants.SHEET_SOLICITUD, id, Constants.SolicitudCols.COL_ID)
+                val eliminadoEnNube = repository.deleteRowById(
+                    Constants.SHEET_SOLICITUD,
+                    id,
+                    Constants.SolicitudCols.COL_ID
+                )
+                if (!eliminadoEnNube) {
+                    onResult(
+                        false,
+                        "No se confirmó la eliminación en Google Sheets. " +
+                            "El registro se conserva en este teléfono; verifica la hoja y vuelve a intentarlo."
+                    )
+                    return@launch
+                }
+                // Conservar la copia local hasta confirmar que la fila remota ya no existe.
                 solicitudDao.deleteById(id)
                 onResult(true, null)
             } catch (e: Exception) {
