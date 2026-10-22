@@ -197,7 +197,7 @@ interface MatrizDao {
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
         imagenUrl: String?, imagenUrl2: String?, fecha: Long?, hora: String?, ruta: String?, folioP: String?
     )
-    @Query("UPDATE matriz_table SET id = :idNuevo WHERE id = :idAnterior")
+    @Query("UPDATE matriz_table SET id = :idNuevo, isDirty = 1 WHERE id = :idAnterior")
     suspend fun renameId(idAnterior: String, idNuevo: String)
     @Query("UPDATE matriz_table SET folioP = :folioP, isDirty = 1 WHERE id = :id")
     suspend fun updateFolioP(id: String, folioP: String)
