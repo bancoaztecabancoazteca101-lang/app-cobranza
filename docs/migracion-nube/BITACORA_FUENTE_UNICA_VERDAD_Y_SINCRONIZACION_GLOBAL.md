@@ -271,3 +271,36 @@ Esta clasificación es preliminar: el contrato final debe verificar todos los co
 Consolidar este inventario en una matriz entidad por entidad y definir el modelo de datos de Firestore: documentos, IDs estables, relaciones, permisos por usuario/equipo, estrategia de cambios offline, deduplicación, borrados y conflictos. Luego revisar la configuración de Firebase Console. No empezar a escribir datos productivos hasta cerrar esos puntos.
 
 **Estado:** auditoría de flujos ampliada; Firestore sigue sin integración operativa en el código revisado. Esta etapa no cambia código funcional, no actualiza Room, no contiene prueba de compilación ni prueba multi-dispositivo.
+
+## 13. Consolidación del contrato por DAO y operación — 2026-10-23
+
+Se revisaron las definiciones de DAO y las rutas restantes de `SyncWorker.kt`, `AppDatabase.kt`, `DAOs.kt` y `Entities.kt` en la rama. La base sigue en `DB_VERSION = 38`; no se modificó el esquema ni el código funcional.
+
+### Lo que la capa actual permite afirmar
+
+- La cola `PaseSyncOperationEntity` es un precedente útil: `AppDatabase` guarda de forma transaccional la operación pendiente junto con el renombre/borrado local de Pase. Para Firestore habrá que conservar el patrón de operación durable, pero con confirmación remota real y protección contra repetición.
+- En Matriz, Pase, Solicitud, Filtro Fecha, Filtrar y Ruta IA existen banderas `isDirty`/métodos de limpieza local. La bandera no representa por sí misma una confirmación global, una versión ni un borrado remoto.
+- `SyncWorker` actualmente solo ejecuta sincronización para Matriz, Pase, Ruta IA, Solicitud y Filtro Fecha. No procesa como módulos de subida los tickets, visitas/cartuchos, Semana 6, reportes manuales, reglas/horarios, contactos extra, plantillas SMS ni logs de contacto.
+- `ControlDao` y `CanalPagoDao` tienen operaciones locales de reemplazo/borrado; `SheetsRepository.refreshAll()` actualiza algunos datos desde Sheets. Durante la transición hay que definir precedencia explícita para no mezclar silenciosamente una versión remota con cambios locales.
+- Ruta IA tiene operaciones locales de eliminar toda la lista y reordenar/actualizar elementos, además de reemplazo completo en Sheets. Una migración segura debe representar la ruta como conjunto/versionado o cambios por documento coordinados; no replicar el borrado global de la hoja como estrategia de concurrencia.
+- Los registros de reporte singleton (ID fijo 1) pueden colisionar entre teléfonos porque no llevan propietario, versión ni fecha de modificación comparable. El servidor necesita reglas de actualización y auditoría.
+- `VisitaMapaEntity` y `CartuchoDiaEntity` guardan datos que deben reconciliarse entre sí: el cartucho asignado a una visita histórica no debe cambiar solo porque se cambie el cartucho activo para nuevas visitas.
+- Semana 6 requiere tombstones compartidos para borrados; borrar únicamente la fila local no basta para impedir su recreación por otro cliente o por el generador.
+
+### Contrato mínimo requerido antes de implementar
+
+Para cada entidad/colección se debe especificar:
+1. ID global estable e inmutable, con estrategia de migración desde los IDs actuales.
+2. Campos de creación/actualización, versión o mecanismo de concurrencia, autor y marca de tiempo del servidor.
+3. Política por tipo de dato: último cambio gana solo si es seguro; en otros casos, transacción, rechazo explícito o resolución manual.
+4. Outbox durable en Room para cambios offline; clave idempotente por operación y reintentos seguros.
+5. Tombstone para eliminaciones; no interpretar fallo de lectura como confirmación de inexistencia.
+6. Confirmación del servidor antes de limpiar la operación pendiente, manteniendo cambios locales si falla la red.
+7. Autorización de lectura/escritura por usuario/equipo y clasificación de datos sensibles.
+8. Pruebas de dos teléfonos: mismo registro, edición simultánea, duplicado de pago, cambio de cartucho, borrado Semana 6, reintento tras caída y uso sin conexión.
+
+### Secuencia propuesta para la siguiente fase
+
+**No empezar con la migración de todas las entidades a la vez.** Primero cerrar la matriz entidad → pantalla/ViewModel → DAO → escritor/lector remoto; verificar Firebase Console y modelo de acceso; después preparar el piloto en Firestore con un módulo cuya identidad y política de conflicto estén cerradas. La selección del piloto debe considerar riesgo operacional y capacidad de validar los datos, no solo facilidad de programación.
+
+No hay evidencia de que Firestore esté ya habilitado/configurado en consola, ni se ejecutó compilación o prueba entre teléfonos en esta continuación. No afirmar esos resultados. No modificar `main`, no fusionar PR #122 y mantener hojas actuales como puente/respaldo hasta que la validación de integridad sea satisfactoria.
