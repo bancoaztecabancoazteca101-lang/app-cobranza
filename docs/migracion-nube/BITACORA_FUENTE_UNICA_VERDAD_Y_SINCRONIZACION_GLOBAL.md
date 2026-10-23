@@ -337,3 +337,24 @@ Antes de conectar datos reales:
 - no modificar las hojas actuales ni introducir cambios de esquema Room hasta cerrar la prueba piloto.
 
 **Estado:** decisión de proveedor confirmada por el usuario; Firebase local configurado parcialmente; Firestore aún no integrado; configuración de consola no verificada por el usuario; no hay compilación ni pruebas entre dispositivos confirmadas en esta continuación.
+
+
+## 15. Siguiente corte de inventario: datos de Matriz que hoy no viven en Sheets — 2026-10-23
+
+Se releyó `Entities.kt` en la rama de trabajo (blob SHA `ccd9097479375611993b196fd106736357faf1f9`) y se verificó el inicio de `SyncWorker.kt` (blob SHA `cb87f911072c0bfdd228468a28f35f3902aa9b2c`).
+
+### Hallazgo confirmado que afecta el diseño
+
+`MatrizEntity` incluye campos anotados en el propio código como locales y ausentes de la hoja actual: `ref3`, `ref4`, `diaPago`, `domicilioLaboral`, `diasAtraso`, `diasApertura` y `montoCobrado`. El comentario de `montoCobrado` lo relaciona con el ticket de cobranza y `FiltroFechaViewModel.registrarPagoDesdeTicket`. Esto significa que copiar solo las columnas actuales de Sheets a Firestore perdería parte de la información operativa que Matriz ya guarda localmente. El modelo central debe incluir esos campos y cualquier otro campo real identificado en la auditoría, con una migración que preserve los valores locales existentes.
+
+También se confirma que `TicketPagoEntity` está descrita como local y no se puede considerar migrada por el hecho de que el registro Matriz relacionado tenga un estado de pago. El ticket, el monto, la fecha y la actualización del registro relacionado deben conservar su relación y tener tratamiento idempotente.
+
+### Próximo paso de implementación, con barreras de seguridad
+
+1. Seguir el recorrido completo de campos locales de Matriz y tickets desde ViewModel → DAO → pantallas/consultas, para identificar cuáles son editables, calculados o derivados.
+2. Cerrar la tabla de contrato del piloto antes de escribir el código Firestore: campos incluidos, ID actual, relaciones, borrado, reintento y confirmación remota.
+3. Preferir un piloto con datos sintéticos y una copia aislada de prueba; no conectar producción ni importar datos reales hasta verificar Authentication y reglas.
+4. Para desbloquear esa validación de consola, queda pendiente la respuesta del usuario sobre: existencia de Firestore Database y región, Google Authentication habilitado y uso de la misma cuenta Google en los dispositivos. No pedir ni compartir contraseñas, claves privadas ni datos de clientes.
+5. No subir la versión de Room ni modificar entidades/migraciones en este paso; todavía no hay prueba de compilación ni de sincronización entre teléfonos documentada.
+
+**Estado:** inventario continúa; este hallazgo se incorpora como requisito de preservación de datos. No hay implementación Firestore ni pruebas nuevas confirmadas.
