@@ -1,6 +1,6 @@
 # BITÁCORA DE CONTINUIDAD — FUENTE ÚNICA DE VERDAD Y SINCRONIZACIÓN GLOBAL
 
-Actualizada: 23 de octubre de 2026  
+Actualizada: 23 de octubre de 2026 — revisión de estrategia  
 Repositorio: `bancoaztecabancoazteca101-lang/app-cobranza`  
 Rama de trabajo: `chatgpt/sincronizacion-integridad-nube`  
 PR: https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/pull/122  
@@ -10,7 +10,7 @@ Regla: no modificar `main`, no fusionar el PR sin revisión y pruebas.
 
 Toda la información operativa de Matriz debe ser compartida y sincronizada para todos los dispositivos autorizados. No debe existir información operativa aislada por teléfono como fuente independiente. La nube será la única fuente de verdad; los dispositivos recibirán de ella los datos y enviarán sus cambios. Room podrá conservar caché y cambios pendientes para trabajar sin conexión, pero deberá reconciliarse con la nube.
 
-Google Sheets será una fuente/puente temporal durante la migración y recibirá los datos mientras se mantenga esa compatibilidad. Cuando el backend central esté implementado y validado, Sheets se retirará progresivamente de la operación de la app. No retirar nada antes de probar el reemplazo, migración de datos y recuperación.
+La estrategia se actualiza por decisión del usuario: dejar de adaptar indefinidamente las hojas antiguas y construir una base central nueva para la operación de Matriz. La nube será la fuente única de verdad. Google Sheets dejará de ser una fuente operativa; se creará un archivo NUEVO de Sheets como destino de exportación/reportes y compatibilidad para los scripts que se confirme que siguen siendo necesarios. La app exportará desde la base central hacia ese archivo nuevo. El archivo antiguo no se borrará al inicio: se conservará como respaldo hasta identificar dependencias, migrar datos necesarios y probar la nueva arquitectura. No se debe confundir exportar a una hoja nueva con tener sincronización global.
 
 Este objetivo aplica a TODAS las pantallas, módulos, hojas, tablas, campos y operaciones de alta, edición, renombre y borrado. La auditoría no debe limitarse a los módulos que hoy ya sincronizan.
 
@@ -67,13 +67,16 @@ Canal de pago actualmente se describe como nutrido desde una hoja de catálogo; 
 6. Evitar sobrescrituras concurrentes por escrituras de fila completa; definir actualización por campo/versionado/conflicto.
 7. Añadir pruebas de migración Room 37→38 y las nuevas migraciones futuras, sin pérdida de datos.
 
-### P2 — Backend central y retirada progresiva de Sheets
-1. Comparar Firestore y Supabase según consultas, estructura relacional, operación offline, costos, reglas de acceso, auditoría y migración.
-2. Hacer prototipo aislado con datos de prueba; no migrar datos productivos todavía.
-3. Definir IDs globales, control de versiones, outbox, idempotencia, tombstones, confirmación del servidor, permisos y estrategia de conflictos.
-4. Migrar un módulo piloto y validar creación/edición/borrado online y offline en al menos dos dispositivos.
-5. Migrar todas las entidades/hojas compartidas en etapas; durante la transición, definir cuál sistema escribe y cuál es solo espejo para impedir dos fuentes de verdad simultáneas.
-6. Validar reconciliación, respaldo, recuperación y exportación; retirar Sheets de la app solo cuando el backend sea el origen operativo probado.
+### P2 — Base central nueva y archivo nuevo de exportación
+1. Comparar Firestore y Supabase contra el inventario real de consultas, relaciones, permisos, modo offline, costos, auditoría y exportación. La viabilidad técnica es alta, pero la elección del proveedor queda abierta hasta cerrar ese análisis.
+2. Prototipo aislado con datos sintéticos; no conectar todavía datos productivos ni credenciales de producción.
+3. Diseñar esquema central a partir de entidades/reglas reales de Matriz, no copiando automáticamente la estructura antigua de Sheets.
+4. Definir IDs globales, control de versiones, outbox, idempotencia, tombstones, confirmación del servidor, permisos y resolución de conflictos.
+5. Crear un archivo NUEVO de Google Sheets como salida controlada de la base central. Definir pestañas, columnas y frecuencia de exportación desde los datos reales y las necesidades verificadas de reportes/scripts.
+6. Migrar un módulo piloto y validar alta/edición/borrado online y offline en al menos dos dispositivos; comprobar que la exportación no escribe de vuelta a la base central.
+7. Migrar progresivamente todas las entidades operativas compartidas; Room será caché/outbox, y el archivo nuevo de Sheets será una proyección/exportación, no una segunda fuente de verdad.
+8. Confirmar qué scripts siguen siendo necesarios y adaptarlos al nuevo archivo solo después de verificar su uso real. Los scripts de llamadas/SMS continúan fuera de alcance porque la app ya realiza esas funciones.
+9. Conservar las hojas antiguas como respaldo durante la validación. Retirar sus dependencias del código solo cuando el backend, la migración y las exportaciones hayan pasado las pruebas de aceptación.
 
 ## 6. Pruebas de aceptación obligatorias
 
@@ -90,8 +93,33 @@ Canal de pago actualmente se describe como nutrido desde una hoja de catálogo; 
 
 Un build verde solo demuestra compilación/empaquetado, no sincronización funcional. No declarar completado sin evidencias registradas.
 
-## 7. Próximo paso exacto
+## 7. Evaluación de viabilidad y decisión de estrategia (23-10-2026)
 
-Continuar el inventario P0 desde el código real de la rama actual, recorriendo DAOs, Entities, SheetsRepository, todos los métodos de refresh/download, ViewModels y pantallas. Elaborar matriz de cobertura subida/bajada por entidad y hoja. Priorizar primero las entidades que el código documenta como locales pero que, según el objetivo confirmado, contienen información operativa que debe ser compartida. Después corregir cada flujo en commits pequeños, ejecutar build y pruebas, y registrar los resultados aquí.
+**Conclusión:** la estrategia es viable técnicamente y resulta más coherente con la meta de independizar Matriz de las hojas antiguas. Requiere migración por etapas; no es seguro ni realista borrar las hojas actuales y sustituirlas de golpe sin inventario y pruebas.
 
-Mantener siempre la ruta: fuente única de verdad en la nube → todos los dispositivos autorizados sincronizados → Google Sheets como puente temporal → retirada gradual de Sheets tras validación.
+### Por qué es viable
+- El código ya separa parte del acceso a datos mediante entidades Room, DAOs, `SheetsRepository` y `SyncWorker`; esto proporciona puntos de intervención para introducir una capa de repositorio/backend, aunque no demuestra que la arquitectura actual ya esté preparada para nube.
+- Existe un conjunto identificable de entidades operativas en Room. Algunas ya se sincronizan parcialmente, mientras otras (por ejemplo Semana 6, tickets, visitas de mapa/cartucho y varios módulos de captura) muestran persistencia local en el código revisado. Esas brechas pueden migrarse de forma gradual.
+- Sheets puede tratarse como salida de datos desde el backend nuevo. Esto reduce el acoplamiento futuro entre reglas de negocio y la estructura heredada de hojas.
+
+### Condiciones y riesgos que impiden prometer una migración inmediata
+- Aún falta completar el inventario de todas las pantallas, entidades, columnas, flujos de lectura/escritura, catálogos, informes y scripts realmente activos.
+- No se ha elegido proveedor de nube ni se han configurado proyecto, autenticación, permisos, reglas de seguridad, copias de seguridad ni costos.
+- No está demostrada la migración completa de los datos actuales de Sheets y Room al esquema nuevo, ni la deduplicación entre teléfonos.
+- No se han probado aún de extremo a extremo dos teléfonos, edición concurrente, borrados, reintentos, modo sin conexión, recuperación ni exportación a un Sheets nuevo.
+- La exportación a Sheets debe ser unidireccional desde la base central para no crear una segunda fuente de verdad. Si un script modifica datos operativos, deberá identificarse explícitamente como integración de entrada controlada; no se asumirá que es solo exportación.
+
+### Orden de ejecución acordado
+1. Terminar mapa de dependencias y datos reales.
+2. Comparar proveedor y arquitectura usando ese mapa; elegir con evidencia, no por preferencia previa.
+3. Definir modelo de datos, identidad, permisos, sincronización offline, conflictos y estrategia de migración.
+4. Crear backend y archivo nuevo de Sheets en entorno de prueba.
+5. Migrar un módulo piloto con prueba de dos teléfonos y exportación.
+6. Expandir por módulos, conservar respaldo y comprobar integridad.
+7. Retirar del código las dependencias de hojas antiguas y solo después considerar archivar/eliminar archivos antiguos.
+
+## 8. Próximo paso exacto
+
+Continuar el inventario P0 desde la rama real, recorriendo todas las entidades/DAOs, ViewModels, pantallas, `SheetsRepository`, Workers y flujos de importación/exportación. Para cada entidad, documentar si es operativa compartida, configuración por dispositivo, caché, dato derivado o catálogo; dónde se crea/edita/borra; ID; lectura/escritura; subida/bajada; y pantallas consumidoras. Luego seleccionar el módulo piloto con el menor riesgo y una regla de negocio verificable.
+
+Ruta objetivo actualizada: **base central nueva en la nube (única fuente de verdad) → todos los teléfonos autorizados → exportación unidireccional a un archivo nuevo de Google Sheets para reportes/integraciones verificadas → retirada controlada de dependencias antiguas.**
