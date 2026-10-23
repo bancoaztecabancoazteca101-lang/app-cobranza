@@ -44,7 +44,9 @@ class SheetsRepository(
 
     suspend fun deleteRowById(sheetName: String, id: String, idColumn: String): Boolean = withContext(Dispatchers.IO) {
         val rowIndex = findRowIndexById(sheetName, id, idColumn)
-        if (rowIndex == -1) return@withContext false
+        // El borrado es idempotente: si la hoja respondió correctamente y el ID ya no existe,
+        // el estado remoto deseado ya se cumple. No confundirlo con errores de API, que lanzan excepción.
+        if (rowIndex == -1) return@withContext true
         val sheetId = getSheetIdByTitle(sheetName) ?: return@withContext false
         val deleteRequest = Request().setDeleteDimension(
             DeleteDimensionRequest().setRange(

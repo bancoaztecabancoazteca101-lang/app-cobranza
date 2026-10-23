@@ -13,17 +13,34 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
     private val driveHelper = container.driveHelper
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        // Aislar cada módulo: un registro pendiente con conflicto (por ejemplo, un renombre
+        // ambiguo de Pase o un ID ausente en Filtro Fecha) no debe impedir que los demás módulos
+        // intenten sincronizarse en este ciclo. Si algún módulo falla, WorkManager reintentará.
+        var huboErrores = false
+        suspend fun ejecutarModulo(nombre: String, accion: suspend () -> Unit) {
+            try {
+                accion()
+            } catch (e: Exception) {
+                huboErrores = true
+                android.util.Log.e("SyncWorker", "Falló sincronización del módulo $nombre; se reintentará", e)
+            }
+        }
+
+        ejecutarModulo("Matriz") { syncMatriz() }
+        ejecutarModulo("Pase") { syncPase() }
+        ejecutarModulo("Ruta IA") { syncRutaIA() }
+        ejecutarModulo("Solicitud") { syncSolicitud() }
+        ejecutarModulo("Filtro Fecha") { syncFiltroFecha() }
+
+        // Las fotos se intentan aunque otro módulo haya fallado.
         try {
-            syncMatriz()
-            syncPase()
-            syncRutaIA()
-            syncSolicitud()
-            syncFiltroFecha()
-            // Con red disponible, aprovecha este ciclo para completar las fotos que todavía
-            // no estén guardadas de forma persistente en el teléfono.
             ClientImageSyncWorker.enqueue(applicationContext)
-            Result.success()
-        } catch (e: Exception) { Result.retry() }
+        } catch (e: Exception) {
+            huboErrores = true
+            android.util.Log.e("SyncWorker", "No se pudo programar sincronización de imágenes", e)
+        }
+
+        if (huboErrores) Result.retry() else Result.success()
     }
 
     private suspend fun syncMatriz() {
@@ -63,15 +80,59 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
     private suspend fun syncFiltroFecha() {
         repository.getDirtyFiltroFechaItems().forEach { item ->
             val idx = repository.findRowIndexById(Constants.SHEET_FILTRO, item.id, "M")
-            if (idx != -1) {
-                repository.updateSheetCell(Constants.SHEET_FILTRO, "H", idx, item.estado)
-                repository.updateSheetCell(Constants.SHEET_FILTRO, "N", idx, item.hora)
+            // No marcar como sincronizado si el ID no aparece en Sheets: puede ser un
+            // fallo de lectura o una fila que todavía no se ha creado. Mantener el dirty
+            // permite reintentar en el siguiente ciclo en lugar de perder el cambio local.
+            if (idx == -1) {
+                throw IllegalStateException(
+                    "No se encontró el registro ${item.id} en ${Constants.SHEET_FILTRO}; se conserva pendiente"
+                )
             }
+
+            // updateSheetCell propaga errores de la API; solo limpiamos dirty si ambas
+            // escrituras terminan correctamente.
+            repository.updateSheetCell(Constants.SHEET_FILTRO, "H", idx, item.estado)
+            repository.updateSheetCell(Constants.SHEET_FILTRO, "N", idx, item.hora)
             repository.markFiltroFechaAsClean(item.id)
         }
     }
 
     private suspend fun syncPase() {
+        val operacionesPase = container.database.paseSyncOperationDao()
+        // Resolver primero renombres/borrados pendientes para impedir que el upsert cree duplicados.
+        operacionesPase.pendientes().forEach { op ->
+            when (op.type) {
+                "DELETE" -> {
+                    val eliminado = repository.deleteRowById(Constants.SHEET_PASE, op.oldId, Constants.PaseCols.COL_ID)
+                    if (!eliminado) throw IllegalStateException("No se confirmó la eliminación de Pase para ${op.oldId}")
+                    operacionesPase.completar(op.operationKey)
+                }
+                "RENAME" -> {
+                    val nuevoId = op.newId ?: throw IllegalStateException("Renombre de Pase sin ID nuevo")
+                    val filaAnterior = repository.findRowIndexById(Constants.SHEET_PASE, op.oldId, Constants.PaseCols.COL_ID)
+                    val filaNueva = repository.findRowIndexById(Constants.SHEET_PASE, nuevoId, Constants.PaseCols.COL_ID)
+                    if (filaAnterior != -1 && filaNueva != -1) {
+                        throw IllegalStateException("No se puede renombrar Pase: ya existe ${nuevoId} en Sheets")
+                    }
+                    if (filaAnterior != -1) {
+                        // Si el ID nuevo existe, la comprobación anterior ya detuvo el flujo.
+                        // Solo renombramos cuando la fila anterior sigue presente.
+                        if (!repository.renameRowId(Constants.SHEET_PASE, op.oldId, nuevoId, Constants.PaseCols.COL_ID)) {
+                            throw IllegalStateException("No se confirmó el renombre de Pase ${op.oldId} a ${nuevoId}")
+                        }
+                    } else if (filaNueva != -1) {
+                        // No se puede demostrar que la fila nueva sea la misma entidad:
+                        // pudo ser un renombre ya aplicado antes de una interrupción o una colisión.
+                        // Mantener la operación pendiente evita declarar éxito sobre una identidad ambigua.
+                        throw IllegalStateException("Renombre de Pase ambiguo: no existe ${op.oldId}, pero ${nuevoId} ya existe en Sheets. Requiere verificación antes de reintentar.")
+                    }
+                    // Si ambas filas faltan, el registro es local/pending; el upsert posterior
+                    // lo creará con el ID nuevo. La operación se completa tras confirmar ese estado.
+                    operacionesPase.completar(op.operationKey)
+                }
+                else -> throw IllegalStateException("Operación de Pase desconocida: ${op.type}")
+            }
+        }
         repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CONTIENE, 1, "CONTIENE")
         repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CAPITALES, 1, "CAPITALES")
         repository.getDirtyPaseItems().forEach { item ->

@@ -194,10 +194,37 @@ class MatrizViewModel(
             val idFinal = idNuevo.trim().ifBlank { idAnterior }
             if (idFinal != idAnterior) {
                 try {
-                    repository.renameRowId(Constants.SHEET_MATRIZ, idAnterior, idFinal, Constants.MatrizCols.COL_ID)
+                    // Evita que el nuevo ID apunte a otro cliente, tanto en Room como en Sheets.
+                    val localConNuevoId = matrizDao.getById(idFinal)
+                    if (localConNuevoId != null && idFinal != idAnterior) {
+                        onResult(false, "El ID $idFinal ya pertenece a otro registro de Matriz")
+                        return@launch
+                    }
+                    val remotoConNuevoId = repository.findRowIndexById(
+                        Constants.SHEET_MATRIZ, idFinal, Constants.MatrizCols.COL_ID
+                    )
+                    val remotoAnterior = repository.findRowIndexById(
+                        Constants.SHEET_MATRIZ, idAnterior, Constants.MatrizCols.COL_ID
+                    )
+                    if (remotoConNuevoId != -1 && remotoConNuevoId != remotoAnterior) {
+                        onResult(false, "El ID $idFinal ya existe en Sheets")
+                        return@launch
+                    }
+
+                    // Si el registro anterior todavía no existe remotamente, es un alta local
+                    // pendiente: se renombra en Room y queda dirty para que SyncWorker lo agregue.
+                    if (remotoAnterior != -1) {
+                        val renombrado = repository.renameRowId(
+                            Constants.SHEET_MATRIZ, idAnterior, idFinal, Constants.MatrizCols.COL_ID
+                        )
+                        if (!renombrado) {
+                            onResult(false, "No se pudo confirmar el cambio de ID en Sheets")
+                            return@launch
+                        }
+                    }
                     matrizDao.renameId(idAnterior, idFinal)
                 } catch (e: Exception) {
-                    onResult(false, "No se pudo cambiar el ID en el Sheet (revisa tu conexión): ${e.message}")
+                    onResult(false, "No se pudo cambiar el ID en Sheets (revisa tu conexión): ${e.message}")
                     return@launch
                 }
             }
@@ -329,11 +356,28 @@ class MatrizViewModel(
         viewModelScope.launch {
             _deleteInProgress.value = true
             try {
-                repository.deleteRowById(Constants.SHEET_MATRIZ, id, Constants.MatrizCols.COL_ID)
+                val eliminadoEnNube = repository.deleteRowById(
+                    Constants.SHEET_MATRIZ,
+                    id,
+                    Constants.MatrizCols.COL_ID
+                )
+                if (!eliminadoEnNube) {
+                    onResult(
+                        false,
+                        "No se confirmó la eliminación en Google Sheets. " +
+                            "El registro se conserva en este teléfono; verifica la hoja y vuelve a intentarlo."
+                    )
+                    return@launch
+                }
+                // Solo quitar la copia local después de que Google Sheets confirme el borrado.
                 matrizDao.deleteById(id)
                 onResult(true, null)
             } catch (e: Exception) {
-                onResult(false, e.message)
+                onResult(
+                    false,
+                    "No se pudo confirmar la eliminación en Google Sheets. " +
+                        "El registro se conserva en este teléfono. " + (e.message ?: "")
+                )
             } finally {
                 _deleteInProgress.value = false
             }
