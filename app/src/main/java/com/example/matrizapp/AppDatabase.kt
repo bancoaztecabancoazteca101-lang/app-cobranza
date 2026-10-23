@@ -3,6 +3,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -17,6 +18,29 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun visitaMapaDao(): VisitaMapaDao
     abstract fun paseDao(): PaseCarteraDao
     abstract fun paseSyncOperationDao(): PaseSyncOperationDao
+
+    /** Atomically persist the remote operation and local rename, so a crash cannot split them. */
+    suspend fun renombrarPaseAtomico(idAnterior: String, registroNuevo: PaseEntity, operacion: PaseSyncOperationEntity): Boolean =
+        withTransaction {
+            val pase = paseDao()
+            if (pase.getById(idAnterior) == null) return@withTransaction false
+            if (pase.contarPorId(registroNuevo.id) > 0) return@withTransaction false
+            val inserted = pase.insertar(registroNuevo)
+            if (inserted == -1L) throw IllegalStateException("No se pudo insertar el nuevo ID de Pase: ${registroNuevo.id}")
+            paseSyncOperationDao().encolar(operacion)
+            pase.eliminar(idAnterior)
+            true
+        }
+
+    /** Atomically persist the remote delete and remove the local record. */
+    suspend fun eliminarPaseAtomico(id: String, operacion: PaseSyncOperationEntity): Boolean =
+        withTransaction {
+            val pase = paseDao()
+            if (pase.getById(id) == null) return@withTransaction false
+            paseSyncOperationDao().encolar(operacion)
+            pase.eliminar(id)
+            true
+        }
     abstract fun solicitudDao(): SolicitudDao
     abstract fun filtroDao(): FiltroFechaDao
     abstract fun filtrarDao(): FiltrarDao
