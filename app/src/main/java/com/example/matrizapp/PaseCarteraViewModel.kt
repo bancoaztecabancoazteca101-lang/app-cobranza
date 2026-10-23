@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
 
-class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matrizDao: MatrizDao, val driveHelper: DriveHelper) : ViewModel() {
+class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matrizDao: MatrizDao, private val paseSyncDao: PaseSyncOperationDao, val driveHelper: DriveHelper) : ViewModel() {
     val paseList: StateFlow<List<PaseEntity>> = paseDao.getAllPase().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _deleteInProgress = MutableStateFlow(false)
     val deleteInProgress: StateFlow<Boolean> = _deleteInProgress
@@ -293,10 +293,25 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
     }
 
     fun cambiarIdYGuardar(idAnterior: String, idNuevo: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?, fecha: Long?, hora: String?, ruta: String?, folioP: String?, onResult: (Boolean, String?) -> Unit) = viewModelScope.launch {
-        val existente = paseList.value.find { it.id == idAnterior }
+        val existente = paseDao.getById(idAnterior)
         if (existente == null) { onResult(false, "El registro ya no existe"); return@launch }
-        paseDao.actualizar(existente.copy(nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true))
-        onResult(true, null)
+        val nuevoId = idNuevo.trim().ifBlank { idAnterior }
+        if (nuevoId != idAnterior && paseDao.contarPorId(nuevoId) > 0) {
+            onResult(false, "Ya existe otro registro de Pase con el ID $nuevoId")
+            return@launch
+        }
+        try {
+            if (nuevoId != idAnterior) {
+                paseSyncDao.encolar(PaseSyncOperationEntity("RENAME:$idAnterior:$nuevoId", "RENAME", idAnterior, nuevoId))
+                paseDao.eliminar(idAnterior)
+                paseDao.insertar(existente.copy(id = nuevoId, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true))
+            } else {
+                paseDao.actualizar(existente.copy(nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true))
+            }
+            onResult(true, null)
+        } catch (e: Exception) {
+            onResult(false, e.message ?: "No se pudo guardar el cambio de ID")
+        }
     }
 
     fun crearRegistro(id: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?, fecha: Long, hora: String?, ruta: String?, folioP: String?) {
@@ -306,8 +321,19 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
 
     fun eliminarRegistro(id: String, onResult: (Boolean, String?) -> Unit) = viewModelScope.launch {
         _deleteInProgress.value = true
-        paseDao.eliminar(id)
-        _deleteInProgress.value = false
-        onResult(true, null)
+        try {
+            if (paseDao.getById(id) == null) {
+                _deleteInProgress.value = false
+                onResult(false, "El registro ya no existe")
+                return@launch
+            }
+            paseSyncDao.encolar(PaseSyncOperationEntity("DELETE:$id", "DELETE", id, null))
+            paseDao.eliminar(id)
+            _deleteInProgress.value = false
+            onResult(true, null)
+        } catch (e: Exception) {
+            _deleteInProgress.value = false
+            onResult(false, e.message ?: "No se pudo eliminar de Pase")
+        }
     }
 }
