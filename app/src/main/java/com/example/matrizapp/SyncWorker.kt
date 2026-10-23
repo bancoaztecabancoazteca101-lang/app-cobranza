@@ -98,10 +98,19 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
                         throw IllegalStateException("No se puede renombrar Pase: ya existe ${nuevoId} en Sheets")
                     }
                     if (filaAnterior != -1) {
+                        // Si el ID nuevo existe, la comprobación anterior ya detuvo el flujo.
+                        // Solo renombramos cuando la fila anterior sigue presente.
                         if (!repository.renameRowId(Constants.SHEET_PASE, op.oldId, nuevoId, Constants.PaseCols.COL_ID)) {
                             throw IllegalStateException("No se confirmó el renombre de Pase ${op.oldId} a ${nuevoId}")
                         }
+                    } else if (filaNueva != -1) {
+                        // No se puede demostrar que la fila nueva sea la misma entidad:
+                        // pudo ser un renombre ya aplicado antes de una interrupción o una colisión.
+                        // Mantener la operación pendiente evita declarar éxito sobre una identidad ambigua.
+                        throw IllegalStateException("Renombre de Pase ambiguo: no existe ${op.oldId}, pero ${nuevoId} ya existe en Sheets. Requiere verificación antes de reintentar.")
                     }
+                    // Si ambas filas faltan, el registro es local/pending; el upsert posterior
+                    // lo creará con el ID nuevo. La operación se completa tras confirmar ese estado.
                     operacionesPase.completar(op.operationKey)
                 }
                 else -> throw IllegalStateException("Operación de Pase desconocida: ${op.type}")
