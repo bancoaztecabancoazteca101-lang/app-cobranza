@@ -200,3 +200,35 @@ Se mantiene Firestore como candidato backend central inicial porque el proyecto 
 
 **Estado al cierre de esta entrada:** auditoría/diseño; sin integración Firestore, sin migración de datos productivos, sin cambios de Room y sin pruebas de dos teléfonos documentadas.
 
+## 11. Seguimiento del mapa CRUD: Matriz, tickets, mapa y Semana 6 — 2026-10-23
+
+**Continuación realizada en la rama de trabajo** `chatgpt/sincronizacion-integridad-nube`. Se leyeron directamente los siguientes archivos de esa rama:
+
+- `MapaScreen.kt` — blob SHA `05e71746d5d9c57b446f59fea4eccefc54599e91`.
+- `MatrizViewModel.kt` — blob SHA `38fa7428fa92329a7164b5ec4cfec10dd3ef290d`.
+- `FiltroFechaViewModel.kt` — blob SHA `5ece22add07e87257ed845a02b306872cfa636c1`.
+- `Sem6ViewModel.kt` — blob SHA `5110af8d9ed70834d67296992662d37bfa775905`.
+- `Sem6Generador.kt` — blob SHA `38a9ae9ef7b8126157cc1a65b0372551034aea13`.
+- `SyncWorker.kt` — blob SHA `cb87f911072c0bfdd228468a28f35f3902aa9b2c`.
+- `DAOs.kt` — blob SHA `78574574296743fe92a0e51d64170e3f51c628f7`.
+- `Entities.kt` — blob SHA `ccd9097479375611993b196fd106736357faf1f9`.
+
+### Flujos y riesgos confirmados en esta revisión
+
+1. **Mapa:** `MapaScreen` combina historial guardado con registros actuales de Matriz que caen dentro de la semana y tienen coordenadas. El comentario de código confirma que, si un registro no aparece en el historial, se presenta con cartucho 1. La pantalla actualiza el cartucho diario llamando directamente a `VisitaMapaDao.asegurarCartuchoDia()` y `setCartuchoActivo()`; no se encontró en esta ruta una confirmación remota. Por tanto, el cambio de cartucho no es aún una operación global compartida.
+2. **Registro de visitas:** `MatrizViewModel` llama a `registrarRegistrosDeHoy()` al observar Matriz y también a `registrarVisitaHoy()` al guardar cambios relevantes. El DAO ignora duplicados con la clave local `clave + fechaDia` y conserva alrededor de cuatro meses. Esto define parte de la conducta actual que la migración debe preservar; no es suficiente para deduplicar entre teléfonos.
+3. **Pago por ticket:** `FiltroFechaViewModel.registrarPagoDesdeTicket()` inserta el ticket OCR localmente, busca duplicados por cliente/monto desde el inicio del día, marca como Pagado el registro Matriz encontrado y registra la visita del mapa. El ticket usa un ID basado en la hora actual y hash del texto OCR; la comprobación de duplicados es una consulta local previa al insert, por lo que dos teléfonos pueden pasar la comprobación al mismo tiempo. En el piloto se necesitará una clave idempotente/operación atómica en servidor, no copiar simplemente esta comprobación local.
+4. **Semana 6:** `Sem6ViewModel` elimina la fila en Room y escribe la marca de eliminación en `Sem6CacheStore`; al arrancar, importa las hojas antiguas una sola vez según preferencia local, y observa Matriz para regenerar/completar Semana 6. `Sem6Generador` inserta registros que faltan y actualiza ciertos campos. El borrado y la protección contra regeneración no están coordinados entre teléfonos; la marca local no puede ser la lápida global.
+5. **Fuente remota vigente:** el `SyncWorker` revisado sigue utilizando `SheetsRepository` para Matriz/Filtro Fecha/Pase/Solicitud; la ruta actual no contiene persistencia Firestore. No confundir los eventos/avisos locales con sincronización de datos.
+
+### Reglas que deben conservarse al diseñar la migración
+
+- Mantener la regla actual del mapa: un cliente cuenta una vez por día; registrar la visita no debe duplicar el registro de Matriz.
+- Conservar el cartucho asignado a visitas históricas; definir explícitamente cómo se resuelve una edición de cartucho concurrente.
+- No volver a crear en Semana 6 un registro cuya eliminación global haya sido confirmada.
+- Un pago/ticket y su actualización relacionada deben tener IDs idempotentes y resultado verificable; evitar que el mismo ticket sumado en dos teléfonos duplique totales.
+- No borrar ni migrar las hojas antiguas hasta tener comparación de datos, reglas de reconciliación y pruebas.
+
+### Siguiente paso inmediato
+
+Terminar de rastrear la ruta de CRUD y persistencia de las entidades restantes, y convertir el mapa completo en un contrato por entidad: identidad global, lectores/escritores, autorización, outbox local, confirmación del servidor, conflictos y tombstones. Después de esa trazabilidad, definir un piloto pequeño de Firestore. Todavía no se ha hecho cambio de código funcional, compilación ni prueba entre dos teléfonos en esta etapa.
