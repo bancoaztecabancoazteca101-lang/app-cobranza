@@ -304,3 +304,36 @@ Para cada entidad/colección se debe especificar:
 **No empezar con la migración de todas las entidades a la vez.** Primero cerrar la matriz entidad → pantalla/ViewModel → DAO → escritor/lector remoto; verificar Firebase Console y modelo de acceso; después preparar el piloto en Firestore con un módulo cuya identidad y política de conflicto estén cerradas. La selección del piloto debe considerar riesgo operacional y capacidad de validar los datos, no solo facilidad de programación.
 
 No hay evidencia de que Firestore esté ya habilitado/configurado en consola, ni se ejecutó compilación o prueba entre teléfonos en esta continuación. No afirmar esos resultados. No modificar `main`, no fusionar PR #122 y mantener hojas actuales como puente/respaldo hasta que la validación de integridad sea satisfactoria.
+
+
+## 14. Continuación tras confirmar Firebase como proveedor — 2026-10-23
+
+El usuario confirma que la duda sobre Drive era exploratoria y que el proyecto continúa con Firebase. Los dispositivos actuales son personales y usan la misma cuenta de Google; el diseño debe cubrir primero este escenario, sin impedir que en el futuro se incorporen usuarios autorizados adicionales. Este dato simplifica el alcance inicial de acceso, pero no reemplaza autenticación/autorización ni las pruebas de sincronización.
+
+### Revisión directa adicional de acceso y contenedor
+
+Se volvieron a leer desde la rama `chatgpt/sincronizacion-integridad-nube`:
+
+- `app/src/main/java/com/example/matrizapp/AppContainer.kt` — blob SHA `5013020b97b687e80fa9835e7de52ecdd7f7c264`.
+- `app/src/main/java/com/example/matrizapp/LoginScreen.kt` — blob SHA `5d2b59b95e27a1dc8e1a2d2954d982afd8e1bb2c`.
+- `app/src/main/java/com/example/matrizapp/MainActivity.kt` — blob SHA `f4a9608a0ba90f49ef6aa604e0102a680c4cd4d7`.
+- `app/build.gradle` — blob SHA `9a5f44092bf87b94b4a3418839002fa4ed9da55e`.
+
+Hallazgos confirmados:
+1. `LoginScreen.kt` usa Google Sign-In y solicita scopes de Google Sheets y Drive (`SPREADSHEETS` y `DRIVE`). `hasSignedInAccount()` comprueba esa cuenta y esos scopes. Esto autentica el acceso actual a las APIs de Google usadas por la app, pero **no equivale a iniciar sesión con Firebase Authentication** ni prueba una identidad Firebase.
+2. `AppContainer.kt` construye `SheetsRepository` con DAOs Room y un servicio Google Sheets; también expone servicios Drive/backup. En el código inspeccionado, el repositorio operativo remoto continúa siendo Sheets.
+3. `app/build.gradle` aplica Google Services y tiene la configuración Android de Firebase existente, pero la inspección anterior no encontró dependencia `firebase-firestore` ni llamadas a `FirebaseFirestore`. Firestore sigue sin estar integrado como base operativa.
+4. El usuario aún no ha informado el estado actual de Firestore Database ni del proveedor Google en Firebase Authentication. No asumir que la consola está configurada ni pedirle cambios de seguridad a ciegas.
+
+### Decisión para el siguiente trabajo
+
+No cambiar de proveedor y no comenzar aún una migración de datos reales. Continuar el inventario de CRUD y cerrar el piloto usando datos sintéticos. En paralelo, preparar el diseño de identidad de forma que pueda aprovechar la cuenta Google existente, pero validar expresamente cómo vincular Google Sign-In con Firebase Authentication y cómo autorizar la cuenta antes de cualquier lectura/escritura productiva.
+
+Antes de conectar datos reales:
+- comprobar en Firebase Console si Firestore Database existe y su región;
+- verificar Google como proveedor de Firebase Authentication;
+- definir reglas cerradas por defecto y probar acceso permitido/denegado;
+- elegir un identificador de usuario/equipo estable sin codificar que la app solo tendrá un usuario para siempre;
+- no modificar las hojas actuales ni introducir cambios de esquema Room hasta cerrar la prueba piloto.
+
+**Estado:** decisión de proveedor confirmada por el usuario; Firebase local configurado parcialmente; Firestore aún no integrado; configuración de consola no verificada por el usuario; no hay compilación ni pruebas entre dispositivos confirmadas en esta continuación.
