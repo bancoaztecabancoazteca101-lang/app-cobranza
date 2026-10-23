@@ -268,7 +268,7 @@ interface PaseCarteraDao {
 interface PaseSyncOperationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun encolar(operation: PaseSyncOperationEntity)
-    @Query("SELECT * FROM pase_sync_operation_table ORDER BY operationKey ASC")
+    @Query("SELECT * FROM pase_sync_operation_table ORDER BY rowid ASC")
     suspend fun pendientes(): List<PaseSyncOperationEntity>
     @Query("DELETE FROM pase_sync_operation_table WHERE operationKey = :key")
     suspend fun completar(key: String)
