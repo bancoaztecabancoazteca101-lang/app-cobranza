@@ -81,6 +81,32 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
     }
 
     private suspend fun syncPase() {
+        val operacionesPase = container.database.paseSyncOperationDao()
+        // Resolver primero renombres/borrados pendientes para impedir que el upsert cree duplicados.
+        operacionesPase.pendientes().forEach { op ->
+            when (op.type) {
+                "DELETE" -> {
+                    val eliminado = repository.deleteRowById(Constants.SHEET_PASE, op.oldId, Constants.PaseCols.COL_ID)
+                    if (!eliminado) throw IllegalStateException("No se confirmó la eliminación de Pase para ${op.oldId}")
+                    operacionesPase.completar(op.operationKey)
+                }
+                "RENAME" -> {
+                    val nuevoId = op.newId ?: throw IllegalStateException("Renombre de Pase sin ID nuevo")
+                    val filaAnterior = repository.findRowIndexById(Constants.SHEET_PASE, op.oldId, Constants.PaseCols.COL_ID)
+                    val filaNueva = repository.findRowIndexById(Constants.SHEET_PASE, nuevoId, Constants.PaseCols.COL_ID)
+                    if (filaAnterior != -1 && filaNueva != -1) {
+                        throw IllegalStateException("No se puede renombrar Pase: ya existe ${nuevoId} en Sheets")
+                    }
+                    if (filaAnterior != -1) {
+                        if (!repository.renameRowId(Constants.SHEET_PASE, op.oldId, nuevoId, Constants.PaseCols.COL_ID)) {
+                            throw IllegalStateException("No se confirmó el renombre de Pase ${op.oldId} a ${nuevoId}")
+                        }
+                    }
+                    operacionesPase.completar(op.operationKey)
+                }
+                else -> throw IllegalStateException("Operación de Pase desconocida: ${op.type}")
+            }
+        }
         repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CONTIENE, 1, "CONTIENE")
         repository.updateSheetCell(Constants.SHEET_PASE, Constants.PaseCols.COL_CAPITALES, 1, "CAPITALES")
         repository.getDirtyPaseItems().forEach { item ->
