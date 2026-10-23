@@ -97,6 +97,16 @@ Un build verde solo demuestra compilación/empaquetado, no sincronización funci
 
 **Conclusión:** la estrategia es viable técnicamente y resulta más coherente con la meta de independizar Matriz de las hojas antiguas. Requiere migración por etapas; no es seguro ni realista borrar las hojas actuales y sustituirlas de golpe sin inventario y pruebas.
 
+### Decisión de proveedor (23-10-2026): Firebase Cloud Firestore
+
+Se selecciona **Firebase Cloud Firestore como primera opción para el backend central**, porque el proyecto es Android/Kotlin, el usuario ya dispone de cuenta Firebase y Firestore ofrece SDK Android, sincronización en tiempo real, caché y escrituras offline, consultas, transacciones/escrituras por lotes e integración con Firebase Authentication y Security Rules. Documentación oficial: [Firestore](https://firebase.google.com/docs/firestore), [persistencia offline](https://firebase.google.com/docs/firestore/manage-data/enable-offline), [transacciones y lotes](https://firebase.google.com/docs/firestore/manage-data/transactions), [reglas de seguridad](https://firebase.google.com/docs/rules) y [precios](https://firebase.google.com/docs/firestore/pricing).
+
+La selección es una decisión de arquitectura inicial, no prueba de que Firebase ya esté conectado ni configurado en este repositorio. Antes de datos productivos se debe verificar el proyecto Firebase real, región, autenticación, permisos, reglas cerradas por defecto, App Check cuando corresponda, cuotas/costos y estrategia de respaldo. No incluir credenciales ni secretos en el repositorio.
+
+Firestore tiene un matiz crítico: su comportamiento offline resuelve caché y sincronización básica, pero los cambios concurrentes sobre el mismo documento pueden aplicar last-write-wins. Por tanto, **no se delegará la integridad de Matriz solo al SDK**: se definirán IDs globales, campos de auditoría/versionado, reglas de conflicto, borrados/tombstones, outbox persistente para operaciones de negocio y confirmación remota. Las transacciones requieren conexión y no deben ser el único mecanismo para operaciones que se originan offline.
+
+Supabase no se elige como opción inicial: su modelo SQL puede convenir si el inventario demuestra necesidad fuerte de relaciones/consultas analíticas complejas, pero agregaría otra plataforma y no ofrece una ventaja suficiente demostrada frente a aprovechar la cuenta y ecosistema Firebase existentes. Reabrir la decisión solo si el inventario, prototipo o costos reales muestran una limitación importante de Firestore.
+
 ### Por qué es viable
 - El código ya separa parte del acceso a datos mediante entidades Room, DAOs, `SheetsRepository` y `SyncWorker`; esto proporciona puntos de intervención para introducir una capa de repositorio/backend, aunque no demuestra que la arquitectura actual ya esté preparada para nube.
 - Existe un conjunto identificable de entidades operativas en Room. Algunas ya se sincronizan parcialmente, mientras otras (por ejemplo Semana 6, tickets, visitas de mapa/cartucho y varios módulos de captura) muestran persistencia local en el código revisado. Esas brechas pueden migrarse de forma gradual.
