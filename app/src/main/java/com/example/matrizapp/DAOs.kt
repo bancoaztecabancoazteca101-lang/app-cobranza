@@ -241,7 +241,7 @@ interface PaseCarteraDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<PaseEntity>)
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertar(item: PaseEntity)
+    suspend fun insertar(item: PaseEntity): Long
     @Update
     suspend fun actualizar(item: PaseEntity)
     @Query("DELETE FROM pase_cartera_table WHERE id = :id")
