@@ -133,3 +133,35 @@ Supabase no se elige como opción inicial: su modelo SQL puede convenir si el in
 Continuar el inventario P0 desde la rama real, recorriendo todas las entidades/DAOs, ViewModels, pantallas, `SheetsRepository`, Workers y flujos de importación/exportación. Para cada entidad, documentar si es operativa compartida, configuración por dispositivo, caché, dato derivado o catálogo; dónde se crea/edita/borra; ID; lectura/escritura; subida/bajada; y pantallas consumidoras. Luego seleccionar el módulo piloto con el menor riesgo y una regla de negocio verificable.
 
 Ruta objetivo actualizada: **base central nueva en la nube (única fuente de verdad) → todos los teléfonos autorizados → exportación unidireccional a un archivo nuevo de Google Sheets para reportes/integraciones verificadas → retirada controlada de dependencias antiguas.**
+
+## 9. Verificación directa de Firebase en la rama `chatgpt/sincronizacion-integridad-nube` — 2026-10-23
+
+Inspección directa de `app/build.gradle`, `build.gradle`, `settings.gradle`, `app/google-services.json`, `app/src/main/AndroidManifest.xml`, `AppDatabase.kt`, `SyncWorker.kt` y `SheetsRepository.kt`.
+
+### Hallazgos confirmados
+
+- **Sí existe configuración Firebase para Android en el repositorio:** `app/google-services.json` contiene un proyecto Firebase identificado como `app-matriz` y el paquete Android `com.example.matrizapp`. Esto confirma que el archivo de configuración está presente en esta rama; no confirma por sí solo que los servicios estén habilitados correctamente en la consola, que las reglas sean seguras o que la app pueda autenticar y leer/escribir datos.
+- **El plugin de Google Services ya está aplicado** en `app/build.gradle` y declarado en `build.gradle`; no hace falta agregarlo de nuevo sin una razón técnica.
+- **Firebase BoM y Firebase Cloud Messaging ya están en dependencias** (`firebase-bom:34.18.0`, `firebase-messaging`). El manifiesto registra `.MatrizFirebaseMessagingService`. Esto es uso de mensajería, no una implementación de base de datos Firestore.
+- **No se encontró una dependencia `firebase-firestore` ni uso de `FirebaseFirestore` en la búsqueda de código realizada.** Por tanto, Firestore todavía no está integrado como base operativa en la rama examinada.
+- Room sigue en versión 38 y contiene las entidades enumeradas en la sección de inventario. No se debe subir la versión ni modificar migraciones hasta diseñar y probar los cambios necesarios.
+- `SyncWorker.kt` sigue enviando cambios operativos a Google Sheets. En `syncMatriz()`, si no encuentra el ID remoto, llama a `appendRow()`; eso puede recrear en Sheets un registro que fue eliminado remotamente o cuyo resultado de consulta fue incorrecto. También actualiza múltiples celdas individualmente, por lo que una escritura parcial o concurrente puede dejar campos mezclados.
+- `syncFiltroFecha()` ahora conserva pendiente un registro cuyo ID no encuentra, evitando marcarlo limpio sin confirmación.
+- `SheetsRepository.updateSheetCell()` ejecuta una actualización de una celda y devuelve `Unit`; no proporciona por sí mismo una confirmación de integridad de toda una operación de negocio.
+- El manifiesto declara permiso de Internet y servicio FCM. Esto no demuestra conectividad con Firestore, autenticación de usuarios ni controles de acceso.
+- El archivo `google-services.json` contiene identificadores de configuración y una API key de cliente. No copiar esos valores a bitácoras, respuestas o informes; validar restricciones de API y configuración del proyecto en Firebase Console. No se detectó aquí ninguna credencial privada de servidor, pero esta inspección no sustituye una revisión de secretos completa.
+
+### Decisión operativa derivada
+
+Se mantiene **Firestore como backend elegido**, aprovechando el proyecto configurado existente solo después de validar su estado en Firebase Console. Antes de conectar datos reales, comprobar:
+1. Firestore Database creado y región elegida con criterio de latencia/cumplimiento.
+2. Authentication: método de acceso real para los teléfonos autorizados y ciclo de alta/baja.
+3. Security Rules cerradas por defecto, probadas con usuarios autorizados y no autorizados.
+4. App Check cuando sea viable, límites/cuotas/costos y respaldo/recuperación.
+5. Separación entre mensajería FCM existente y persistencia Firestore; FCM no sustituye a la base de datos.
+
+No se ha escrito ni leído ningún documento Firestore desde la app, no se han migrado datos, no se han creado reglas ni se ha probado sincronización entre dos teléfonos. No afirmar que Firebase ya funciona como fuente de verdad.
+
+### Próximo paso técnico
+
+Continuar el inventario P0 de entidades, DAOs, ViewModels, pantallas y rutas de lectura/escritura; usar la configuración existente como punto de partida, sin tocar todavía datos productivos. Elegir un módulo piloto solo cuando su identidad, CRUD, consumidores y regla de conflicto estén trazados. No cambiar `main`, no fusionar PR #122 y no retirar las hojas antiguas en esta fase.
