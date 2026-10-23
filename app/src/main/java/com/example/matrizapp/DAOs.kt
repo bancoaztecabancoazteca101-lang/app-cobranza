@@ -246,6 +246,10 @@ interface PaseCarteraDao {
     suspend fun actualizar(item: PaseEntity)
     @Query("DELETE FROM pase_cartera_table WHERE id = :id")
     suspend fun eliminar(id: String)
+    @Query("SELECT * FROM pase_cartera_table WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): PaseEntity?
+    @Query("SELECT COUNT(*) FROM pase_cartera_table WHERE id = :id")
+    suspend fun contarPorId(id: String): Int
     @Query("SELECT origenMatrizId FROM pase_cartera_table")
     suspend fun getOrigenesYaCopiados(): List<String>
     @Query("UPDATE pase_cartera_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
@@ -258,6 +262,16 @@ interface PaseCarteraDao {
     suspend fun getDirtyItems(): List<PaseEntity>
     @Query("UPDATE pase_cartera_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
     suspend fun markAsClean(id: String, syncTime: Long = System.currentTimeMillis())
+}
+
+@Dao
+interface PaseSyncOperationDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun encolar(operation: PaseSyncOperationEntity)
+    @Query("SELECT * FROM pase_sync_operation_table ORDER BY operationKey ASC")
+    suspend fun pendientes(): List<PaseSyncOperationEntity>
+    @Query("DELETE FROM pase_sync_operation_table WHERE operationKey = :key")
+    suspend fun completar(key: String)
 }
 
 @Dao
