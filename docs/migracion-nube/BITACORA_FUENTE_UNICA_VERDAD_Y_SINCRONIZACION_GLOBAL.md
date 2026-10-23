@@ -232,3 +232,42 @@ Se mantiene Firestore como candidato backend central inicial porque el proyecto 
 ### Siguiente paso inmediato
 
 Terminar de rastrear la ruta de CRUD y persistencia de las entidades restantes, y convertir el mapa completo en un contrato por entidad: identidad global, lectores/escritores, autorización, outbox local, confirmación del servidor, conflictos y tombstones. Después de esa trazabilidad, definir un piloto pequeño de Firestore. Todavía no se ha hecho cambio de código funcional, compilación ni prueba entre dos teléfonos en esta etapa.
+
+## 12. Trazabilidad ampliada: configuración, Ruta IA, reportes y catálogos — 2026-10-23
+
+Se continuó el inventario sobre la rama de trabajo, leyendo directamente los archivos siguientes:
+
+- `ConfiguracionAutomatizacion.kt` — blob SHA `19ee1af3528884aad71998fb4fd6701a89d1872e`.
+- `BloqueHorarioViewModel.kt` — blob SHA `e6480a909ddcc12ebd5f6f7fdd8bde94609e78c1`.
+- `LlamadaAutomatica.kt` — blob SHA `80355eb837bb266107cb6b4b2387df953f5cf55f`.
+- `RutaIAViewModel.kt` — blob SHA `a67f8ed613747697028dd1d627e12f61509ff585`.
+- `RutaIA.kt` — blob SHA `e6c815650b5b6f07539b3a4d41648972b6551989`.
+- `PenalizacionViewModel.kt` — blob SHA `ccd7c908d94b7f5d8cfc116de76a799eca496499`.
+- `ComisionViewModel.kt` — blob SHA `fc55b1619aab6c1d3d2474ba05f36421dcea138e`.
+- `BolsaGerenciaViewModel.kt` — blob SHA `f11998f09178f25f8a2ac7742a5695b8952bbe88`.
+- `SheetsRepository.kt` — blob SHA `9a625c6a68d64febc5aa24d75243027389ee25bf`.
+- Se volvieron a revisar las rutas pertinentes de `DAOs.kt` y `SyncWorker.kt`.
+
+### Hallazgos adicionales
+
+1. **Configuración de automatización:** `ConfiguracionAutomatizacionEntity` mezcla opciones del dispositivo (por ejemplo, `simSeleccionada` y `simSms`, IDs de SIM del teléfono) con ajustes de comportamiento (`ocultarNumero`, pausa entre llamadas, duración máxima). No se debe sincronizar ciegamente la entidad completa entre teléfonos: las SIM pertenecen al dispositivo y los parámetros de comportamiento deben definirse como configuración compartida o individual explícitamente. La automatización es ejecutada por la app; Apps Script de llamadas/SMS sigue fuera de alcance.
+2. **Reglas semanales y bloques de horario:** `ReglaSemanaEntity` guarda offsets de contacto y `catchupActivo`; `BloqueHorarioViewModel` edita reglas, horarios y opciones de ejecución. Los horarios/reglas de negocio podrían ser compartidos por el equipo, pero el disparo real, permisos, disponibilidad de SIM y alarmas siguen siendo propios de cada teléfono. Antes de migrar, se requiere distinguir configuración compartida de ejecución local para evitar llamadas/SMS duplicados desde varios teléfonos.
+3. **Contacto extra, plantillas y logs:** `LlamadaAutomatica.kt` consulta `ContactoExtraDao`, `PlantillaSmsDao` y `ContactoLogDao` al procesar clientes. Son datos usados por el flujo operativo real, no deben quedar como configuración invisible distinta en cada teléfono. La migración necesita una política compartida de plantillas/contactos y un registro global de intentos/resultados o una asignación exclusiva por tarea que evite que dos teléfonos contacten al mismo cliente a la vez. No cambiar el flujo actual de llamadas/SMS en esta etapa.
+4. **Ruta IA:** `RutaIAViewModel` importa una ruta, la guarda en Room, ordena las paradas y usa `reemplazarRutaIAEnSheet()`. Este método limpia el rango `A2:O` y después escribe filas; el reemplazo completo puede perder cambios concurrentes si dos teléfonos editan la ruta. `refreshRutaIA()` descarga desde Sheets cuando no hay cambios locales sucios; si hay cambios locales, la copia local reemplaza la hoja y no descarga. Es una política local-gana que no es suficiente para una fuente global con múltiples escritores. La ruta y sus filtros deben migrarse como conjunto/versionado o documentos con control de concurrencia.
+5. **Reportes capturados manualmente:** los ViewModels de Penalización (`VelocidadEntity`), Comisión (`ComisionEntity`) y Bolsa Gerencia (`BolsaGerenciaEntity`) guardan los datos en Room con un registro singleton local. Para que los mismos datos estén disponibles en todos los teléfonos, estas entidades requieren sincronización compartida; no deben asumirse como preferencias personales solo porque actualmente son locales.
+6. **Filtrar / Control / catálogos:** los DAOs muestran escrituras locales y `SheetsRepository` refresca desde Sheets datos de Filtrar y Control. El catálogo `CanalPagoEntity` se reemplaza localmente al actualizarse desde la fuente actual. Estas rutas necesitan definir cuál es el origen temporal durante la transición y pasar a Firestore como lectura operativa central; las hojas antiguas no deben quedar como autoridad paralela después de la migración.
+7. **Confirmación de sincronización:** los campos `isDirty` y `lastSync` sirven para el flujo actual, pero no son suficientes por sí solos para concurrencia entre teléfonos, borrados o confirmación atómica de cambios relacionados. La nueva capa requiere outbox persistente, clave idempotente, versión/autor de modificación, tombstone y marcar la operación confirmada solo después de la aceptación del servidor.
+
+### Clasificación preliminar para el contrato de sincronización
+
+- **Compartidos, por defecto según la misión:** Matriz, Pase, Solicitud, Filtro Fecha, Filtrar, Control, Ruta IA y filtros de ruta, tickets de pago, visitas/cartucho por día, Semana 6, contactos extra, plantillas, logs de contacto necesarios para evitar repetición, reglas y bloques horarios, y reportes manuales de Penalización/Comisión/Bolsa Gerencia.
+- **Por separar entre compartido y específico del dispositivo:** configuración de automatización (SIM, permisos y capacidades del teléfono frente a reglas generales), alarmas/disparadores locales, estado de conectividad, selección de ubicación actual y preferencias puramente visuales.
+- **Catálogo externo:** canales de pago. Debe fijarse una fuente de publicación/actualización central y no permitir que cada teléfono mantenga una versión divergente.
+
+Esta clasificación es preliminar: el contrato final debe verificar todos los consumidores y usos de cada DAO, así como los datos sensibles, antes de diseñar las colecciones y reglas.
+
+### Próximo paso
+
+Consolidar este inventario en una matriz entidad por entidad y definir el modelo de datos de Firestore: documentos, IDs estables, relaciones, permisos por usuario/equipo, estrategia de cambios offline, deduplicación, borrados y conflictos. Luego revisar la configuración de Firebase Console. No empezar a escribir datos productivos hasta cerrar esos puntos.
+
+**Estado:** auditoría de flujos ampliada; Firestore sigue sin integración operativa en el código revisado. Esta etapa no cambia código funcional, no actualiza Room, no contiene prueba de compilación ni prueba multi-dispositivo.
