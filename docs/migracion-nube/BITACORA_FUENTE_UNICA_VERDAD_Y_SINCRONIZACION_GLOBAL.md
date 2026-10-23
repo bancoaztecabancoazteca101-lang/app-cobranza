@@ -165,3 +165,38 @@ No se ha escrito ni leído ningún documento Firestore desde la app, no se han m
 ### Próximo paso técnico
 
 Continuar el inventario P0 de entidades, DAOs, ViewModels, pantallas y rutas de lectura/escritura; usar la configuración existente como punto de partida, sin tocar todavía datos productivos. Elegir un módulo piloto solo cuando su identidad, CRUD, consumidores y regla de conflicto estén trazados. No cambiar `main`, no fusionar PR #122 y no retirar las hojas antiguas en esta fase.
+
+## 10. Continuación de auditoría: entidades operativas y riesgos — 2026-10-23
+
+**Rama de trabajo:** `chatgpt/sincronizacion-integridad-nube`. No modificar `main` ni fusionar el PR #122 sin autorización. Esta actualización documenta hallazgos; no implica implementación ni pruebas de compilación.
+
+### Archivos inspeccionados directamente
+- `app/src/main/java/com/example/matrizapp/Entities.kt` — blob SHA `ccd9097479375611993b196fd106736357faf1f9`.
+- `app/src/main/java/com/example/matrizapp/DAOs.kt` — blob SHA `78574574296743fe92a0e51d64170e3f51c628f7`.
+- `app/src/main/java/com/example/matrizapp/AppDatabase.kt` — blob SHA `6a641b399e8ae6071a6e46b4629abc115c5a99f1`; Room `DB_VERSION = 38`.
+- `app/src/main/java/com/example/matrizapp/SyncWorker.kt` — blob SHA `cb87f911072c0bfdd228468a28f35f3902aa9b2c`.
+- También se revisaron previamente las rutas de Semana 6 en `Sem6ViewModel.kt` y `Sem6Generador.kt`.
+
+### Hallazgos confirmados
+1. **Matriz / Sheets:** `SyncWorker.syncMatriz()` recorre registros sucios y busca el ID remoto; cuando no lo encuentra puede usar `appendRow()`. Antes de migrar se debe distinguir registro nuevo de borrado remoto, fallo de consulta o conflicto, para evitar resurrecciones/duplicados. La escritura de celdas individuales en Sheets no es una transacción de negocio entre teléfonos.
+2. **Tickets de pago:** `TicketPagoEntity` está descrito en código como registro OCR local de Filtro Fecha. `TicketPagoDao` usa `OnConflictStrategy.IGNORE`, consulta totales por rango y permite operaciones locales; en los flujos `SyncWorker` revisados no aparece sincronización de tickets. Los datos y totales pueden diferir entre dispositivos.
+3. **Visitas del mapa:** `VisitaMapaEntity` usa clave primaria compuesta `clave + fechaDia`; el DAO inserta evitando duplicados locales. Esto no garantiza unicidad entre instalaciones. Debe definirse ID global/idempotente y política para correcciones de visita, fecha y cartucho.
+4. **Cartucho por día:** `CartuchoDiaEntity` usa `fechaDia` como clave y guarda `cartuchoActivo` en Room. Falta trazar consumidores y confirmar que el cartucho diario debe ser idéntico para todos los teléfonos; la meta general del proyecto sí es compartir los datos operativos.
+5. **Semana 6:** `Sem6RegistroEntity` usa clave compuesta `hoja + id`. La ruta revisada importa hojas `Cont-Sem-NN` una sola vez por instalación mediante preferencia local y después opera en Room; `Sem6Generador` crea registros faltantes desde Matriz. La marca de eliminación revisada en `Sem6CacheStore` es local, no una lápida compartida. Otra instalación o regeneración puede no respetar el borrado; no se ha demostrado que sea la única causa de toda reaparición.
+6. **Esquema:** la base actual registra 23 entidades y está en Room versión 38. No incrementar versión ni cambiar entidades/migraciones hasta diseñar la sincronización y las pruebas de compatibilidad.
+
+### Alcance de estos resultados
+Estos son hallazgos del código inspeccionado, no un mapa CRUD exhaustivo. Falta rastrear pantallas/ViewModels y todos los consumidores de DAO para confirmar cada flujo de alta, lectura, edición y borrado, además de privacidad y reglas de conflicto.
+
+### Decisión de arquitectura y objetivo
+Se mantiene Firestore como candidato backend central inicial porque el proyecto ya contiene configuración Firebase y usa Android/Kotlin; no hay integración Firestore confirmada todavía. Firebase Messaging/FCM no equivale a una base de datos Firestore operativa. Room seguirá siendo caché/outbox local, no una fuente independiente de verdad. Sheets queda como puente de exportación/reportes durante la transición y no como segunda autoridad operacional. Apps Script y los scripts de llamadas/SMS quedan fuera del alcance actual, según la decisión del usuario.
+
+### Próxima ruta de trabajo
+1. Completar el mapa CRUD real de Matriz, TicketPago, VisitaMapa, CartuchoDia y Semana 6: pantalla/ViewModel → DAO → fuente/lector remoto → borrado.
+2. Especificar por entidad ID estable global, idempotencia, versiones/auditoría, tombstones, conflictos, autorización y campos sensibles.
+3. Verificar en Firebase Console existencia/ubicación de Firestore, Authentication y reglas seguras; no asumir que la configuración local demuestra que el backend está listo.
+4. Elegir un piloto pequeño solo después del mapa CRUD; probar dos teléfonos, ediciones concurrentes, reintentos, borrados y modo sin conexión.
+5. Compilar y probar antes de declarar éxito. Migrar progresivamente; mantener Sheets antiguo como respaldo hasta validar integridad y exportaciones.
+
+**Estado al cierre de esta entrada:** auditoría/diseño; sin integración Firestore, sin migración de datos productivos, sin cambios de Room y sin pruebas de dos teléfonos documentadas.
+
