@@ -13,17 +13,34 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
     private val driveHelper = container.driveHelper
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        // Aislar cada módulo: un registro pendiente con conflicto (por ejemplo, un renombre
+        // ambiguo de Pase o un ID ausente en Filtro Fecha) no debe impedir que los demás módulos
+        // intenten sincronizarse en este ciclo. Si algún módulo falla, WorkManager reintentará.
+        var huboErrores = false
+        suspend fun ejecutarModulo(nombre: String, accion: suspend () -> Unit) {
+            try {
+                accion()
+            } catch (e: Exception) {
+                huboErrores = true
+                android.util.Log.e("SyncWorker", "Falló sincronización del módulo $nombre; se reintentará", e)
+            }
+        }
+
+        ejecutarModulo("Matriz") { syncMatriz() }
+        ejecutarModulo("Pase") { syncPase() }
+        ejecutarModulo("Ruta IA") { syncRutaIA() }
+        ejecutarModulo("Solicitud") { syncSolicitud() }
+        ejecutarModulo("Filtro Fecha") { syncFiltroFecha() }
+
+        // Las fotos se intentan aunque otro módulo haya fallado.
         try {
-            syncMatriz()
-            syncPase()
-            syncRutaIA()
-            syncSolicitud()
-            syncFiltroFecha()
-            // Con red disponible, aprovecha este ciclo para completar las fotos que todavía
-            // no estén guardadas de forma persistente en el teléfono.
             ClientImageSyncWorker.enqueue(applicationContext)
-            Result.success()
-        } catch (e: Exception) { Result.retry() }
+        } catch (e: Exception) {
+            huboErrores = true
+            android.util.Log.e("SyncWorker", "No se pudo programar sincronización de imágenes", e)
+        }
+
+        if (huboErrores) Result.retry() else Result.success()
     }
 
     private suspend fun syncMatriz() {
