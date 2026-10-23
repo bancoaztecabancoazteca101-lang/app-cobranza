@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
 
-class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matrizDao: MatrizDao, private val paseSyncDao: PaseSyncOperationDao, val driveHelper: DriveHelper) : ViewModel() {
+class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matrizDao: MatrizDao, private val paseSyncDao: PaseSyncOperationDao, private val database: AppDatabase, val driveHelper: DriveHelper) : ViewModel() {
     val paseList: StateFlow<List<PaseEntity>> = paseDao.getAllPase().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _deleteInProgress = MutableStateFlow(false)
     val deleteInProgress: StateFlow<Boolean> = _deleteInProgress
@@ -302,9 +302,16 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
         }
         try {
             if (nuevoId != idAnterior) {
-                paseSyncDao.encolar(PaseSyncOperationEntity("RENAME:$idAnterior:$nuevoId", "RENAME", idAnterior, nuevoId))
-                paseDao.eliminar(idAnterior)
-                paseDao.insertar(existente.copy(id = nuevoId, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true))
+                val registroNuevo = existente.copy(id = nuevoId, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true)
+                val completado = database.renombrarPaseAtomico(
+                    idAnterior,
+                    registroNuevo,
+                    PaseSyncOperationEntity("RENAME:$idAnterior:$nuevoId", "RENAME", idAnterior, nuevoId)
+                )
+                if (!completado) {
+                    onResult(false, "No se pudo completar el cambio: verifica si el registro anterior existe y si el nuevo ID está libre")
+                    return@launch
+                }
             } else {
                 paseDao.actualizar(existente.copy(nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true))
             }
@@ -327,8 +334,15 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
                 onResult(false, "El registro ya no existe")
                 return@launch
             }
-            paseSyncDao.encolar(PaseSyncOperationEntity("DELETE:$id", "DELETE", id, null))
-            paseDao.eliminar(id)
+            val eliminada = database.eliminarPaseAtomico(
+                id,
+                PaseSyncOperationEntity("DELETE:$id", "DELETE", id, null)
+            )
+            if (!eliminada) {
+                _deleteInProgress.value = false
+                onResult(false, "El registro ya no existe")
+                return@launch
+            }
             _deleteInProgress.value = false
             onResult(true, null)
         } catch (e: Exception) {
