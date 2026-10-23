@@ -225,6 +225,7 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
                     actualizados++
                 }
             }
+            if (actualizados > 0) triggerSync()
             onResult(if (actualizados > 0) "Contiene/Capitales actualizado en $actualizados registro(s) de Pase" else "No se encontró coincidencia para ningún registro de Pase existente")
         } catch (e: Exception) { onResult(e.message ?: "No se pudo procesar el reporte de Contiene/Capitales") }
     }
@@ -280,6 +281,9 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
                     }
                 }
             }
+            // La importación modifica filas locales dirty; programar la subida aquí evita
+            // depender de que el usuario realice después otra edición para sincronizarlas.
+            if (agregados > 0 || yaExistian > 0) triggerSync()
             onResult(
                 "Importación aplicada: $agregados registro(s) de Matriz fueron llevados a Pase. " +
                     if (yaExistian > 0) "$yaExistian ya existían en Pase. " else "" +
