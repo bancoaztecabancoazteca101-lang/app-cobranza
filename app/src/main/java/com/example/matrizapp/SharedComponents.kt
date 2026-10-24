@@ -42,38 +42,92 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 val ESTADOS_MATRIZ = listOf("APP", "Retorno", "Pagado", "PASE", "FILTRAR", "Mano")
 
+/** Ubicación leída del GPS con su error estimado en metros. */
+data class UbicacionGps(val coordenadas: String, val precisionM: Float)
+const val PRECISION_BUENA_M = 20f     // con este error se deja de esperar
+const val PRECISION_ACEPTABLE_M = 35f // hasta aquí se guarda sin advertencia
+const val PRECISION_MAXIMA_M = 50f    // peor que esto NUNCA se guarda
+
 /**
- * Obtiene una ubicación actual para capturar domicilios, no una ubicación antigua de caché.
- * Solo acepta coordenadas finitas, dentro del rango geográfico, con precisión declarada
- * de hasta 50 m y una lectura de antigüedad máxima de 30 s. El llamador conserva el valor
- * anterior cuando devuelve null; nunca se reemplaza una ubicación guardada por una falla.
+ * Lee el GPS "de verdad" (solo se llama cuando el usuario pulsa un botón de ubicación).
+ * Pide lecturas nuevas con máxima precisión, se queda con la MEJOR dentro de [tiempoMaxMs] y corta
+ * en cuanto el error baja a [PRECISION_BUENA_M]. Descarta lecturas con coordenadas fuera de rango,
+ * sin precisión declarada o con más de 30 s de antigüedad. Devuelve null si nada sirve.
  */
-suspend fun obtenerUbicacionActual(context: android.content.Context): String? {
-    return try {
-        val client = LocationServices.getFusedLocationProviderClient(context)
-        val location = withTimeoutOrNull(15_000L) {
-            client.getCurrentLocation(
-                Priority.PRIORITY_HIGH_ACCURACY,
-                CancellationTokenSource().token
-            ).await()
-        } ?: return null
-
-        val lat = location.latitude
-        val lng = location.longitude
-        if (!lat.isFinite() || !lng.isFinite()) return null
-        if (lat !in -90.0..90.0 || lng !in -180.0..180.0) return null
-        if (!location.hasAccuracy() || !location.accuracy.isFinite() ||
-            location.accuracy <= 0f || location.accuracy > 50f
-        ) return null
-
-        val edadNanos = android.os.SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos
-        if (edadNanos < 0L || edadNanos > 30_000_000_000L) return null
-
-        "${lat}, ${lng}"
+@android.annotation.SuppressLint("MissingPermission")
+suspend fun obtenerUbicacionPrecisa(context: android.content.Context, tiempoMaxMs: Long = 15_000L): UbicacionGps? {
+    val client = LocationServices.getFusedLocationProviderClient(context)
+    var mejor: android.location.Location? = null
+    fun valida(l: android.location.Location): Boolean {
+        if (!l.latitude.isFinite() || !l.longitude.isFinite()) return false
+        if (l.latitude !in -90.0..90.0 || l.longitude !in -180.0..180.0) return false
+        if (!l.hasAccuracy() || !l.accuracy.isFinite() || l.accuracy <= 0f) return false
+        val edad = android.os.SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos
+        return edad in 0L..30_000_000_000L
+    }
+    val peticion = com.google.android.gms.location.LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_000L)
+        .setMinUpdateIntervalMillis(500L).setMaxUpdates(30).build()
+    var callback: com.google.android.gms.location.LocationCallback? = null
+    try {
+        withTimeoutOrNull(tiempoMaxMs) {
+            suspendCancellableCoroutine<Unit> { cont ->
+                val cb = object : com.google.android.gms.location.LocationCallback() {
+                    override fun onLocationResult(resultado: com.google.android.gms.location.LocationResult) {
+                        for (l in resultado.locations) {
+                            if (!valida(l)) continue
+                            val actual = mejor
+                            if (actual == null || l.accuracy < actual.accuracy) mejor = l
+                            if (l.accuracy <= PRECISION_BUENA_M && cont.isActive) cont.resume(Unit) {}
+                        }
+                    }
+                }
+                callback = cb
+                client.requestLocationUpdates(peticion, cb, android.os.Looper.getMainLooper())
+                cont.invokeOnCancellation { client.removeLocationUpdates(cb) }
+            }
+        }
     } catch (e: SecurityException) {
-        null
+        return null
     } catch (e: Exception) {
-        null
+        // se usa lo que se haya alcanzado a leer
+    } finally {
+        callback?.let { try { client.removeLocationUpdates(it) } catch (_: Exception) { } }
+    }
+    return mejor?.let { UbicacionGps("${it.latitude}, ${it.longitude}", it.accuracy) }
+}
+
+/** Coordenadas "lat, lng" solo si la precisión es de hasta [PRECISION_MAXIMA_M]; si no, null (para ordenar por cercanía). */
+suspend fun obtenerUbicacionActual(context: android.content.Context): String? =
+    obtenerUbicacionPrecisa(context)?.takeIf { it.precisionM <= PRECISION_MAXIMA_M }?.coordenadas
+
+/**
+ * Captura la ubicación de un registro al pulsar el botón y AVISA la precisión en metros.
+ * Devuelve la coordenada que debe quedar en el campo: nunca pisa una coordenada guardada con una lectura
+ * peor que [PRECISION_MAXIMA_M], y una lectura de 35-50 m solo se guarda si el campo estaba vacío.
+ */
+suspend fun capturarUbicacionRegistro(context: android.content.Context, actual: String?): String? {
+    val r = obtenerUbicacionPrecisa(context)
+    val tieneGuardada = parseLatLngOrden(actual) != null
+    fun aviso(texto: String, largo: Boolean) =
+        Toast.makeText(context, texto, if (largo) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+    return when {
+        r == null -> {
+            aviso("No se pudo obtener el GPS. Revisa que esté activo y sal al aire libre.", true)
+            actual
+        }
+        r.precisionM <= PRECISION_ACEPTABLE_M -> {
+            aviso("Ubicación guardada (±${r.precisionM.toInt()} m)", false)
+            r.coordenadas
+        }
+        r.precisionM <= PRECISION_MAXIMA_M && !tieneGuardada -> {
+            aviso("Ubicación guardada con poca precisión (±${r.precisionM.toInt()} m). Conviene repetirla al aire libre.", true)
+            r.coordenadas
+        }
+        else -> {
+            val resto = if (tieneGuardada) "se conservó la ubicación anterior" else "no se guardó"
+            aviso("GPS impreciso (±${r.precisionM.toInt()} m): $resto. Intenta de nuevo al aire libre.", true)
+            actual
+        }
     }
 }
 
@@ -615,16 +669,7 @@ fun MatrizFullFormDialog(
                 )
                 LaunchedEffect(buscandoUbicacion) {
                     if (buscandoUbicacion) {
-                        val actual = obtenerUbicacionActual(context)
-                        if (actual != null) {
-                            ubicacion = actual
-                        } else {
-                            Toast.makeText(
-                                context,
-                                "No se obtuvo una ubicación reciente y precisa. Activa la ubicación y vuelve a intentarlo.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
+                        ubicacion = capturarUbicacionRegistro(context, ubicacion) ?: ubicacion
                         buscandoUbicacion = false
                     }
                 }
@@ -666,16 +711,7 @@ fun MatrizFullFormDialog(
                     )
                     LaunchedEffect(buscandoUbicacionLaboral) {
                         if (buscandoUbicacionLaboral) {
-                            val actual = obtenerUbicacionActual(context)
-                            if (actual != null) {
-                                domicilioLaboral = actual
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    "No se obtuvo una ubicación reciente y precisa. Activa la ubicación y vuelve a intentarlo.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
+                            domicilioLaboral = capturarUbicacionRegistro(context, domicilioLaboral) ?: domicilioLaboral
                             buscandoUbicacionLaboral = false
                         }
                     }
