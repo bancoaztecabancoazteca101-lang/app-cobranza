@@ -358,3 +358,58 @@ También se confirma que `TicketPagoEntity` está descrita como local y no se pu
 5. No subir la versión de Room ni modificar entidades/migraciones en este paso; todavía no hay prueba de compilación ni de sincronización entre teléfonos documentada.
 
 **Estado:** inventario continúa; este hallazgo se incorpora como requisito de preservación de datos. No hay implementación Firestore ni pruebas nuevas confirmadas.
+
+---
+
+## 8. Continuidad de configuración Firebase desde la consola (25-10-2026)
+
+Esta sección registra el avance posterior a la revisión del 23-10-2026. Si alguna descripción anterior de esta bitácora contradice este estado, prevalece esta sección para el estado de la consola Firebase; las conclusiones de arquitectura y los hallazgos de código anteriores siguen vigentes salvo que se indique lo contrario.
+
+### Proyecto Firebase y app Android — datos descritos por el usuario
+
+- Proyecto visible: `App Matriz`.
+- ID de proyecto: `app-matriz`.
+- Número de proyecto: `542876060274`.
+- Aplicación Android registrada: `Matriz App`.
+- Paquete Android registrado: `com.example.matrizapp`.
+- App ID: `1:542876060274:android:d354e9f160e0eb2ce390eb`.
+- Plan: Spark.
+- Base de datos Cloud Firestore `(default)`: creada; aparece vacía/lista para añadir datos.
+- Región elegida por el usuario: región de Norteamérica/México, descrita durante la configuración como `northamerica-south1`. Confirmar el identificador exacto en la consola antes de documentar una decisión de residencia definitiva.
+- SHA-1/SHA-256 en la configuración de la app Android: lista vacía. No inventar huellas ni asumir que esto por sí solo explica un fallo; primero identificar el certificado de firma real del APK que se distribuye a los teléfonos.
+- Reglas de Firestore: el usuario indicó que completó el paso 1 pegando reglas que deniegan toda lectura y escritura (`allow read, write: if false;`). No se ha confirmado expresamente en el chat que se haya pulsado **Publicar**; verificarlo en consola. Mantener el acceso cerrado hasta implementar autenticación y reglas específicas.
+
+### Situación del paso 2 — Authentication
+
+- El trabajo actual es revisar **Firebase Authentication**, sin modificar aún el código Android.
+- URL directa de trabajo: https://console.firebase.google.com/project/app-matriz/authentication
+- Próxima comprobación: determinar qué pantalla aparece (Comenzar, Método de acceso/proveedores, usuarios u otra) y si el proveedor Google está habilitado.
+- En una revisión anterior se reportó Google deshabilitado, pero el estado actual debe confirmarse con el usuario en la consola; no darlo por verificado.
+- No deshabilitar el inicio de sesión de Google existente de Matriz, no sustituir `google-services.json` y no registrar huellas SHA inventadas.
+- El inicio de sesión actual de la app utiliza Google Sign-In para acceder a Google Sheets/Drive y sus ámbitos; eso no equivale a Firebase Authentication. La integración futura deberá enlazar de forma deliberada la identidad de Google con Firebase Auth y preservar el acceso actual a Sheets/Drive.
+- En el código previamente inspeccionado no se encontraron referencias a `FirebaseAuth`, `FirebaseFirestore` ni dependencia `firebase-firestore`. Sí se observó Firebase Messaging/FCM, lo cual no significa que Firestore o Auth ya estén integrados.
+- No crear colecciones manualmente ni cargar datos reales todavía. No abrir reglas públicas ni usar modo de prueba. App Check se revisará después y no sustituye autenticación ni reglas.
+
+### Secuencia inmediata acordada
+
+1. Confirmar el estado real de Authentication y del proveedor Google en consola, guiando al usuario paso a paso según el texto que vea; no depender de capturas.
+2. Verificar que las reglas cerradas de Firestore quedaron publicadas.
+3. Revisar la configuración de autenticación necesaria y la huella SHA solo después de identificar el certificado real del APK instalado/distribuido.
+4. Antes de tocar el código, volver a leer el estado actual de la rama y los archivos Android reales. Preparar integración de Firebase Auth/Firestore en una rama de trabajo; no tocar `main` ni fusionar PR #122.
+5. Diseñar y probar primero un piloto aislado con datos sintéticos. No conectar datos productivos hasta tener identidad, reglas, permisos, estructura, costos/cuotas y recuperación respaldados por evidencia.
+6. Continuar con inventario de todas las entidades/pantallas y luego migración progresiva; Firestore debe ser la fuente única de verdad, Room caché/outbox y Google Sheets una salida/exportación compatible, no una fuente paralela.
+
+### Estado verificado y pendiente al cierre de esta actualización
+
+**Confirmado por el usuario:** proyecto/app registrados, Firestore creado y reglas de denegación total copiadas en la consola.  
+**Pendiente de confirmación:** publicación efectiva de las reglas; estado actual de Authentication y proveedor Google; identificación de la firma real del APK.  
+**No realizado todavía:** integración de Firebase Auth/Firestore en el código, carga de datos operativos, migración productiva, pruebas de sincronización entre dos teléfonos, compilación de una versión con esta integración y validación de exportación a un nuevo Google Sheets.
+
+### Reglas de continuidad para un chat nuevo
+
+- Leer primero esta bitácora y la rama `chatgpt/sincronizacion-integridad-nube`; no reiniciar la auditoría ni repetir hallazgos ya documentados.
+- No asumir acceso a la consola Firebase ni al APK si no está disponible en la sesión; pedir al usuario que describa el texto visible cuando sea necesario.
+- Trabajar con código real del repositorio, cambios pequeños y comprobables; documentar archivos, commits, pruebas y resultados reales.
+- No modificar `main`, no fusionar PR #122 sin autorización expresa, no afirmar compilación/pruebas sin evidencia.
+- Los scripts de llamadas/SMS quedan fuera de alcance: el usuario confirmó que esas funciones ya las realiza la app.
+
