@@ -7,6 +7,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -116,11 +122,13 @@ private fun textoHoraSeguimiento(minutoDia: Int): String =
 fun SeguimientoPorDiaScreen() {
     val context = LocalContext.current
     val prefs = remember { preferenciasSeguimiento(context) }
-    var cartucho by remember { mutableIntStateOf(prefs.getInt(KEY_CARTUCHO_SEGUIMIENTO, 1).coerceIn(1, 3)) }
+    var cartucho by remember { mutableIntStateOf(prefs.getInt(KEY_CARTUCHO_SEGUIMIENTO, 1).coerceAtLeast(1)) }
     var modo by remember { mutableStateOf(prefs.getString(KEY_MODO_SEGUIMIENTO, MODO_COMBINADO) ?: MODO_COMBINADO) }
     val horarios = remember { mutableStateListOf<Int>().apply { addAll(leerHorariosSeguimiento(context)) } }
     var totalRegistros by remember { mutableIntStateOf(0) }
     var totalIdsCartucho by remember { mutableIntStateOf(0) }
+    // Clientes únicos de ayer por cartucho, tal como quedaron en el Mapa (la única fuente del cartucho).
+    var clientesPorCartucho by remember { mutableStateOf<Map<Int, Int>>(emptyMap()) }
     var listadoVerificacion by remember { mutableStateOf<List<VisitaMapaEntity>>(emptyList()) }
     var estadosPorId by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var totalPendientes by remember { mutableIntStateOf(0) }
@@ -147,6 +155,8 @@ fun SeguimientoPorDiaScreen() {
                 container.database.visitaMapaDao().getVisitasSemana(inicioAyer, finAyer).first()
             }
             listadoVerificacion = visitas
+            clientesPorCartucho = visitas.filter { it.matrizId != null }.groupBy { it.cartucho }
+                .mapValues { (_, filas) -> filas.mapNotNull { it.matrizId }.toSet().size }
             estadosPorId = todos.associate { it.id to it.estado }
             val idsConCartucho = visitas.mapNotNull { it.matrizId }.toSet()
             val idsCartuchoSeleccionado = visitas.filter { it.cartucho == cartucho }.mapNotNull { it.matrizId }.toSet()
@@ -171,7 +181,7 @@ fun SeguimientoPorDiaScreen() {
         } catch (_: Exception) {
             totalRegistros = 0; totalPendientes = 0
             totalMatrizAyer = 0; totalConCartucho = 0; totalSinCartucho = 0
-            totalIdsCartucho = 0; listadoVerificacion = emptyList(); estadosPorId = emptyMap()
+            totalIdsCartucho = 0; listadoVerificacion = emptyList(); estadosPorId = emptyMap(); clientesPorCartucho = emptyMap()
             mensaje = "No se pudo consultar Matriz y el historial de cartuchos del día anterior."
         } finally { cargando = false }
     }
@@ -195,12 +205,18 @@ fun SeguimientoPorDiaScreen() {
             }
         }
         Text("Cartucho que se procesará", style = MaterialTheme.typography.titleMedium)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            (1..3).forEach { numero ->
-                FilterChip(selected = cartucho == numero, onClick = {
-                    cartucho = numero
-                    prefs.edit().putInt(KEY_CARTUCHO_SEGUIMIENTO, numero).apply()
-                }, label = { Text("Cartucho $numero") })
+        Text("Cada cartucho se toma tal como quedó en el Mapa (color y número). Matriz no guarda el cartucho.", style = MaterialTheme.typography.bodySmall)
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ((1..3).toSet() + clientesPorCartucho.keys + cartucho).toSortedSet().forEach { numero ->
+                FilterChip(
+                    selected = cartucho == numero,
+                    onClick = {
+                        cartucho = numero
+                        prefs.edit().putInt(KEY_CARTUCHO_SEGUIMIENTO, numero).apply()
+                    },
+                    leadingIcon = { Box(Modifier.size(12.dp).clip(CircleShape).background(colorCartucho(numero))) },
+                    label = { Text("Cartucho $numero · ${clientesPorCartucho[numero] ?: 0}") }
+                )
             }
         }
         Card(Modifier.fillMaxWidth()) {
@@ -392,7 +408,7 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         if (modo != MODO_SMS && !CallHelper.tienePermisos(applicationContext)) return Result.failure()
         if (modo != MODO_SMS) promoverSeguimientoEnPrimerPlano()
         val container = (applicationContext as MainApplication).container
-        val cartucho = prefs.getInt(KEY_CARTUCHO_SEGUIMIENTO, 1).coerceIn(1, 3)
+        val cartucho = prefs.getInt(KEY_CARTUCHO_SEGUIMIENTO, 1).coerceAtLeast(1)
         val diaObjetivo = inputData.getLong(EXTRA_DIA_SEGUIMIENTO, inicioDelDia())
         val (inicioAyer, finAyer) = rangoAyerParaDiaSeguimiento(diaObjetivo)
         val visitas = container.database.visitaMapaDao().getVisitasSemana(inicioAyer, finAyer).first()

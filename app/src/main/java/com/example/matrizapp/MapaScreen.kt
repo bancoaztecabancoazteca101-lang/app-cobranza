@@ -38,7 +38,7 @@ private val HUES_DIA = floatArrayOf(210f, 120f, 60f, 30f, 0f, 270f, 300f) // lun
 private val HUES_CARTUCHO = floatArrayOf(285f, 120f, 30f, 200f, 60f, 330f)
 private fun colorDia(i: Int) = Color(android.graphics.Color.HSVToColor(floatArrayOf(HUES_DIA[i], 0.9f, 0.85f)))
 private fun hueCartucho(cartucho: Int) = HUES_CARTUCHO[(cartucho - 1).coerceAtLeast(0) % HUES_CARTUCHO.size]
-private fun colorCartucho(cartucho: Int) = Color(android.graphics.Color.HSVToColor(floatArrayOf(hueCartucho(cartucho), 0.9f, 0.85f)))
+internal fun colorCartucho(cartucho: Int) = Color(android.graphics.Color.HSVToColor(floatArrayOf(hueCartucho(cartucho), 0.9f, 0.85f)))
 
 private fun inicioSemanaMapa(offsetSemanas: Int): Long {
     val c = Calendar.getInstance()
