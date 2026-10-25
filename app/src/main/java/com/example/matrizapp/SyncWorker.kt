@@ -56,7 +56,7 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
             // dirección nueva de Drive para que siga viéndose sin internet sin volver a descargarla.
             container.clientImageStore.adopt(item.imagenUrl, remoteImg, driveHelper)
             container.clientImageStore.adopt(item.imagenUrl2, remoteImg2, driveHelper)
-            repository.markMatrizAsClean(item.id, remoteImg, remoteImg2)
+            repository.markMatrizAsClean(item, remoteImg, remoteImg2)
         }
     }
 

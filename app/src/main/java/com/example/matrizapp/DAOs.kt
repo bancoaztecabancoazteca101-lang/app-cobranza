@@ -70,12 +70,12 @@ interface VisitaMapaDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun registrar(visita: VisitaMapaEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun registrarVarias(visitas: List<VisitaMapaEntity>)
+
     // Cambiar a mano el cartucho de UN punto (si el punto solo existía "en vivo", se guarda con ese cartucho).
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun reemplazar(visita: VisitaMapaEntity)
-
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun registrarVarias(visitas: List<VisitaMapaEntity>)
 
     @Query("SELECT cartuchoActivo FROM cartucho_dia_table WHERE fechaDia = :fechaDia LIMIT 1")
     suspend fun getCartuchoActivo(fechaDia: Long): Int?
@@ -197,7 +197,7 @@ interface MatrizDao {
         numTT = :numTT, ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado,
         ubicacion = :ubicacion, imagenUrl = :imagenUrl, imagenUrl2 = :imagenUrl2, fecha = :fecha,
         hora = :hora, ruta = :ruta, folioP = :folioP
-        WHERE id = :id""")
+        WHERE id = :id AND isDirty = 0""")
     // UPDATE parcial usado por el pull de Sheets (SheetsRepository.refreshMatriz) para registros
     // que ya existen en Room -- a propósito NO incluye descuentoPago/descuentoAhorro/ref3/ref4/diaPago/domicilioLaboral/isDirty en
     // el SET. El Sheet no tiene esas 2 columnas (son 100% locales), así que antes había que leer
@@ -225,8 +225,25 @@ interface MatrizDao {
     suspend fun updateImagen2Local(id: String, uri: String)
     @Query("SELECT * FROM matriz_table WHERE isDirty = 1")
     suspend fun getDirtyItems(): List<MatrizEntity>
-    @Query("UPDATE matriz_table SET isDirty = 0, imagenUrl = :remoteImg, imagenUrl2 = :remoteImg2, lastSync = :syncTime WHERE id = :id")
-    suspend fun markAsClean(id: String, remoteImg: String?, remoteImg2: String?, syncTime: Long = System.currentTimeMillis())
+    // Solo limpia el registro si todos los campos siguen siendo los mismos que se subieron.
+    // Si el usuario editó mientras corría el push, la condición falla y el registro sigue dirty.
+    @Query("""UPDATE matriz_table SET isDirty = 0, imagenUrl = :remoteImg, imagenUrl2 = :remoteImg2, lastSync = :syncTime
+        WHERE id = :id AND isDirty = 1
+        AND nombre = :nombre AND semana = :semana AND requisito = :requisito AND numTT = :numTT
+        AND ref1 = :ref1 AND ref2 = :ref2 AND observaciones IS :observaciones AND estado = :estado
+        AND ubicacion IS :ubicacion AND imagenUrl IS :imagenUrl AND imagenUrl2 IS :imagenUrl2
+        AND fecha IS :fecha AND hora IS :hora AND ruta IS :ruta AND folioP IS :folioP
+        AND descuentoPago IS :descuentoPago AND descuentoAhorro IS :descuentoAhorro
+        AND ref3 IS :ref3 AND ref4 IS :ref4 AND diaPago IS :diaPago AND domicilioLaboral IS :domicilioLaboral
+        AND diasAtraso IS :diasAtraso AND diasApertura IS :diasApertura AND montoCobrado IS :montoCobrado""")
+    suspend fun markAsClean(
+        id: String, remoteImg: String?, remoteImg2: String?, nombre: String, semana: String,
+        requisito: String, numTT: String, ref1: String, ref2: String, observaciones: String?,
+        estado: String, ubicacion: String?, imagenUrl: String?, imagenUrl2: String?, fecha: Long?,
+        hora: String?, ruta: String?, folioP: String?, descuentoPago: String?, descuentoAhorro: String?,
+        ref3: String?, ref4: String?, diaPago: String?, domicilioLaboral: String?, diasAtraso: String?,
+        diasApertura: String?, montoCobrado: Double?, syncTime: Long = System.currentTimeMillis()
+    )
     @Query("DELETE FROM matriz_table WHERE id = :id")
     suspend fun deleteById(id: String)
 }

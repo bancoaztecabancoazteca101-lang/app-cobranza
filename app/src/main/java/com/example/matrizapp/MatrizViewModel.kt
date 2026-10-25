@@ -68,9 +68,10 @@ class MatrizViewModel(
             // distinctUntilChanged: si la sincronización trae los mismos datos no se reprograman alarmas.
             matrizDao.getAllMatriz().distinctUntilChanged().collect { items ->
                 notificacionesHelper.sincronizarAlarmasRetornoMatriz(items)
-                // No convertir automáticamente cada fila sincronizada/importada en una visita.
-                // El historial de cartucho se registra desde los flujos explícitos de crear/editar,
-                // para no asignar a un cartucho incorrecto registros que nunca se visitaron hoy.
+                // Mapa: los registros de hoy (los de Filtro Fecha) quedan guardados como visitas de hoy, con el cartucho
+                // que esté activo en ese momento. Se CONSERVA a propósito (regla de Diego: todos los registros de hoy
+                // cuentan); el borrado que proponía la rama de ChatGPT se dejó fuera.
+                visitaMapaDao.registrarRegistrosDeHoy(items)
             }
         }
     }

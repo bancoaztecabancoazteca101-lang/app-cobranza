@@ -230,7 +230,17 @@ class SheetsRepository(
     }
 
     suspend fun getDirtyMatrizItems() = matrizDao.getDirtyItems()
-    suspend fun markMatrizAsClean(id: String, remoteImg: String?, remoteImg2: String?) = matrizDao.markAsClean(id, remoteImg, remoteImg2)
+    suspend fun markMatrizAsClean(item: MatrizEntity, remoteImg: String?, remoteImg2: String?) =
+        matrizDao.markAsClean(
+            id = item.id, remoteImg = remoteImg, remoteImg2 = remoteImg2,
+            nombre = item.nombre, semana = item.semana, requisito = item.requisito, numTT = item.numTT,
+            ref1 = item.ref1, ref2 = item.ref2, observaciones = item.observaciones, estado = item.estado,
+            ubicacion = item.ubicacion, imagenUrl = item.imagenUrl, imagenUrl2 = item.imagenUrl2,
+            fecha = item.fecha, hora = item.hora, ruta = item.ruta, folioP = item.folioP,
+            descuentoPago = item.descuentoPago, descuentoAhorro = item.descuentoAhorro,
+            ref3 = item.ref3, ref4 = item.ref4, diaPago = item.diaPago, domicilioLaboral = item.domicilioLaboral,
+            diasAtraso = item.diasAtraso, diasApertura = item.diasApertura, montoCobrado = item.montoCobrado
+        )
     suspend fun getDirtyPaseItems() = paseDao.getDirtyItems()
     suspend fun markPaseAsClean(id: String) = paseDao.markAsClean(id)
     suspend fun getDirtySolicitudItems() = solicitudDao.getDirtyItems()
