@@ -87,11 +87,25 @@ private const val KEY_N_CONTACTOS = "n_"
 private const val KEY_WHATSAPP = "wa_"
 
 /** Registro propio de Seguimiento Por Día (no usa contacto_log_table para no alterar las cuentas del catchup). */
-private fun registrarContactoSeguimiento(context: Context, id: String) {
+private fun registrarContactoSeguimiento(context: Context, id: String, resumen: String = "") {
     val p = preferenciasSeguimiento(context)
+    val hoy = inicioDelDia()
+    val previo = p.getString("hoy_$id", "")?.split(":")
+    val nHoy = if (previo?.getOrNull(0)?.toLongOrNull() == hoy) (previo.getOrNull(1)?.toIntOrNull() ?: 0) + 1 else 1
     p.edit().putLong(KEY_ULT_CONTACTO + id, System.currentTimeMillis())
-        .putInt(KEY_N_CONTACTOS + id, p.getInt(KEY_N_CONTACTOS + id, 0) + 1).apply()
+        .putInt(KEY_N_CONTACTOS + id, p.getInt(KEY_N_CONTACTOS + id, 0) + 1)
+        .putString("hoy_$id", "$hoy:$nHoy")
+        .putString("res_$id", resumen.take(800)).apply()
 }
+private fun contactosHoySeguimiento(context: Context, id: String): Int {
+    val previo = preferenciasSeguimiento(context).getString("hoy_$id", "")?.split(":")
+    return if (previo?.getOrNull(0)?.toLongOrNull() == inicioDelDia()) previo.getOrNull(1)?.toIntOrNull() ?: 0 else 0
+}
+/** Líneas del resumen del último contacto (oferta y referencias), para mostrarlas en Resultados. */
+private fun resumenSeguimiento(context: Context, id: String): List<String> =
+    (preferenciasSeguimiento(context).getString("res_$id", "") ?: "").lines()
+        .map { it.trim().removePrefix("•").trim() }
+        .filter { it.startsWith("Oferta") || it.startsWith("Llamada + SMS de referencia") || it.startsWith("Sin referencias") || it.startsWith("SMS a TT omitido") || it.startsWith("Sin NumTT") || it.startsWith("TT contactado") }
 private fun contactosSeguimiento(context: Context, id: String): Int =
     preferenciasSeguimiento(context).getInt(KEY_N_CONTACTOS + id, 0)
 private fun ultimoContactoSeguimiento(context: Context, id: String): Long =
@@ -189,6 +203,7 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
     var pestana by remember { mutableIntStateOf(0) }
     var refresco by remember { mutableIntStateOf(0) }
     var registrosPorId by remember { mutableStateOf<Map<String, MatrizEntity>>(emptyMap()) }
+    var reglas by remember { mutableStateOf(ReglaRepeticion.BLOQUES_POR_SEM) }
     val fechaAyer = remember { SimpleDateFormat("EEEE d 'de' MMMM", Locale("es", "MX")).format(Date(inicioAyerSeguimiento())) }
 
     LaunchedEffect(cartucho) {
@@ -218,6 +233,7 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
                 idsCartuchoSeleccionado.mapNotNull { id -> matrizDao.getById(id) }
             }
             registrosPorId = registrosHistorial.associateBy { it.id }
+            reglas = withContext(Dispatchers.IO) { container.database.reglaSemanaDao().obtenerMapaOSembrar() }
             totalMatrizAyer = matrizAyer.size
             totalConCartucho = idsConCartucho.size
             totalSinCartucho = matrizAyer.count { it.id !in idsConCartucho }
@@ -252,9 +268,13 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
     val hoyInicio = remember(refresco) { inicioDelDia() }
     val programado = remember(refresco, mensaje) { prefs.getString(KEY_MODO_SEGUIMIENTO, "") == MODO_COMBINADO }
 
-    fun horarioDe(id: String?): String =
-        if (id == null || horariosOrdenados.isEmpty()) "—"
-        else textoHoraSeguimiento(horariosOrdenados[Math.floorMod(id.hashCode(), horariosOrdenados.size)])
+    // Mismo criterio que bloques: el horario k hace de "bloque k" y el cliente entra como si se hubiera dado de
+    // alta en el primero; en el horario k se contacta si k está en la frecuencia de su semana (Bloques de horario).
+    fun semDe(registro: MatrizEntity?): Int? = registro?.semana?.trim()?.toIntOrNull()?.takeIf { it in 1..5 }
+    fun horariosDe(registro: MatrizEntity?): List<String> {
+        val sem = semDe(registro) ?: return emptyList()
+        return horariosOrdenados.filterIndexed { i, _ -> ReglaRepeticion.debeContactarseEnBloque(sem, i, 0, reglas) }.map { textoHoraSeguimiento(it) }
+    }
 
     Column(Modifier.fillMaxSize()) {
         TabRow(selectedTabIndex = pestana) {
@@ -341,11 +361,16 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
                     }
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Frecuencia", style = MaterialTheme.typography.titleMedium)
+                            Text("Frecuencia (igual que en bloques)", style = MaterialTheme.typography.titleMedium)
                             if (horariosOrdenados.isEmpty()) Text("Sin horarios configurados.")
                             else {
-                                Text("${horariosOrdenados.size} horario(s) al día: ${horariosOrdenados.joinToString(", ") { textoHoraSeguimiento(it) }}")
-                                Text("Cada cliente se contacta UNA vez al día, en el horario que le toca. Los horarios se reparten el cartucho entre sí (no se llama a todo el cartucho en cada horario).", style = MaterialTheme.typography.bodySmall)
+                                Text("${horariosOrdenados.size} horario(s): ${horariosOrdenados.joinToString(", ") { textoHoraSeguimiento(it) }}")
+                                (1..5).forEach { sem ->
+                                    val meta = ReglaRepeticion.metaContactos(sem, reglas)
+                                    val alcanzables = (reglas[sem] ?: emptyList()).count { it < horariosOrdenados.size }
+                                    Text("Sem $sem: $meta contacto(s) al día" + if (alcanzables < meta) " · con tus horarios solo $alcanzables (agrega horarios)" else "", style = MaterialTheme.typography.bodySmall)
+                                }
+                                Text("Cada contacto es llamada + SMS al titular y a Ref1 a Ref4. Las veces por semana se editan en Bloques de horario → Frecuencia de contacto por semana.", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -368,9 +393,9 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
                         val contenido = buildString {
                             append("Seguimiento por Día - Cartucho $cartucho\n")
                             append("Clientes: ${clientes.size} · Filas historial: ${filasCartucho.size}\n")
-                            append("Nombre | ID Matriz | Estado actual | Horario | Fecha/hora visita\n")
+                            append("Nombre | ID Matriz | Estado actual | Horarios de contacto | Fecha/hora visita\n")
                             clientes.forEachIndexed { i, v ->
-                                append("${i + 1}. ${v.nombre} | ${v.matrizId ?: "(sin ID)"} | ${v.matrizId?.let { estadosPorId[it] } ?: "(sin registro Matriz)"} | ${horarioDe(v.matrizId)} | ${fechaHora.format(Date(v.timestamp))}\n")
+                                append("${i + 1}. ${v.nombre} | ${v.matrizId ?: "(sin ID)"} | ${v.matrizId?.let { estadosPorId[it] } ?: "(sin registro Matriz)"} | ${horariosDe(v.matrizId?.let { registrosPorId[it] }).joinToString(",").ifBlank { "—" }} | ${fechaHora.format(Date(v.timestamp))}\n")
                             }
                         }
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -390,7 +415,8 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text("${index + 1}. ${visita.nombre}", style = MaterialTheme.typography.bodyMedium)
                                 Text("ID ${visita.matrizId ?: "sin ID"} · ${registro?.estado?.ifBlank { "sin estado" } ?: "sin registro Matriz"}", style = MaterialTheme.typography.bodySmall)
-                                Text(motivo ?: "Horario asignado: ${horarioDe(visita.matrizId)}", style = MaterialTheme.typography.bodySmall)
+                                val horariosCliente = horariosDe(registro)
+                                Text(motivo ?: "Se contacta a las: ${horariosCliente.joinToString(", ").ifBlank { "—" }} (meta ${semDe(registro)?.let { ReglaRepeticion.metaContactos(it, reglas) } ?: 0}, hoy ${contactosHoySeguimiento(context, visita.matrizId.orEmpty())})", style = MaterialTheme.typography.bodySmall)
                                 if (ult >= hoyInicio) Text("✓ Contactado hoy ${hora.format(Date(ult))} (${contactosSeguimiento(context, visita.matrizId.orEmpty())} en total)", style = MaterialTheme.typography.bodySmall)
                                 if (ultWa >= hoyInicio) Text("WhatsApp abierto hoy ${hora.format(Date(ultWa))}", style = MaterialTheme.typography.bodySmall)
                                 if (registro != null && WhatsAppHelper.normalizar(registro.numTT) == null) Text("TT sin número válido para WhatsApp", style = MaterialTheme.typography.bodySmall)
@@ -424,7 +450,9 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
                             Text("Cartucho $cartucho · hoy", style = MaterialTheme.typography.titleMedium)
                             Text("Entran al flujo: $entran de ${clientes.size}")
                             Text("Ya contactados hoy: ${contactadosHoy.size}")
-                            Text("Pendientes por contactar: ${(entran - contactadosHoy.size).coerceAtLeast(0)}")
+                            val esperados = clientes.sumOf { v -> if (motivoExclusionSeguimiento(v, v.matrizId?.let { registrosPorId[it] }) == null) horariosDe(v.matrizId?.let { registrosPorId[it] }).size else 0 }
+                            val hechos = clientes.sumOf { v -> v.matrizId?.let { contactosHoySeguimiento(context, it) } ?: 0 }
+                            Text("Contactos del día según las reglas: $hechos de $esperados")
                             Text("WhatsApp abiertos hoy: $waHoy")
                             Text("Excluidos por Pagado: ${motivos.count { it?.startsWith("Pagado") == true }}")
                             Text("Omitidos por semana fuera de 1 a 5: ${motivos.count { it?.startsWith("Semana") == true }}")
@@ -432,13 +460,14 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
                             Text("Ayer sin cartucho en el Mapa (no se contactan): $totalSinCartucho")
                         }
                     }
-                    Text("Se anota el cliente cuando el flujo termina con él (llamada y SMS a todos sus números). Aquí no se distingue si una llamada o SMS puntual falló.", style = MaterialTheme.typography.bodySmall)
+                    Text("Se anota el cliente cuando el flujo termina con él. Debajo de cada uno se ve si la oferta de descuento se envió o por qué no. No se distingue si una llamada o SMS puntual falló.", style = MaterialTheme.typography.bodySmall)
                     Text("Contactados hoy", style = MaterialTheme.typography.titleMedium)
                     val hora = SimpleDateFormat("HH:mm", Locale.ROOT)
                     contactadosHoy.sortedByDescending { v -> v.matrizId?.let { ultimoContactoSeguimiento(context, it) } ?: 0L }.forEach { v ->
                         val ult = v.matrizId?.let { ultimoContactoSeguimiento(context, it) } ?: 0L
                         Divider()
-                        Text("${hora.format(Date(ult))} · ${v.nombre}", style = MaterialTheme.typography.bodyMedium)
+                        Text("${hora.format(Date(ult))} · ${v.nombre} (${v.matrizId?.let { contactosHoySeguimiento(context, it) } ?: 0} hoy)", style = MaterialTheme.typography.bodyMedium)
+                        v.matrizId?.let { resumenSeguimiento(context, it) }?.forEach { linea -> Text(linea, style = MaterialTheme.typography.bodySmall) }
                     }
                     if (contactadosHoy.isEmpty()) Text("Todavía no se ha contactado a nadie hoy.")
                 }
@@ -570,7 +599,9 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         // nombres y podría dejar fuera una visita válida que sí figura en el historial del Mapa.
         val registros = ids.mapNotNull { id -> matrizDao.getById(id) }
         if (registros.isEmpty()) return Result.success()
-        val config = container.database.configuracionAutomatizacionDao().obtenerOSembrar()
+        val configDao = container.database.configuracionAutomatizacionDao()
+        var config = configDao.obtenerOSembrar()
+        val reglas = container.database.reglaSemanaDao().obtenerMapaOSembrar()
         val logDao = container.database.contactoLogDao()
         val plantillaDao = container.database.plantillaSmsDao()
         val contactoExtraDao = container.database.contactoExtraDao()
@@ -580,27 +611,38 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         // Si cambió el número de horarios después de encolar esta tarea, descartarla: la nueva
         // programación ya asignará los clientes con la distribución actualizada.
         if (cantidadSlots != leerHorariosSeguimiento(applicationContext).size || slot !in 0 until cantidadSlots) return Result.success()
-        // Cada horario atiende una parte estable de los registros: los siguientes horarios no vuelven a llamar al cartucho completo.
-        val registrosDelHorario = registros.filter { Math.floorMod(it.id.hashCode(), cantidadSlots) == slot }
-
+        // Igual que los bloques: el horario `slot` hace de "bloque" y todos los clientes entran como dados de alta en
+        // el primero, así que se contacta a quien tenga ese número de bloque en la frecuencia (editable) de su semana.
+        val registrosDelHorario = registros.filter { r ->
+            val semR = r.semana.trim().toIntOrNull()?.takeIf { it in 1..5 } ?: return@filter false
+            ReglaRepeticion.debeContactarseEnBloque(semR, slot, 0, reglas)
+        }
+        var esPrimerContacto = true
         for (registro in registrosDelHorario) {
             if (prefs.getString(KEY_MODO_SEGUIMIENTO, "") != modo) return Result.success()
-            if (modo != MODO_LLAMADAS && !SmsHelper.tienePermisos(applicationContext)) return Result.failure()
-            if (modo != MODO_SMS && !CallHelper.tienePermisos(applicationContext)) return Result.failure()
+            if (!SmsHelper.tienePermisos(applicationContext) || !CallHelper.tienePermisos(applicationContext)) return Result.failure()
+            // Ya contactado en este horario y día (Worker reiniciado por Android): no repetir ni esperar la pausa.
+            val claveReclamo = "cl_${registro.id}_$slot"
+            if (prefs.getLong(claveReclamo, 0L) == diaObjetivo) continue
             val actual = matrizDao.getById(registro.id) ?: continue
             if (esPagado(actual.estado)) continue
             val sem = actual.semana.trim().toIntOrNull()?.takeIf { it in 1..5 } ?: continue
-            // Mismo índice de rotación de plantillas que en bloques, más los contactos de Seguimiento (que
-            // no escriben en contacto_log_table): así cada contacto sucesivo usa una variante distinta.
-            val variante = logDao.contarTotalContactos(actual.id) + contactosSeguimiento(applicationContext, actual.id)
+            config = configDao.obtenerOSembrar() // relee: lo que se ajuste en Bloques de horario aplica desde el siguiente cliente
+            if (!esPrimerContacto) delay(config.segundosPausaEntreLlamadas * 1_000L)
+            esPrimerContacto = false
+            // Relee tras la pausa: puede haberse marcado Pagado mientras tanto.
             val fresco = matrizDao.getById(actual.id) ?: continue
             if (esPagado(fresco.estado)) continue
-            procesarClienteLlamadaAutomatica(
+            // Rotación de plantillas: total de contactos previos (bloques) + los de Seguimiento, leído ANTES de reclamar.
+            val variante = logDao.contarTotalContactos(fresco.id) + contactosSeguimiento(applicationContext, fresco.id)
+            // Se reclama antes de contactar: ni un reinicio a mitad de cliente ni dos Workers lo repiten.
+            if (!prefs.edit().putLong(claveReclamo, diaObjetivo).commit()) continue
+            val resumen = procesarClienteLlamadaAutomatica(
                 applicationContext, fresco, sem, config, logDao, plantillaDao,
                 contactoExtraDao, vistos, variante,
                 estadoActual = { matrizDao.getById(fresco.id)?.estado }
             )
-            registrarContactoSeguimiento(applicationContext, fresco.id)
+            registrarContactoSeguimiento(applicationContext, fresco.id, resumen)
         }
         return Result.success()
     }
