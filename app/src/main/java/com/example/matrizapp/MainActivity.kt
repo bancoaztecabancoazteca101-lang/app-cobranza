@@ -391,7 +391,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.SmsStatus.route) { SmsStatusScreen(onBack = { navController.popBackStack() }) }
                             composable(Screen.Llamadas.route) { CallScreen(callVm) }
                             composable(Screen.BloquesLlamada.route) { BloqueHorarioScreen(bloqueVm) }
-                            composable(Screen.SeguimientoPorDia.route) { SeguimientoPorDiaScreen() }
+                            composable(Screen.SeguimientoPorDia.route) { SeguimientoPorDiaScreen(onAbrirPlantillas = { navController.navigate(Screen.PlantillasSms.route) }) }
                             composable(Screen.PlantillasSms.route) { PlantillaSmsScreen(plantillaVm) }
                             composable(Screen.RutaIA.route) { RutaIAScreen(rutaIAVm, matrizVm, searchQuery) }
                             composable(Screen.Diagnostico.route) { DiagnosticoScreen(diagnosticoVm) }

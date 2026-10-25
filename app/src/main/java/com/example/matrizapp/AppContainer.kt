@@ -47,6 +47,7 @@ class AppContainer(val context: Context) {
             if (dao.contar() == 0) {
                 dao.insertarTodas(PlantillasSemillaSms.defaults())
             }
+            dao.insertarIgnorando(PlantillasSemillaSms.defaultsWhatsApp())
             dao.migrarPlaceholdersLegado()
         }
         // Limpieza diaria de Ruta IA (4 AM) -- se reprograma aquí cada vez que la app arranca

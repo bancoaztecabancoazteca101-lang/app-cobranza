@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
@@ -49,6 +50,11 @@ interface PlantillaSmsDao {
     @Insert
     suspend fun insertarTodas(plantillas: List<PlantillaSmsEntity>)
 
+    /** Inserta solo las que faltan (el índice único tipo+semana+slot evita duplicados): así las
+     * instalaciones que ya tenían plantillas reciben las nuevas (WhatsApp) sin tocar las editadas. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertarIgnorando(plantillas: List<PlantillaSmsEntity>)
+
     @Query("SELECT COUNT(*) FROM plantilla_sms_table")
     suspend fun contar(): Int
 }
@@ -69,10 +75,20 @@ object PlantillasSemillaSms {
         return lista
     }
 
+    /** Mensaje de WhatsApp al titular (Seguimiento Por Día): tipo "WA_TT", editable en "Plantillas de SMS".
+     * Arranca con los mismos textos del SMS al titular; cambiarlos aquí no afecta los SMS. */
+    fun defaultsWhatsApp(): List<PlantillaSmsEntity> {
+        val lista = mutableListOf<PlantillaSmsEntity>()
+        textosTT.forEach { (sem, textos) ->
+            textos.forEachIndexed { i, texto -> lista.add(PlantillaSmsEntity(tipo = "WA_TT", semana = sem, slot = i + 1, texto = texto)) }
+        }
+        return lista
+    }
+
     /** Texto original de fábrica de un slot puntual — usado por "Restaurar esta semana" en la
      * pantalla de edición, sin tener que rehacer todas las plantillas de la app. */
     fun textoDeFabrica(tipo: String, semana: Int, slot: Int): String? {
-        val mapa = if (tipo == "TT") textosTT else textosRef
+        val mapa = if (tipo == "TT" || tipo == "WA_TT") textosTT else textosRef
         return mapa[semana]?.getOrNull(slot - 1)
     }
 

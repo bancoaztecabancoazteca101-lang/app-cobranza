@@ -15,6 +15,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -73,6 +82,46 @@ private const val KEY_DIA_SLOT_PREFIX = "dia_objetivo_slot_"
 private const val SLOT_BASE_SEGUIMIENTO = 8200
 private const val MAX_HORARIOS_SEGUIMIENTO = 20
 
+private const val KEY_ULT_CONTACTO = "ult_"
+private const val KEY_N_CONTACTOS = "n_"
+private const val KEY_WHATSAPP = "wa_"
+
+/** Registro propio de Seguimiento Por Día (no usa contacto_log_table para no alterar las cuentas del catchup). */
+private fun registrarContactoSeguimiento(context: Context, id: String) {
+    val p = preferenciasSeguimiento(context)
+    p.edit().putLong(KEY_ULT_CONTACTO + id, System.currentTimeMillis())
+        .putInt(KEY_N_CONTACTOS + id, p.getInt(KEY_N_CONTACTOS + id, 0) + 1).apply()
+}
+private fun contactosSeguimiento(context: Context, id: String): Int =
+    preferenciasSeguimiento(context).getInt(KEY_N_CONTACTOS + id, 0)
+private fun ultimoContactoSeguimiento(context: Context, id: String): Long =
+    preferenciasSeguimiento(context).getLong(KEY_ULT_CONTACTO + id, 0L)
+private fun marcarWhatsAppSeguimiento(context: Context, id: String) {
+    preferenciasSeguimiento(context).edit().putLong(KEY_WHATSAPP + id, System.currentTimeMillis()).apply()
+}
+private fun ultimoWhatsAppSeguimiento(context: Context, id: String): Long =
+    preferenciasSeguimiento(context).getLong(KEY_WHATSAPP + id, 0L)
+
+/** Por qué un cliente del historial NO se contactaría (null = sí entra al flujo). Mismas reglas que el Worker. */
+private fun motivoExclusionSeguimiento(visita: VisitaMapaEntity, registro: MatrizEntity?): String? = when {
+    visita.matrizId == null -> "Sin ID de Matriz: no se contacta"
+    registro == null -> "Sin registro en Matriz: no se contacta"
+    esPagado(registro.estado) -> "Pagado: se excluye"
+    registro.semana.trim().toIntOrNull()?.let { it in 1..5 } != true -> "Semana '${registro.semana}' fuera de 1 a 5: se omite"
+    else -> null
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BotonWhatsAppSeguimiento(onClick: () -> Unit, onLongClick: () -> Unit) {
+    Box(
+        Modifier.size(44.dp).clip(CircleShape).combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.material3.Icon(Icons.Default.Chat, contentDescription = "WhatsApp Business al titular", tint = Color(0xFF0B8F6A))
+    }
+}
+
 private fun preferenciasSeguimiento(context: Context) =
     context.getSharedPreferences(PREFS_SEGUIMIENTO_DIA, Context.MODE_PRIVATE)
 
@@ -119,11 +168,10 @@ private fun textoHoraSeguimiento(minutoDia: Int): String =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SeguimientoPorDiaScreen() {
+fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
     val context = LocalContext.current
     val prefs = remember { preferenciasSeguimiento(context) }
     var cartucho by remember { mutableIntStateOf(prefs.getInt(KEY_CARTUCHO_SEGUIMIENTO, 1).coerceAtLeast(1)) }
-    var modo by remember { mutableStateOf(prefs.getString(KEY_MODO_SEGUIMIENTO, MODO_COMBINADO) ?: MODO_COMBINADO) }
     val horarios = remember { mutableStateListOf<Int>().apply { addAll(leerHorariosSeguimiento(context)) } }
     var totalRegistros by remember { mutableIntStateOf(0) }
     var totalIdsCartucho by remember { mutableIntStateOf(0) }
@@ -137,6 +185,10 @@ fun SeguimientoPorDiaScreen() {
     var totalSinCartucho by remember { mutableIntStateOf(0) }
     var cargando by remember { mutableStateOf(false) }
     var mensaje by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    var pestana by remember { mutableIntStateOf(0) }
+    var refresco by remember { mutableIntStateOf(0) }
+    var registrosPorId by remember { mutableStateOf<Map<String, MatrizEntity>>(emptyMap()) }
     val fechaAyer = remember { SimpleDateFormat("EEEE d 'de' MMMM", Locale("es", "MX")).format(Date(inicioAyerSeguimiento())) }
 
     LaunchedEffect(cartucho) {
@@ -165,6 +217,7 @@ fun SeguimientoPorDiaScreen() {
             val registrosHistorial = withContext(Dispatchers.IO) {
                 idsCartuchoSeleccionado.mapNotNull { id -> matrizDao.getById(id) }
             }
+            registrosPorId = registrosHistorial.associateBy { it.id }
             totalMatrizAyer = matrizAyer.size
             totalConCartucho = idsConCartucho.size
             totalSinCartucho = matrizAyer.count { it.id !in idsConCartucho }
@@ -181,29 +234,48 @@ fun SeguimientoPorDiaScreen() {
         } catch (_: Exception) {
             totalRegistros = 0; totalPendientes = 0
             totalMatrizAyer = 0; totalConCartucho = 0; totalSinCartucho = 0
-            totalIdsCartucho = 0; listadoVerificacion = emptyList(); estadosPorId = emptyMap(); clientesPorCartucho = emptyMap()
+            totalIdsCartucho = 0; listadoVerificacion = emptyList(); estadosPorId = emptyMap(); clientesPorCartucho = emptyMap(); registrosPorId = emptyMap()
             mensaje = "No se pudo consultar Matriz y el historial de cartuchos del día anterior."
         } finally { cargando = false }
     }
 
     fun guardarYProgramar() {
-        prefs.edit().putInt(KEY_CARTUCHO_SEGUIMIENTO, cartucho).putString(KEY_MODO_SEGUIMIENTO, modo).apply()
+        prefs.edit().putInt(KEY_CARTUCHO_SEGUIMIENTO, cartucho).putString(KEY_MODO_SEGUIMIENTO, MODO_COMBINADO).apply()
         guardarHorariosSeguimiento(context, horarios.toList())
         SeguimientoPorDiaScheduler.programar(context)
         mensaje = "Configuración guardada. Se programaron ${horarios.size} horario(s) independientes de los bloques normales."
     }
 
-    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.Icon(Icons.Default.CalendarMonth, contentDescription = null)
-                    Text("  Seguimiento del día anterior", style = MaterialTheme.typography.titleMedium)
-                }
-                Text(fechaAyer.replaceFirstChar { it.uppercase(Locale("es", "MX")) }, style = MaterialTheme.typography.bodyLarge)
-                Text("Solo procesa registros del día anterior; nunca incorpora registros del día actual.", style = MaterialTheme.typography.bodySmall)
+    val horariosOrdenados = horarios.sorted()
+    val filasCartucho = listadoVerificacion.filter { it.cartucho == cartucho }.sortedBy { it.timestamp }
+    val clientes = filasCartucho.distinctBy { it.matrizId ?: it.clave }
+    val hoyInicio = remember(refresco) { inicioDelDia() }
+    val programado = remember(refresco, mensaje) { prefs.getString(KEY_MODO_SEGUIMIENTO, "") == MODO_COMBINADO }
+
+    fun horarioDe(id: String?): String =
+        if (id == null || horariosOrdenados.isEmpty()) "—"
+        else textoHoraSeguimiento(horariosOrdenados[Math.floorMod(id.hashCode(), horariosOrdenados.size)])
+
+    Column(Modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = pestana) {
+            listOf("Configuración", "Clientes del flujo", "Resultados").forEachIndexed { i, titulo ->
+                Tab(selected = pestana == i, onClick = { pestana = i }, text = { Text(titulo, maxLines = 1) })
             }
         }
+        Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            when (pestana) {
+                0 -> {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                androidx.compose.material3.Icon(Icons.Default.CalendarMonth, contentDescription = null)
+                                Text("  Seguimiento del día anterior", style = MaterialTheme.typography.titleMedium)
+                            }
+                            Text(fechaAyer.replaceFirstChar { it.uppercase(Locale("es", "MX")) }, style = MaterialTheme.typography.bodyLarge)
+                            Text("Solo procesa registros del día anterior; nunca incorpora registros del día actual.", style = MaterialTheme.typography.bodySmall)
+                            Text(if (programado) "Programación: ACTIVA" else "Programación: inactiva (guarda para activarla)", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
         Text("Cartucho que se procesará", style = MaterialTheme.typography.titleMedium)
         Text("Cada cartucho se toma tal como quedó en el Mapa (color y número). Matriz no guarda el cartucho.", style = MaterialTheme.typography.bodySmall)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -219,51 +291,8 @@ fun SeguimientoPorDiaScreen() {
                 )
             }
         }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(if (cargando) "Consultando registros…" else "Registros de ayer en Matriz: $totalMatrizAyer")
-                Text("Registros identificados en el historial: $totalConCartucho")
-                Text("Registros de ayer sin cartucho identificado: $totalSinCartucho")
-                Text("Filas del historial en Cartucho $cartucho: $totalRegistros")
-                Text("Clientes con ID único para seguimiento: $totalIdsCartucho")
-                Text("Pendientes (excluye solo Pagado): $totalPendientes")
-                Text("El estado pagado se vuelve a comprobar antes de contactar.", style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        val filasCartucho = listadoVerificacion.filter { it.cartucho == cartucho }.sortedBy { it.timestamp }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Listado manual para verificar · Cartucho $cartucho", style = MaterialTheme.typography.titleMedium)
-                Text("Fuente: historial persistido del Mapa. Cada fila muestra el nombre y la clave/ID guardados; no se reclasifica por la fecha actual de Matriz.", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
-                    val fechaHora = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("es", "MX"))
-                    val contenido = buildString {
-                        append("Seguimiento por Día - Cartucho $cartucho\n")
-                        append("Filas historial: ${filasCartucho.size}\n")
-                        append("Nombre | ID Matriz | Clave historial | Estado actual | Cartucho | Fecha/hora\n")
-                        filasCartucho.forEachIndexed { i, v ->
-                            append("${i + 1}. ${v.nombre} | ${v.matrizId ?: "(sin ID)"} | ${v.clave} | ${v.matrizId?.let { estadosPorId[it] } ?: "(sin registro Matriz)"} | ${v.cartucho} | ${fechaHora.format(Date(v.timestamp))}\n")
-                        }
-                    }
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Listado cartucho $cartucho", contenido))
-                    mensaje = "Listado copiado. Pégalo en el chat para comparar los nombres e IDs."
-                }) { Text("Copiar listado completo") }
-                filasCartucho.forEachIndexed { index, visita ->
-                    Divider()
-                    Text("${index + 1}. ${visita.nombre}", style = MaterialTheme.typography.bodyMedium)
-                    Text("ID Matriz: ${visita.matrizId ?: "sin ID"} · Clave: ${visita.clave}", style = MaterialTheme.typography.bodySmall)
-                    Text("Estado actual: ${visita.matrizId?.let { estadosPorId[it] } ?: "sin registro Matriz"} · Cartucho guardado: ${visita.cartucho}", style = MaterialTheme.typography.bodySmall)
-                }
-                if (filasCartucho.isEmpty()) Text("No hay filas del historial para este cartucho y fecha.")
-            }
-        }
-        Text("Modalidad", style = MaterialTheme.typography.titleMedium)
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            FilterChip(selected = modo == MODO_COMBINADO, onClick = { modo = MODO_COMBINADO }, label = { Text("Llamada + SMS (secuencia original de Matriz)") })
-            FilterChip(selected = modo == MODO_SMS, onClick = { modo = MODO_SMS }, label = { Text("Solo SMS") })
-            FilterChip(selected = modo == MODO_LLAMADAS, onClick = { modo = MODO_LLAMADAS }, label = { Text("Solo llamadas") })
-        }
+                    Text("Flujo", style = MaterialTheme.typography.titleMedium)
+                    Text("Llamada y después SMS a cada número, igual que en los bloques de horario (titular, Ref1 a Ref4 y contactos extra). Se usa la misma pausa y duración de llamada configuradas en Bloques de horario.", style = MaterialTheme.typography.bodySmall)
         Text("Horarios durante el día", style = MaterialTheme.typography.titleMedium)
         Text("Se ejecutan en orden cronológico. Cada horario es propio de Seguimiento Por Día.", style = MaterialTheme.typography.bodySmall)
         horarios.forEachIndexed { index, minutoDia ->
@@ -291,13 +320,131 @@ fun SeguimientoPorDiaScreen() {
                 horarios.clear(); horarios.addAll(ordenados)
             }
         }) { Text("Agregar horario") }
-        Text("Solo los registros Pagado se excluyen y el estado se revalida antes de cada contacto. Los horarios normales de llamadas no se modifican.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onAbrirPlantillas) { Text("Editar textos de SMS y WhatsApp (Plantillas de SMS)") }
+                    Text("Solo los registros Pagado se excluyen y el estado se revalida antes de cada contacto. Los horarios normales de llamadas no se modifican.", style = MaterialTheme.typography.bodySmall)
         Button(modifier = Modifier.fillMaxWidth(), enabled = horarios.isNotEmpty() && !cargando, onClick = { guardarYProgramar() }) { Text("Guardar y programar") }
         OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
             SeguimientoPorDiaScheduler.cancelar(context)
             mensaje = "Se canceló la programación de Seguimiento Por Día."
         }) { Text("Cancelar programación") }
-        mensaje?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                }
+                1 -> {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(if (cargando) "Consultando registros…" else "Registros de ayer en Matriz: $totalMatrizAyer")
+                            Text("Registros identificados en el historial: $totalConCartucho")
+                            Text("Registros de ayer sin cartucho identificado: $totalSinCartucho")
+                            Text("Filas del historial en Cartucho $cartucho: $totalRegistros")
+                            Text("Clientes con ID único para seguimiento: $totalIdsCartucho")
+                            Text("Pendientes (excluye solo Pagado): $totalPendientes")
+                        }
+                    }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Frecuencia", style = MaterialTheme.typography.titleMedium)
+                            if (horariosOrdenados.isEmpty()) Text("Sin horarios configurados.")
+                            else {
+                                Text("${horariosOrdenados.size} horario(s) al día: ${horariosOrdenados.joinToString(", ") { textoHoraSeguimiento(it) }}")
+                                Text("Cada cliente se contacta UNA vez al día, en el horario que le toca. Los horarios se reparten el cartucho entre sí (no se llama a todo el cartucho en cada horario).", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    Text("Cartucho que se muestra", style = MaterialTheme.typography.titleMedium)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ((1..3).toSet() + clientesPorCartucho.keys + cartucho).toSortedSet().forEach { numero ->
+                            FilterChip(
+                                selected = cartucho == numero,
+                                onClick = {
+                                    cartucho = numero
+                                    prefs.edit().putInt(KEY_CARTUCHO_SEGUIMIENTO, numero).apply()
+                                },
+                                leadingIcon = { Box(Modifier.size(12.dp).clip(CircleShape).background(colorCartucho(numero))) },
+                                label = { Text("Cartucho $numero · ${clientesPorCartucho[numero] ?: 0}") }
+                            )
+                        }
+                    }
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                        val fechaHora = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale("es", "MX"))
+                        val contenido = buildString {
+                            append("Seguimiento por Día - Cartucho $cartucho\n")
+                            append("Clientes: ${clientes.size} · Filas historial: ${filasCartucho.size}\n")
+                            append("Nombre | ID Matriz | Estado actual | Horario | Fecha/hora visita\n")
+                            clientes.forEachIndexed { i, v ->
+                                append("${i + 1}. ${v.nombre} | ${v.matrizId ?: "(sin ID)"} | ${v.matrizId?.let { estadosPorId[it] } ?: "(sin registro Matriz)"} | ${horarioDe(v.matrizId)} | ${fechaHora.format(Date(v.timestamp))}\n")
+                            }
+                        }
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Listado cartucho $cartucho", contenido))
+                        mensaje = "Listado copiado. Pégalo en el chat para comparar los nombres e IDs."
+                    }) { Text("Copiar listado completo") }
+                    Text("Clientes del Cartucho $cartucho (${clientes.size})", style = MaterialTheme.typography.titleMedium)
+                    Text("Fuente: historial del Mapa. Botón verde = abrir WhatsApp Business al titular con el texto editable (toque largo = WhatsApp normal).", style = MaterialTheme.typography.bodySmall)
+                    clientes.forEachIndexed { index, visita ->
+                        val registro = visita.matrizId?.let { registrosPorId[it] }
+                        val motivo = motivoExclusionSeguimiento(visita, registro)
+                        val ult = visita.matrizId?.let { ultimoContactoSeguimiento(context, it) } ?: 0L
+                        val ultWa = visita.matrizId?.let { ultimoWhatsAppSeguimiento(context, it) } ?: 0L
+                        val hora = SimpleDateFormat("HH:mm", Locale.ROOT)
+                        Divider()
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("${index + 1}. ${visita.nombre}", style = MaterialTheme.typography.bodyMedium)
+                                Text("ID ${visita.matrizId ?: "sin ID"} · ${registro?.estado?.ifBlank { "sin estado" } ?: "sin registro Matriz"}", style = MaterialTheme.typography.bodySmall)
+                                Text(motivo ?: "Horario asignado: ${horarioDe(visita.matrizId)}", style = MaterialTheme.typography.bodySmall)
+                                if (ult >= hoyInicio) Text("✓ Contactado hoy ${hora.format(Date(ult))} (${contactosSeguimiento(context, visita.matrizId.orEmpty())} en total)", style = MaterialTheme.typography.bodySmall)
+                                if (ultWa >= hoyInicio) Text("WhatsApp abierto hoy ${hora.format(Date(ultWa))}", style = MaterialTheme.typography.bodySmall)
+                                if (registro != null && WhatsAppHelper.normalizar(registro.numTT) == null) Text("TT sin número válido para WhatsApp", style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (registro != null && !esPagado(registro.estado) && WhatsAppHelper.normalizar(registro.numTT) != null) {
+                                suspend fun abrirWa(alterno: Boolean) {
+                                    val container = (context.applicationContext as MainApplication).container
+                                    val sem = registro.semana.trim().toIntOrNull()?.coerceIn(1, 5) ?: 1
+                                    val variante = withContext(Dispatchers.IO) { container.database.contactoLogDao().contarTotalContactos(registro.id) } + contactosSeguimiento(context, registro.id)
+                                    val texto = withContext(Dispatchers.IO) { MensajesCobranza.paraWhatsAppTT(container.database.plantillaSmsDao(), registro.nombre, registro.requisito, sem, variante) }
+                                    WhatsAppHelper.abrir(context, registro.numTT, negocio = true, alterno = alterno, texto = texto)
+                                    marcarWhatsAppSeguimiento(context, registro.id)
+                                    refresco++
+                                }
+                                BotonWhatsAppSeguimiento(
+                                    onClick = { scope.launch { abrirWa(false) } },
+                                    onLongClick = { scope.launch { abrirWa(true) } }
+                                )
+                            }
+                        }
+                    }
+                    if (clientes.isEmpty()) Text("No hay clientes del historial para este cartucho y fecha.")
+                }
+                else -> {
+                    val contactadosHoy = clientes.filter { v -> v.matrizId?.let { ultimoContactoSeguimiento(context, it) >= hoyInicio } == true }
+                    val waHoy = clientes.count { v -> v.matrizId?.let { ultimoWhatsAppSeguimiento(context, it) >= hoyInicio } == true }
+                    val motivos = clientes.map { v -> motivoExclusionSeguimiento(v, v.matrizId?.let { registrosPorId[it] }) }
+                    val entran = motivos.count { it == null }
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Cartucho $cartucho · hoy", style = MaterialTheme.typography.titleMedium)
+                            Text("Entran al flujo: $entran de ${clientes.size}")
+                            Text("Ya contactados hoy: ${contactadosHoy.size}")
+                            Text("Pendientes por contactar: ${(entran - contactadosHoy.size).coerceAtLeast(0)}")
+                            Text("WhatsApp abiertos hoy: $waHoy")
+                            Text("Excluidos por Pagado: ${motivos.count { it?.startsWith("Pagado") == true }}")
+                            Text("Omitidos por semana fuera de 1 a 5: ${motivos.count { it?.startsWith("Semana") == true }}")
+                            Text("Sin ID o sin registro en Matriz: ${motivos.count { it?.startsWith("Sin") == true }}")
+                            Text("Ayer sin cartucho en el Mapa (no se contactan): $totalSinCartucho")
+                        }
+                    }
+                    Text("Se anota el cliente cuando el flujo termina con él (llamada y SMS a todos sus números). Aquí no se distingue si una llamada o SMS puntual falló.", style = MaterialTheme.typography.bodySmall)
+                    Text("Contactados hoy", style = MaterialTheme.typography.titleMedium)
+                    val hora = SimpleDateFormat("HH:mm", Locale.ROOT)
+                    contactadosHoy.sortedByDescending { v -> v.matrizId?.let { ultimoContactoSeguimiento(context, it) } ?: 0L }.forEach { v ->
+                        val ult = v.matrizId?.let { ultimoContactoSeguimiento(context, it) } ?: 0L
+                        Divider()
+                        Text("${hora.format(Date(ult))} · ${v.nombre}", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (contactadosHoy.isEmpty()) Text("Todavía no se ha contactado a nadie hoy.")
+                }
+            }
+            mensaje?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
     }
 }
 
@@ -311,7 +458,7 @@ object SeguimientoPorDiaScheduler {
         cancelarAlarmas(context)
         val prefs = preferenciasSeguimiento(context)
         val modo = prefs.getString(KEY_MODO_SEGUIMIENTO, MODO_COMBINADO) ?: MODO_COMBINADO
-        if (modo !in setOf(MODO_COMBINADO, MODO_SMS, MODO_LLAMADAS)) return
+        if (modo != MODO_COMBINADO) return
         val horarios = leerHorariosSeguimiento(context)
         val hoy = inicioDelDia()
         horarios.forEachIndexed { index, minutoDia ->
@@ -372,7 +519,7 @@ class SeguimientoPorDiaAlarmReceiver : BroadcastReceiver() {
         if (slot !in 0 until MAX_HORARIOS_SEGUIMIENTO) return
         val prefs = preferenciasSeguimiento(context)
         val modo = prefs.getString(KEY_MODO_SEGUIMIENTO, "") ?: ""
-        if (modo !in setOf(MODO_COMBINADO, MODO_SMS, MODO_LLAMADAS)) return
+        if (modo != MODO_COMBINADO) return
         val minuto = leerHorariosSeguimiento(context).getOrNull(slot) ?: return
         val diaObjetivo = intent.getLongExtra(EXTRA_DIA_SEGUIMIENTO, inicioDelDia())
         val cantidadSlotsActual = leerHorariosSeguimiento(context).size
@@ -397,7 +544,7 @@ class SeguimientoPorDiaAlarmReceiver : BroadcastReceiver() {
 class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val modo = inputData.getString("modo_seguimiento") ?: return Result.failure()
-        if (modo !in setOf(MODO_COMBINADO, MODO_SMS, MODO_LLAMADAS)) return Result.failure()
+        if (modo != MODO_COMBINADO) return Result.failure()
         val prefs = preferenciasSeguimiento(applicationContext)
         // Si el usuario canceló o cambió la modalidad después de que sonó la alarma, no ejecutar
         // una tarea antigua que quedó esperando en la cola.
@@ -435,7 +582,6 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
         if (cantidadSlots != leerHorariosSeguimiento(applicationContext).size || slot !in 0 until cantidadSlots) return Result.success()
         // Cada horario atiende una parte estable de los registros: los siguientes horarios no vuelven a llamar al cartucho completo.
         val registrosDelHorario = registros.filter { Math.floorMod(it.id.hashCode(), cantidadSlots) == slot }
-        var huboFalloSms = false
 
         for (registro in registrosDelHorario) {
             if (prefs.getString(KEY_MODO_SEGUIMIENTO, "") != modo) return Result.success()
@@ -444,64 +590,17 @@ class SeguimientoPorDiaWorker(context: Context, params: WorkerParameters) : Coro
             val actual = matrizDao.getById(registro.id) ?: continue
             if (esPagado(actual.estado)) continue
             val sem = actual.semana.trim().toIntOrNull()?.takeIf { it in 1..5 } ?: continue
-            val variante = logDao.contarTotalContactos(actual.id)
-            if (modo == MODO_COMBINADO) {
-                val fresco = matrizDao.getById(actual.id) ?: continue
-                if (esPagado(fresco.estado)) continue
-                procesarClienteLlamadaAutomatica(
-                    applicationContext, fresco, sem, config, logDao, plantillaDao,
-                    contactoExtraDao, vistos, variante,
-                    estadoActual = { matrizDao.getById(fresco.id)?.estado }
-                )
-                continue
-            }
-            val telefonos = buildList {
-                actual.numTT.trim().takeIf { it.filter { c -> c.isDigit() }.length >= 7 }?.let { add(it to true) }
-                listOf(actual.ref1, actual.ref2, actual.ref3.orEmpty(), actual.ref4.orEmpty())
-                    .map { it.trim() }.filter { it.filter { c -> c.isDigit() }.length >= 7 }
-                    .forEach { add(it to false) }
-                contactoExtraDao.obtenerPara(actual.id).map { it.telefono.trim() }
-                    .filter { it.filter { c -> c.isDigit() }.length >= 7 }.forEach { add(it to false) }
-            }.distinctBy { ultimos10Digitos(it.first) }.filter { vistos.add(ultimos10Digitos(it.first)) }
-
-            for ((telefono, esTitular) in telefonos) {
-                val estadoFresco = matrizDao.getById(actual.id)?.estado ?: continue
-                if (esPagado(estadoFresco)) break
-                if (modo == MODO_SMS) {
-                    if (!SmsHelper.tienePermisos(applicationContext)) return Result.failure()
-                    val marcaReserva = NumeroContactadoGuard.reservarSmsConMarca(applicationContext, telefono) ?: continue
-                    val mensaje = if (esTitular) MensajesCobranza.paraTT(plantillaDao, actual.nombre, actual.requisito, sem, variante)
-                    else MensajesCobranza.paraReferencia(plantillaDao, actual.nombre, sem, variante)
-                    val estadoAntesDeEnviar = matrizDao.getById(actual.id)?.estado
-                    if (estadoAntesDeEnviar == null) {
-                        NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
-                        continue
-                    }
-                    if (esPagado(estadoAntesDeEnviar)) {
-                        NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
-                        break
-                    }
-                    if (!SmsHelper.enviarSms(applicationContext, config.simSms, telefono, mensaje)) {
-                        // Un rechazo de SmsManager no debe dejar el número bloqueado 30 min ni
-                        // tratarse como envío exitoso. Se reintenta el Worker sin duplicar los
-                        // SMS que sí fueron aceptados por el sistema.
-                        NumeroContactadoGuard.liberarReservaSms(applicationContext, telefono, marcaReserva)
-                        huboFalloSms = true
-                        android.util.Log.e("SeguimientoPorDia", "SmsManager rechazó un SMS automático (teléfono terminado en ${telefono.filter { it.isDigit() }.takeLast(4)})")
-                    }
-                } else {
-                    if (!CallHelper.tienePermisos(applicationContext)) return Result.failure()
-                    if (!NumeroContactadoGuard.reservar(applicationContext, telefono)) continue
-                    if (esPagado(matrizDao.getById(actual.id)?.estado ?: continue)) break
-                    llamarSilenciadoYEsperar(applicationContext, config.simSeleccionada, telefono, config)
-                    delay(config.segundosPausaEntreLlamadas * 1_000L)
-                }
-            }
-        }
-        if (huboFalloSms) {
-            // WorkManager reintentará con backoff. Los envíos ya aceptados siguen protegidos por
-            // NumeroContactadoGuard; solo se vuelven a intentar los números cuya reserva se liberó.
-            return if (runAttemptCount < 2) Result.retry() else Result.failure()
+            // Mismo índice de rotación de plantillas que en bloques, más los contactos de Seguimiento (que
+            // no escriben en contacto_log_table): así cada contacto sucesivo usa una variante distinta.
+            val variante = logDao.contarTotalContactos(actual.id) + contactosSeguimiento(applicationContext, actual.id)
+            val fresco = matrizDao.getById(actual.id) ?: continue
+            if (esPagado(fresco.estado)) continue
+            procesarClienteLlamadaAutomatica(
+                applicationContext, fresco, sem, config, logDao, plantillaDao,
+                contactoExtraDao, vistos, variante,
+                estadoActual = { matrizDao.getById(fresco.id)?.estado }
+            )
+            registrarContactoSeguimiento(applicationContext, fresco.id)
         }
         return Result.success()
     }
