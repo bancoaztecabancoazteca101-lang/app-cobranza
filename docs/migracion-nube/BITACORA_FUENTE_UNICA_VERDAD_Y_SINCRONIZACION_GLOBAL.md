@@ -488,3 +488,30 @@ Leer esta bitácora y el código actual de la rama antes de continuar. No reinic
 
 Esta entrada registra evidencia comunicada por el usuario; no significa que el asistente haya vuelto a ejecutar `apksigner` sobre esos APK ni que ya se hayan guardado cambios en Firebase.
 
+
+
+## 2026-10-26 — Continuidad después de revisar huellas Firebase; reinicio del inventario P0 con código real
+
+### Estado de Firebase comunicado por el usuario
+- El usuario confirma que en Firebase quedó guardada **solo una huella SHA-256**; no guardó la SHA-1 y la alerta roja desapareció.
+- El valor que el usuario transcribió en esta sesión fue `DD:9B:77:C4:FD:53:66:A6:CB:04:BD:81:60:7C:20:80:E5:C2:6B:0B:9A:62:6D:29:0C:E1:ED:4C:E4:17`. **No está verificado contra el certificado del APK** y difiere de la SHA-256 previamente comprobada por el usuario en los APK (`DD:0B:72:C4:FD:53:56:E8:B8:C6:D4:BD:81:CA:7C:23:83:EB:05:C2:6B:CB:3A:62:6D:29:3C:E1:ED:4C:E4:17`). No reemplazar ni añadir huellas basándose solo en esta transcripción; comparar visualmente con el certificado real cuando se retome la configuración de Google Sign-In.
+- La SHA-1 comprobada para los APK `app-debug.apk` y `app-optimizado.apk` sigue siendo `BC:F4:55:B9:3B:B3:34:4B:EE:91:BA:CB:69:59:88:F9:36:1D:FB:64`, pero el usuario no la guardó en Firebase.
+- No se modificaron credenciales OAuth ni el archivo `google-services.json` por esta revisión.
+
+### Nueva lectura directa del código en la rama
+Rama inspeccionada: `chatgpt/sincronizacion-integridad-nube`.
+
+- `Entities.kt`, blob SHA `ccd9097479375611993b196fd106736357faf1f9`: se confirma que `MatrizEntity` contiene campos locales que no existen en Sheets (`ref3`, `ref4`, `diaPago`, `domicilioLaboral`, `diasAtraso`, `diasApertura`, `montoCobrado`). También existen entidades explícitamente locales para tickets OCR, visitas de mapa y reportes manuales de Velocidad/Penalización, Comisión y Bolsa Gerencia. Estas anotaciones describen el comportamiento actual, no una decisión de mantener esos datos aislados: deben clasificarse para la futura fuente global y evitar pérdida de información.
+- `AppDatabase.kt`, blob SHA `6a641b399e8ae6071a6e46b4629abc115c5a99f1`: versión Room confirmada en `38`; incluye 23 entidades en la anotación `@Database`. La migración 37→38 ya está representada en el trabajo anterior de la cola de operaciones de Pase. No cambiar versión ni migraciones hasta diseñar y probar la siguiente modificación.
+- `SyncWorker.kt`, blob SHA `cb87f911072c0bfdd228468a28f35f3902aa9b2c`: el aislamiento de errores por módulo está en la rama. La sincronización actual todavía escribe en Google Sheets; esto no equivale a Firestore ni a fuente única de verdad. En Matriz persiste el patrón de actualizar celdas individualmente o añadir una fila cuando no se encuentra el ID remoto; siguen vigentes los riesgos de sobrescritura/recreación documentados arriba.
+- `SheetsRepository.kt`, blob SHA `9a625c6a68d64febc5aa24d75243027389ee25bf`: `updateSheetCell()` ejecuta una actualización de una celda y retorna `Unit`; `appendRow()` agrega filas. El repositorio depende directamente de Google Sheets, así que no debe reemplazarse sin mapear primero todos sus consumidores y flujos.
+- `LoginScreen.kt`, blob SHA `5d2b59b95e27a1dc8e1a2d2954d982afd8e1bb2c`: el inicio de sesión actual solicita email y scopes de Sheets/Drive mediante Google Sign-In; no solicita ID token ni autentica con Firebase Auth. La integración futura debe preservar esos scopes y el acceso existente.
+- `app/build.gradle`, blob SHA `9a5f44092bf87b94b4a3418839002fa4ed9da55e`: Firebase BoM `34.18.0` y Firebase Messaging están presentes; no están declaradas `firebase-auth` ni `firebase-firestore`. El plugin Google Services ya está aplicado. No agregar código de login a ciegas antes de resolver la configuración OAuth y revisar el JSON oficial completo.
+
+### Siguiente ejecución
+1. Continuar P0 desde archivos reales: identificar DAOs, repositorios, ViewModels, pantallas y operaciones CRUD por entidad; clasificar cada entidad como operativa compartida, configuración por dispositivo, caché, derivada o catálogo, con evidencia de subida/bajada.
+2. Elegir el primer piloto solo después de verificar las dependencias y las operaciones de lectura/escritura reales.
+3. Mantener Firestore con reglas `deny-all`; no añadir datos reales ni declarar completada la autenticación, integración, compilación o prueba entre teléfonos sin evidencia.
+4. Mantener `main` intacta y PR #122 sin fusionar; continuar únicamente en esta rama. Los scripts de llamadas/SMS siguen fuera de alcance.
+
+**Estado al cierre de esta actualización:** inspección de archivos realizada; no se modificó código de aplicación, no se añadieron dependencias, no se ejecutó compilación y no se probaron dispositivos. Esta entrada documenta la revisión y el siguiente paso, no una implementación terminada.
