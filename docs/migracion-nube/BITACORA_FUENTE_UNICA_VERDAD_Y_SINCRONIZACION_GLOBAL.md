@@ -413,3 +413,40 @@ Esta sección registra el avance posterior a la revisión del 23-10-2026. Si alg
 - No modificar `main`, no fusionar PR #122 sin autorización expresa, no afirmar compilación/pruebas sin evidencia.
 - Los scripts de llamadas/SMS quedan fuera de alcance: el usuario confirmó que esas funciones ya las realiza la app.
 
+## 9. Verificación del App ID y prerrequisitos de Firebase Authentication — 2026-10-25
+
+### Comparación directa entre consola y código real
+
+El usuario confirmó que el App ID mostrado en Firebase Console para la app Android «Matriz App» termina en `d354e9f160e0eb2ce390eb`. Se volvió a leer el archivo real `app/google-services.json` en la rama `chatgpt/sincronizacion-integridad-nube`:
+
+- Archivo: [app/google-services.json](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/blob/chatgpt/sincronizacion-integridad-nube/app/google-services.json).
+- Blob SHA leído: `e499626e662e0219996201df46ff451cc7ca188a`.
+- El único cliente Android dentro del JSON tiene paquete `com.example.matrizapp`, pero su `mobilesdk_app_id` termina en `d334e9f168a8ab2ce890eb`.
+- El JSON tiene `oauth_client: []` y `other_platform_oauth_client: []`.
+
+**Resultado:** discrepancia confirmada entre el App ID descrito desde la consola y el JSON versionado. No se reemplazó el archivo, no se generaron IDs OAuth y no se alteró el inicio de sesión. La coincidencia del proyecto y paquete no elimina la discrepancia del ID de aplicación.
+
+### Revisión de la integración Android actual
+
+Se releyeron estos archivos en la misma rama:
+
+- `app/build.gradle`, blob SHA `9a5f44092bf87b94b4a3418839002fa4ed9da55e`.
+- `app/src/main/java/com/example/matrizapp/LoginScreen.kt`, blob SHA `5d2b59b95e27a1dc8e1a2d2954d982afd8e1bb2c`.
+- `app/src/main/java/com/example/matrizapp/MainActivity.kt`, blob SHA `f4a9608a0ba90f49ef6aa604e0102a680c4cd4d7`.
+
+Hallazgos confirmados:
+
+1. El proyecto incluye el plugin Google Services y Firebase BoM/Cloud Messaging, pero en las dependencias inspeccionadas no aparecen `firebase-auth` ni `firebase-firestore`.
+2. `LoginScreen.kt` usa Google Sign-In con los ámbitos de Google Sheets y Drive. La comprobación de acceso de `MainActivity.kt` verifica la cuenta y esos permisos; no se observa una sesión Firebase Auth.
+3. El inicio de sesión actual debe preservarse y enlazarse deliberadamente con Firebase Authentication, no sustituirse por un flujo genérico que pierda los permisos de Sheets/Drive.
+4. `app/build.gradle` configura las variantes debug, release y optimizado con `../debug.keystore`. Esto describe la configuración de esta rama; antes de registrar huellas SHA en Firebase hay que comprobar el certificado del APK que realmente se instala/distribuye, especialmente si se usa un APK producido por otro flujo.
+5. No se modificó código de aplicación, dependencias, configuración Firebase ni reglas Firestore. Las reglas deben seguir denegando toda lectura/escritura mientras no exista una política autenticada y probada.
+
+### Siguiente paso seguro
+
+1. Desde Firebase Console, abrir la aplicación Android «Matriz App» cuyo App ID termina en `d354e9f160e0eb2ce390eb` y descargar su `google-services.json` desde la configuración de esa app exacta.
+2. Comparar ese archivo descargado con el versionado antes de sustituir nada; verificar proyecto, paquete, App ID y clientes OAuth generados. No copiar manualmente IDs.
+3. Identificar la firma real del APK distribuido y verificar SHA-1/SHA-256 antes de configurar OAuth. No publicar certificados privados ni contraseñas.
+4. Solo después preparar una rama separada para integrar Firebase Auth en el login existente y probarlo sin datos operativos. Firestore y sus reglas continúan cerrados; no se importan datos productivos.
+
+**Estado de esta verificación:** discrepancia de configuración confirmada; Auth/Firestore aún no integrados en los archivos revisados; no se ha hecho una nueva compilación ni prueba en dispositivo en este paso.
