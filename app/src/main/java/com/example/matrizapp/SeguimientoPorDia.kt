@@ -18,7 +18,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.runtime.rememberCoroutineScope
@@ -204,6 +207,9 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
     var refresco by remember { mutableIntStateOf(0) }
     var registrosPorId by remember { mutableStateOf<Map<String, MatrizEntity>>(emptyMap()) }
     var reglas by remember { mutableStateOf(ReglaRepeticion.BLOQUES_POR_SEM) }
+    var eligiendoPrueba by remember { mutableStateOf(false) }
+    var clientePrueba by remember { mutableStateOf<MatrizEntity?>(null) }
+    var resultadoPrueba by remember { mutableStateOf<String?>(null) }
     val fechaAyer = remember { SimpleDateFormat("EEEE d 'de' MMMM", Locale("es", "MX")).format(Date(inicioAyerSeguimiento())) }
 
     LaunchedEffect(cartucho) {
@@ -340,6 +346,7 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
                 horarios.clear(); horarios.addAll(ordenados)
             }
         }) { Text("Agregar horario") }
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = clientes.isNotEmpty(), onClick = { eligiendoPrueba = true }) { Text("Probar con un cliente (llamada + SMS reales)") }
                     OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = onAbrirPlantillas) { Text("Editar textos de SMS y WhatsApp (Plantillas de SMS)") }
                     Text("Solo los registros Pagado se excluyen y el estado se revalida antes de cada contacto. Los horarios normales de llamadas no se modifican.", style = MaterialTheme.typography.bodySmall)
         Button(modifier = Modifier.fillMaxWidth(), enabled = horarios.isNotEmpty() && !cargando, onClick = { guardarYProgramar() }) { Text("Guardar y programar") }
@@ -474,6 +481,53 @@ fun SeguimientoPorDiaScreen(onAbrirPlantillas: () -> Unit = {}) {
             }
             mensaje?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
+    }
+
+    // ---- Prueba de un cliente: mismo flujo que los bloques (llamada + SMS + oferta), sin contar como contacto real.
+    if (eligiendoPrueba) {
+        AlertDialog(
+            onDismissRequest = { eligiendoPrueba = false },
+            title = { Text("¿A qué cliente probar?") },
+            text = {
+                Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) {
+                    Text("Usa un cliente cuyo teléfono sea el tuyo, porque la prueba llama y manda SMS de verdad.", style = MaterialTheme.typography.bodySmall)
+                    clientes.mapNotNull { v -> v.matrizId?.let { registrosPorId[it] } }.forEach { r ->
+                        TextButton(modifier = Modifier.fillMaxWidth(), onClick = { eligiendoPrueba = false; clientePrueba = r }) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(r.nombre, style = MaterialTheme.typography.bodyMedium)
+                                Text("TT ${r.numTT.ifBlank { "sin número" }} · Sem ${r.semana}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { eligiendoPrueba = false }) { Text("Cancelar") } }
+        )
+    }
+    clientePrueba?.let { r ->
+        AlertDialog(
+            onDismissRequest = { clientePrueba = null },
+            title = { Text("Confirmar prueba") },
+            text = { Text("Se va a LLAMAR y mandar SMS de verdad a ${r.nombre}: TT ${r.numTT.ifBlank { "(sin número)" }}, Ref1 a Ref4 y contactos extra que tenga, más la oferta si la tiene capturada en ESTE teléfono.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    clientePrueba = null
+                    scope.launch {
+                        resultadoPrueba = "Probando… (espera a que terminen las llamadas)"
+                        resultadoPrueba = try { ejecutarPruebaCliente(context, r.id) } catch (e: Exception) { "Error al probar: ${e.message}" }
+                    }
+                }) { Text("Llamar y enviar") }
+            },
+            dismissButton = { TextButton(onClick = { clientePrueba = null }) { Text("Cancelar") } }
+        )
+    }
+    resultadoPrueba?.let { texto ->
+        AlertDialog(
+            onDismissRequest = { resultadoPrueba = null },
+            title = { Text("Resultado de la prueba") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(texto) } },
+            confirmButton = { TextButton(onClick = { resultadoPrueba = null }) { Text("Cerrar") } }
+        )
     }
 }
 

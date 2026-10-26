@@ -59,6 +59,16 @@ class DriveHelper(private val driveService: Drive, private val context: Context)
         borrados
     }
 
+    /** Respaldos `matriz_*.zip` de la carpeta [folderName] en Drive, del más nuevo al más viejo. */
+    suspend fun listBackups(folderName: String): List<DriveBackupFile> = withContext(Dispatchers.IO) {
+        val folderId = findFolderIdByName(folderName.trimEnd('/')) ?: return@withContext emptyList()
+        val query = "'$folderId' in parents and trashed = false and name contains 'matriz_' and mimeType != 'application/vnd.google-apps.folder'"
+        driveService.files().list().setQ(query).setSpaces("drive").setOrderBy("createdTime desc")
+            .setFields("files(id,name,createdTime,size)").setPageSize(50).execute().files.orEmpty()
+            .filter { it.name.startsWith("matriz_") && it.name.endsWith(".zip") }
+            .map { DriveBackupFile(it.id, it.name, it.createdTime?.value ?: 0L, it.size ?: 0L) }
+    }
+
     private fun findOrCreateFolderId(name: String): String {
         findFolderIdByName(name)?.let { return it }
         val metadata = File().apply {
@@ -131,3 +141,5 @@ class DriveHelper(private val driveService: Drive, private val context: Context)
 
     private fun extractFileId(urlOrId: String): String? = Regex("[-\\w]{25,}").find(urlOrId)?.value
 }
+/** Un respaldo que está en Drive (todavía no descargado). */
+data class DriveBackupFile(val id: String, val name: String, val createdMillis: Long, val sizeBytes: Long)
