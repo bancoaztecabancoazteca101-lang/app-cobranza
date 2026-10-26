@@ -515,3 +515,15 @@ Rama inspeccionada: `chatgpt/sincronizacion-integridad-nube`.
 4. Mantener `main` intacta y PR #122 sin fusionar; continuar únicamente en esta rama. Los scripts de llamadas/SMS siguen fuera de alcance.
 
 **Estado al cierre de esta actualización:** inspección de archivos realizada; no se modificó código de aplicación, no se añadieron dependencias, no se ejecutó compilación y no se probaron dispositivos. Esta entrada documenta la revisión y el siguiente paso, no una implementación terminada.
+
+
+## 2026-10-26 — Inventario P0 de entidades Room publicado
+
+Se creó `docs/migracion-nube/INVENTARIO_ENTIDADES_NUBE_P0.md` en la rama `chatgpt/sincronizacion-integridad-nube`.
+
+- Commit: `6715298f830200f1a5463031b553f164ed8dc2ec`.
+- El inventario registra las 23 entidades declaradas por `AppDatabase.kt` (DB_VERSION 38 en esta rama), la función observada en el código y una clasificación provisional: compartida, configuración, catálogo, proyección o cola local.
+- Se dejaron explícitamente pendientes las decisiones que necesitan seguirse hasta los CRUD/consumidores reales; no se supone que toda tabla local se replique sin análisis.
+- Riesgos que se preservan: cambios concurrentes, borrados resucitados, acoplamiento de `SheetsRepository`, falta de Firebase Auth/Firestore en el código actual, adjuntos, datos sensibles y necesidad de outbox idempotente.
+- Próximo paso: P0-A, mapear por módulo los puntos exactos de alta/edición/borrado/lectura y los caminos de subida/descarga; después redactar contrato de datos y elegir el piloto. No agregar dependencias ni código de Firestore hasta cerrar el mapa del piloto.
+- Sin compilación ni pruebas de dispositivos en esta etapa. `main` permanece intacta; PR #122 no se fusionó; Firestore conserva `deny-all`; scripts de llamadas/SMS fuera de alcance.
