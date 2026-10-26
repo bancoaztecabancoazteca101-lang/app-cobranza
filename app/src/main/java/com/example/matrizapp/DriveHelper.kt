@@ -66,7 +66,7 @@ class DriveHelper(private val driveService: Drive, private val context: Context)
         driveService.files().list().setQ(query).setSpaces("drive").setOrderBy("createdTime desc")
             .setFields("files(id,name,createdTime,size)").setPageSize(50).execute().files.orEmpty()
             .filter { it.name.startsWith("matriz_") && it.name.endsWith(".zip") }
-            .map { DriveBackupFile(it.id, it.name, it.createdTime?.value ?: 0L, it.size ?: 0L) }
+            .map { DriveBackupFile(it.id, it.name, it.createdTime?.value ?: 0L, it.getSize() ?: 0L) }
     }
 
     private fun findOrCreateFolderId(name: String): String {
