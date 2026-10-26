@@ -469,3 +469,22 @@ Hallazgos:
 ### Reglas de continuidad
 
 Leer esta bitácora y el código actual de la rama antes de continuar. No reiniciar la investigación de una supuesta segunda app. No modificar `main`, no fusionar PR #122 sin autorización, no cambiar reglas a abiertas, no afirmar compilaciones/pruebas sin evidencia y mantener los scripts de llamadas/SMS fuera de alcance salvo petición expresa del usuario.
+
+## 2026-10-25 — Huellas de certificado verificadas en APK publicados
+
+**Evidencia proporcionada y comprobada por el usuario:** las huellas no se dedujeron solo de la configuración Gradle. El usuario obtuvo las huellas de `debug.keystore` en la raíz del repositorio (contraseña `android`) y comprobó las firmas de dos APK publicados con `apksigner`.
+
+- Package: `com.example.matrizapp`
+- Certificado: `CN=Diego Cobranza Debug, O=Cobranza, C=MX`
+- Alias: `androiddebugkey`
+- Vigencia reportada: hasta 2053-12-24
+- SHA-1: `BC:F4:55:B9:3B:B3:34:4B:EE:91:BA:CB:69:59:88:F9:36:1D:FB:64`
+- SHA-256: `DD:0B:72:C4:FD:53:56:E8:B8:C6:D4:BD:81:CA:7C:23:83:EB:05:C2:6B:CB:3A:62:6D:29:3C:E1:ED:4C:E4:17`
+- APK comprobados según el usuario: `app-debug.apk` de la publicación `latest-debug` (main) y `app-optimizado.apk` de la rama `claude/seguimiento-cartuchos`. Ambos presentan las mismas huellas.
+- **Límite de la comprobación:** `app-release.apk` no fue revisado; no afirmar que usa este certificado.
+- **Uso previsto:** registrar estas huellas en la ficha Firebase Android existente de `com.example.matrizapp`, proyecto `app-matriz`, para preparar Google Sign-In/Firebase Authentication.
+- **Estado pendiente:** registrar las huellas en Firebase y verificar el flujo de autenticación real. La rama revisada aún requiere revisar la implementación: `LoginScreen.kt` usa Google Sign-In con scopes de Sheets/Drive, pero no solicita ID token ni autentica con Firebase; en `app/build.gradle` se deben incorporar las dependencias Firebase Auth/Firestore cuando corresponda. No habilitar lecturas/escrituras operativas de Firestore: las reglas deben permanecer `deny-all` durante el prototipo y la migración.
+- **Seguridad:** estas son huellas públicas de un certificado de depuración, no una llave de publicación de tienda. Si se publica con otra llave, habrá que registrar las huellas de ese certificado por separado.
+
+Esta entrada registra evidencia comunicada por el usuario; no significa que el asistente haya vuelto a ejecutar `apksigner` sobre esos APK ni que ya se hayan guardado cambios en Firebase.
+
