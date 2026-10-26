@@ -413,60 +413,59 @@ Esta sección registra el avance posterior a la revisión del 23-10-2026. Si alg
 - No modificar `main`, no fusionar PR #122 sin autorización expresa, no afirmar compilación/pruebas sin evidencia.
 - Los scripts de llamadas/SMS quedan fuera de alcance: el usuario confirmó que esas funciones ya las realiza la app.
 
-## 9. Verificación del App ID y prerrequisitos de Firebase Authentication — 2026-10-25
+## 9. Verificación de Firebase Authentication y App ID — actualización 2026-10-25
 
-### Comparación directa entre consola y código real
+### Aclaración definitiva del App ID
 
-El usuario confirmó que el App ID mostrado en Firebase Console para la app Android «Matriz App» termina en `d354e9f160e0eb2ce390eb`. Se volvió a leer el archivo real `app/google-services.json` en la rama `chatgpt/sincronizacion-integridad-nube`:
+El usuario confirmó que en Firebase Console → Configuración del proyecto → General → Tus aplicaciones aparece **una sola aplicación Android**:
 
-- Archivo: [app/google-services.json](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/blob/chatgpt/sincronizacion-integridad-nube/app/google-services.json).
-- Blob SHA leído: `e499626e662e0219996201df46ff451cc7ca188a`.
-- El único cliente Android dentro del JSON tiene paquete `com.example.matrizapp`, pero su `mobilesdk_app_id` termina en `d334e9f168a8ab2ce890eb`.
-- El JSON tiene `oauth_client: []` y `other_platform_oauth_client: []`.
+- Nombre: `Matriz App`
+- Paquete: `com.example.matrizapp`
+- Proyecto: `app-matriz`
+- Número de proyecto: `542876060274`
+- App ID real: `1:542876060274:android:d334e9f168a8ab2ce890eb`
 
-**Resultado:** discrepancia confirmada entre el App ID descrito desde la consola y el JSON versionado. No se reemplazó el archivo, no se generaron IDs OAuth y no se alteró el inicio de sesión. La coincidencia del proyecto y paquete no elimina la discrepancia del ID de aplicación.
+El `google-services.json` compartido por el usuario se descargó desde esa única ficha y contiene el App ID anterior. El texto alternativo terminado en `d354e9f160e0eb2ce390eb` fue una lectura visual equivocada de una captura de baja resolución; **no es una segunda aplicación ni un ID de Firebase confirmado**. Se cierra esa investigación: no volver a pedir que busque otra app ni seguir tratando el caso como una discrepancia de App ID.
 
-### Revisión de la integración Android actual
+### Comparación con el archivo versionado
 
-Se releyeron estos archivos en la misma rama:
+Se volvió a leer directamente `app/google-services.json` en esta rama. Blob SHA: `e499626e662e0219996201df46ff451cc7ca188a`.
 
-- `app/build.gradle`, blob SHA `9a5f44092bf87b94b4a3418839002fa4ed9da55e`.
-- `app/src/main/java/com/example/matrizapp/LoginScreen.kt`, blob SHA `5d2b59b95e27a1dc8e1a2d2954d982afd8e1bb2c`.
-- `app/src/main/java/com/example/matrizapp/MainActivity.kt`, blob SHA `f4a9608a0ba90f49ef6aa604e0102a680c4cd4d7`.
+El archivo versionado coincide con el JSON proporcionado en los campos de proyecto, paquete y App ID. Sin embargo, el JSON versionado actualmente contiene `oauth_client: []` y `other_platform_oauth_client: []`, mientras que el JSON que pegó el usuario incluye un cliente OAuth de `client_type: 3`. Este detalle sí debe revisarse comparando el contenido íntegro antes de reemplazar el archivo; no es evidencia de que exista otra app Android. No copiar IDs manualmente ni modificar el JSON hasta comprobar el diff y el origen exacto del cliente OAuth.
 
-Hallazgos confirmados:
+### Estado real del código Android inspeccionado
 
-1. El proyecto incluye el plugin Google Services y Firebase BoM/Cloud Messaging, pero en las dependencias inspeccionadas no aparecen `firebase-auth` ni `firebase-firestore`.
-2. `LoginScreen.kt` usa Google Sign-In con los ámbitos de Google Sheets y Drive. La comprobación de acceso de `MainActivity.kt` verifica la cuenta y esos permisos; no se observa una sesión Firebase Auth.
-3. El inicio de sesión actual debe preservarse y enlazarse deliberadamente con Firebase Authentication, no sustituirse por un flujo genérico que pierda los permisos de Sheets/Drive.
-4. `app/build.gradle` configura las variantes debug, release y optimizado con `../debug.keystore`. Esto describe la configuración de esta rama; antes de registrar huellas SHA en Firebase hay que comprobar el certificado del APK que realmente se instala/distribuye, especialmente si se usa un APK producido por otro flujo.
-5. No se modificó código de aplicación, dependencias, configuración Firebase ni reglas Firestore. Las reglas deben seguir denegando toda lectura/escritura mientras no exista una política autenticada y probada.
+Archivos releídos en `chatgpt/sincronizacion-integridad-nube`:
 
-### Siguiente paso seguro
+- [`app/build.gradle`](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/blob/chatgpt/sincronizacion-integridad-nube/app/build.gradle), blob SHA `9a5f44092bf87b94b4a3418839002fa4ed9da55e`.
+- [`LoginScreen.kt`](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/blob/chatgpt/sincronizacion-integridad-nube/app/src/main/java/com/example/matrizapp/LoginScreen.kt), blob SHA `5d2b59b95e27a1dc8e1a2d2954d982afd8e1bb2c`.
+- [`app/google-services.json`](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/blob/chatgpt/sincronizacion-integridad-nube/app/google-services.json), blob SHA `e499626e662e0219996201df46ff451cc7ca188a`.
 
-1. Desde Firebase Console, abrir la aplicación Android «Matriz App» cuyo App ID termina en `d354e9f160e0eb2ce390eb` y descargar su `google-services.json` desde la configuración de esa app exacta.
-2. Comparar ese archivo descargado con el versionado antes de sustituir nada; verificar proyecto, paquete, App ID y clientes OAuth generados. No copiar manualmente IDs.
-3. Identificar la firma real del APK distribuido y verificar SHA-1/SHA-256 antes de configurar OAuth. No publicar certificados privados ni contraseñas.
-4. Solo después preparar una rama separada para integrar Firebase Auth en el login existente y probarlo sin datos operativos. Firestore y sus reglas continúan cerrados; no se importan datos productivos.
+Hallazgos:
+1. Google Services ya está aplicado; Firebase BoM `34.18.0` y Firebase Messaging están presentes.
+2. En las dependencias revisadas no están `firebase-auth` ni `firebase-firestore`; Firestore aún no es la base operativa de esta rama.
+3. `LoginScreen.kt` usa Google Sign-In y solicita ámbitos de Google Sheets/Drive. No solicita todavía un ID token ni inicia una sesión de Firebase Authentication. La integración debe preservar los permisos y el flujo actual de Sheets/Drive.
+4. Las variantes debug/release/optimizado de esta rama apuntan a `../debug.keystore`. Eso no demuestra por sí solo qué certificado firmó el APK que se distribuye; antes de configurar SHA-1/SHA-256 se debe verificar la firma del APK real.
+5. El cliente OAuth `client_type: 3` es un cliente OAuth de tipo web; no sustituye la configuración Android vinculada al certificado de firma.
 
-**Estado de esta verificación:** discrepancia de configuración confirmada; Auth/Firestore aún no integrados en los archivos revisados; no se ha hecho una nueva compilación ni prueba en dispositivo en este paso.
+### Siguiente trabajo acordado
 
-### Aclaración posterior: JSON descargado proporcionado como texto por el usuario — 2026-10-25
+1. Comparar de forma controlada el JSON descargado y el versionado, preservando los valores originales y revisando el diff, en una rama de trabajo; no inventar ni editar IDs a mano.
+2. Identificar la firma real del APK instalado/distribuido antes de registrar huellas SHA en Firebase.
+3. Preparar integración de Firebase Authentication con el Google Sign-In existente: solicitar el ID token usando el cliente web configurado, crear la credencial de Google y autenticar en Firebase, con estados de carga/errores y sin romper Sheets/Drive.
+4. Mantener Firestore sin lecturas ni escrituras operativas hasta que Auth esté integrado y probado. Mantener las reglas `deny-all` publicadas; no usar reglas públicas ni modo de prueba.
+5. Ejecutar compilación y pruebas verificables, documentando commit y resultado real. No declarar la integración terminada solo por añadir dependencias.
 
-El usuario compartió el contenido completo del `google-services.json` descargado desde Firebase Console. Ese contenido muestra:
+### Estado al cierre
 
-- `project_id`: `app-matriz`.
-- `project_number`: `542876060274`.
-- `package_name`: `com.example.matrizapp`.
-- `mobilesdk_app_id`: `1:542876060274:android:d334e9f168a8ab2ce890eb`.
-- Un cliente OAuth con `client_type: 3` en `oauth_client`, y el mismo cliente dentro de `services.appinvite_service.other_platform_oauth_client`.
+- App Android única e identidad del proyecto: **confirmadas por el usuario**.
+- App ID: **aclarado; no existe una segunda app fantasma**.
+- JSON versionado y código de login: **releídos directamente**.
+- Integración Firebase Auth/Firestore: **pendiente**.
+- Firma del APK real y huellas SHA: **pendientes de verificar**.
+- Reglas Firestore: deben permanecer cerradas hasta contar con autenticación y reglas específicas probadas.
+- No se ha hecho una nueva compilación ni prueba de login Firebase en esta actualización.
 
-El contenido que compartió coincide en esos campos con el `app/google-services.json` leído en la rama; sin embargo, el App ID no coincide con el que el usuario había visto en la sección de configuración general de Firebase Console (`…d354e9f160e0eb2ce390eb`). El JSON descargado ya incluye un cliente OAuth tipo 3, a diferencia de la versión del repositorio que se leyó antes de esta aclaración.
+### Reglas de continuidad
 
-**Interpretación prudente:** esto no demuestra por sí solo cuál de los dos registros de aplicación se usa o cuál está seleccionado en la consola. Un cliente OAuth tipo 3 no equivale a la configuración OAuth Android vinculada a la huella de firma. No cambiar el JSON, no copiar IDs manualmente y no asumir que la integración de Firebase Auth está lista.
-
-### Próxima comprobación concreta
-
-En Firebase Console → Configuración del proyecto → General → Tus aplicaciones, comprobar si aparecen una o varias aplicaciones Android con paquete `com.example.matrizapp`. Para cada entrada, comparar el App ID mostrado con el `mobilesdk_app_id` del archivo descargado desde esa misma entrada. Confirmar cuál es la aplicación que se pretende usar para la app que se distribuye. Si solo aparece una entrada, verificar que el archivo se descargó desde esa entrada exacta y volver a revisar el App ID de la misma ficha.
-
-No se realizaron cambios en `google-services.json`, dependencias, código Android ni reglas Firestore. No hay nueva compilación ni prueba de inicio de sesión Firebase confirmada.
+Leer esta bitácora y el código actual de la rama antes de continuar. No reiniciar la investigación de una supuesta segunda app. No modificar `main`, no fusionar PR #122 sin autorización, no cambiar reglas a abiertas, no afirmar compilaciones/pruebas sin evidencia y mantener los scripts de llamadas/SMS fuera de alcance salvo petición expresa del usuario.
