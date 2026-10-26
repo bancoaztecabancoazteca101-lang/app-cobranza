@@ -450,3 +450,23 @@ Hallazgos confirmados:
 4. Solo después preparar una rama separada para integrar Firebase Auth en el login existente y probarlo sin datos operativos. Firestore y sus reglas continúan cerrados; no se importan datos productivos.
 
 **Estado de esta verificación:** discrepancia de configuración confirmada; Auth/Firestore aún no integrados en los archivos revisados; no se ha hecho una nueva compilación ni prueba en dispositivo en este paso.
+
+### Aclaración posterior: JSON descargado proporcionado como texto por el usuario — 2026-10-25
+
+El usuario compartió el contenido completo del `google-services.json` descargado desde Firebase Console. Ese contenido muestra:
+
+- `project_id`: `app-matriz`.
+- `project_number`: `542876060274`.
+- `package_name`: `com.example.matrizapp`.
+- `mobilesdk_app_id`: `1:542876060274:android:d334e9f168a8ab2ce890eb`.
+- Un cliente OAuth con `client_type: 3` en `oauth_client`, y el mismo cliente dentro de `services.appinvite_service.other_platform_oauth_client`.
+
+El contenido que compartió coincide en esos campos con el `app/google-services.json` leído en la rama; sin embargo, el App ID no coincide con el que el usuario había visto en la sección de configuración general de Firebase Console (`…d354e9f160e0eb2ce390eb`). El JSON descargado ya incluye un cliente OAuth tipo 3, a diferencia de la versión del repositorio que se leyó antes de esta aclaración.
+
+**Interpretación prudente:** esto no demuestra por sí solo cuál de los dos registros de aplicación se usa o cuál está seleccionado en la consola. Un cliente OAuth tipo 3 no equivale a la configuración OAuth Android vinculada a la huella de firma. No cambiar el JSON, no copiar IDs manualmente y no asumir que la integración de Firebase Auth está lista.
+
+### Próxima comprobación concreta
+
+En Firebase Console → Configuración del proyecto → General → Tus aplicaciones, comprobar si aparecen una o varias aplicaciones Android con paquete `com.example.matrizapp`. Para cada entrada, comparar el App ID mostrado con el `mobilesdk_app_id` del archivo descargado desde esa misma entrada. Confirmar cuál es la aplicación que se pretende usar para la app que se distribuye. Si solo aparece una entrada, verificar que el archivo se descargó desde esa entrada exacta y volver a revisar el App ID de la misma ficha.
+
+No se realizaron cambios en `google-services.json`, dependencias, código Android ni reglas Firestore. No hay nueva compilación ni prueba de inicio de sesión Firebase confirmada.
