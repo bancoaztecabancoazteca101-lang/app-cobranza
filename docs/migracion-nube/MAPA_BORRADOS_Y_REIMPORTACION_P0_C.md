@@ -20,8 +20,8 @@
 - `FiltroFechaViewModel.borrarTicket(id)` llama a `TicketPagoDao.borrar(id)`.
 - `TicketPagoDao.borrar` ejecuta `DELETE FROM ticket_pago_table WHERE id = :id`.
 - En el código inspeccionado, los tickets se crean y consultan en Room; no se identificó una subida/importación de tickets desde Sheets ni un outbox de tickets.
-- Por ahora clasificar el ticket como **dato local** es la interpretación más compatible con este camino de código, pero debe confirmarse como decisión de producto: ¿el historial y total de tickets OCR deben compartirse entre teléfonos o solo existir en el teléfono que leyó el ticket?
-- Si deben ser globales, el borrado y el registro OCR necesitan identidad global y sincronización; si son locales, no deben migrarse como entidad compartida sin una decisión explícita.
+- La entidad `TicketPagoEntity` en `Entities.kt` está documentada explícitamente como **“Registro local ... 100% local”**; el flujo revisado la crea, consulta y elimina en Room, sin subida ni importación remota encontrada. Por tanto, en el código actual los tickets OCR son locales, no una entidad global.
+- No se debe cambiar ese comportamiento por accidente durante la migración. Si en el futuro se quiere compartir historial/totales entre teléfonos, debe ser una decisión de producto separada, con pruebas de duplicados y borrados.
 
 ### 2. Matriz: borrado remoto inmediato y borrado físico local
 
