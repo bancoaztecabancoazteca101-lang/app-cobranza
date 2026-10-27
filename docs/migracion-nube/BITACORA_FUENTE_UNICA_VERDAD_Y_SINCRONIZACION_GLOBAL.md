@@ -590,3 +590,18 @@ Lectura estática de código. No se ejecutó Gradle ni pruebas de dispositivo en
 - Se actualiza la fecha del encabezado de esta bitácora para que no quede desfasada respecto a las anotaciones de octubre 27.
 - Esta bitácora y los documentos P0 enumerados en `docs/migracion-nube/` son el respaldo versionado del avance, decisiones, riesgos y siguientes pasos. No equivalen a una copia descargable independiente ni a una prueba de build; GitHub conserva el historial por commits en la rama `chatgpt/sincronizacion-integridad-nube`.
 - Estado general: objetivo y estrategia documentados; inventario/auditorías P0 registrados; implementación de nube todavía no completada; binario de la release todavía no inspeccionado; pruebas de migración y pruebas reales entre teléfonos pendientes. No modificar `main` ni fusionar PR #122 sin revisión y autorización explícita.
+
+## 14. Corrección del estado de compilación con CI posterior (27 de octubre de 2026)
+
+Esta sección actualiza la conclusión de la sección 13 a la luz de ejecuciones posteriores. Se conserva la anotación histórica anterior, pero ya no debe leerse como el estado actual de compilación.
+
+- **Workflow de push, ejecución [40517906699](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/40517906699):** job `build` completado con conclusión `success`. En el detalle de la ejecución se confirmó que el paso de compilación de Debug APK terminó correctamente.
+- **Workflow de PR, ejecución [40517916861](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/40517916861):** job `build` completado con conclusión `success`.
+- Estas ejecuciones corresponden al avance de la rama en torno al commit `9766f42cbfa05babc03e45a840497757d96bd94a`. La ejecución anterior `40511465262`, que quedó cancelada/inconsistente, fue superada por estas ejecuciones verdes; no se borra su antecedente histórico.
+- **Qué sí queda confirmado:** GitHub Actions terminó satisfactoriamente el job de compilación en las dos ejecuciones citadas, y la ejecución de push confirma el paso de compilación de Debug APK.
+- **Qué NO queda confirmado:** no se acredita con esto la seguridad de la migración Room 37→38, pruebas automatizadas de migración, sincronización funcional entre dos teléfonos, resolución de conflictos, propagación global de borrados, ni qué versión de APK está instalada en cada dispositivo. El pipeline observado no ejecutó pruebas funcionales de esos casos.
+- No se añade una dependencia Firebase ni se habilita Firestore en esta actualización documental. No se cambia código de producción ni el esquema Room.
+
+### Estado actualizado
+
+**Compilación de artefactos confirmada por CI para el avance documentado; pruebas de migración Room, pruebas funcionales y validación entre teléfonos siguen pendientes.** El siguiente paso técnico debe ser definir y verificar el contrato del piloto Matriz + Pase (identidad compartida, renombres, borrados/tombstones y confirmación de operaciones remotas) y establecer un arnés de pruebas con un esquema Room de origen auténtico antes de diseñar otra migración. Mantener Firestore con reglas `deny-all`, `main` intacta y PR #122 sin fusionar sin autorización explícita.
