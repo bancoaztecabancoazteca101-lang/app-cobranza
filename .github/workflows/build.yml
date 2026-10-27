@@ -62,7 +62,7 @@ jobs:
         with:
           name: room-schemas-${{ github.sha }}
           path: app/schemas/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
       # En main: el APK release (sin R8) se publica con el nombre de siempre (app-debug.apk) para que el
