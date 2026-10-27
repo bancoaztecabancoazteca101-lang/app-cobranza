@@ -56,6 +56,15 @@ jobs:
           exit 0
         continue-on-error: false
 
+      - name: Guardar esquema Room generado
+        if: env.BUILD_FAILED != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: room-schemas-${{ github.sha }}
+          path: app/schemas/
+          if-no-files-found: error
+          retention-days: 14
+
       # En main: el APK release (sin R8) se publica con el nombre de siempre (app-debug.apk) para que el
       # enlace permanente latest-debug siga funcionando.
       - name: APK release con el nombre de siempre (solo main)
