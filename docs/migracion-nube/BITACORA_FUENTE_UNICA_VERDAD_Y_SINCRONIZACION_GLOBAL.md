@@ -605,3 +605,24 @@ Esta sección actualiza la conclusión de la sección 13 a la luz de ejecuciones
 ### Estado actualizado
 
 **Compilación de artefactos confirmada por CI para el avance documentado; pruebas de migración Room, pruebas funcionales y validación entre teléfonos siguen pendientes.** El siguiente paso técnico debe ser definir y verificar el contrato del piloto Matriz + Pase (identidad compartida, renombres, borrados/tombstones y confirmación de operaciones remotas) y establecer un arnés de pruebas con un esquema Room de origen auténtico antes de diseñar otra migración. Mantener Firestore con reglas `deny-all`, `main` intacta y PR #122 sin fusionar sin autorización explícita.
+
+## 15. Contrato del piloto de integridad Matriz + Pase — P0-L (27 de octubre de 2026)
+
+Se creó `docs/migracion-nube/CONTRATO_PILOTO_INTEGRIDAD_MATRIZ_PASE_P0_L.md` en esta rama, commit `a296a3663a211e9c86490d186fb94975672cd66e`.
+
+### Hallazgos concretos contrastados con el código actual
+
+- `SyncWorker.syncPase()` resuelve primero la cola `PaseSyncOperationEntity`. En una operación RENAME, si no encuentra el ID anterior ni el nuevo, completa la operación antes de que el upsert posterior cree la fila nueva. El código indica que el upsert la creará después, pero no exige que la creación esté confirmada antes de completar la operación; debe cerrarse esa ventana de fallo.
+- El upsert de Pase usa un ID aleatorio de 12 caracteres creado en `PaseCarteraViewModel.aplicarImportacion()`. La prevención de duplicados compara `origenMatrizId` dentro de la base local; no demuestra una identidad única compartida entre teléfonos.
+- `SheetsRepository.appendRow()` espera la respuesta de la API, pero no usa una clave idempotente remota. Si el servidor acepta una fila y la respuesta se pierde, un reintento puede volver a anexarla.
+- `FiltrarViewModel.guardarRegistroCompleto()` invoca `renameRowId()` y no comprueba su resultado booleano antes de cambiar el ID en Room. El contrato exige corregir esta ruta para que un resultado `false` no produzca una mutación local parcial. **El código todavía no se ha corregido en este paso.**
+- Matriz usa borrado físico en las rutas inspeccionadas y la descarga desde Sheets puede volver a insertar una fila que ya no existe localmente. Hace falta un tombstone/estado canónico para que un borrado confirmado no resucite en otro teléfono.
+- Pase debe conservar su ciclo de vida independiente: borrar/editar Matriz no debe propagar automáticamente esas acciones a Pase.
+
+### Decisión de trabajo
+
+Se documentaron las reglas propuestas y los casos mínimos de prueba en P0-L. No se modificó código de producción, no se cambió `DB_VERSION = 38`, no se añadió dependencia, no se habilitó Firestore ni se modificó la cola existente.
+
+### Próximo paso
+
+Preparar la puerta de pruebas con esquema Room de origen auténtico y revisar las versiones realmente distribuidas; después, diseñar pruebas que cubran el renombre desde Filtrar, operaciones Pase pendientes, duplicados tras timeout, tombstones y migración preservando filas. No comenzar Room 38→39 hasta que estas pruebas sean reproducibles. Mantener `main` intacta y PR #122 sin fusionar.
