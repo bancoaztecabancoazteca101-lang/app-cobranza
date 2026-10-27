@@ -56,6 +56,27 @@ jobs:
           exit 0
         continue-on-error: false
 
+      - name: Recuperar snapshot Room 37 auténtico
+        if: env.BUILD_FAILED != 'true'
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repo: bancoaztecabancoazteca101-lang/app-cobranza
+          run_id: 40543083998
+          name: room-schema-v37-b19c7fec1fac364b129d439c83cedeade2e0cac2
+          path: /tmp/room-schema-v37
+          if_no_artifact_found: fail
+
+      - name: Instalar snapshot Room 37 en esquema de pruebas
+        if: env.BUILD_FAILED != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p app/schemas/com.example.matrizapp.AppDatabase
+          find /tmp/room-schema-v37 -type f -name '37.json' -exec cp {} app/schemas/com.example.matrizapp.AppDatabase/37.json \\\;
+          test -s app/schemas/com.example.matrizapp.AppDatabase/37.json
+          test -s app/schemas/com.example.matrizapp.AppDatabase/38.json
+          echo "Snapshots Room 37 y 38 listos para MigrationTestHelper"
+
       - name: Probar migración Room 37 a 38 en emulador
         if: env.BUILD_FAILED != 'true'
         uses: ReactiveCircus/android-emulator-runner@v2
