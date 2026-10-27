@@ -572,3 +572,13 @@ Lectura estática de código. No se ejecutó Gradle ni pruebas de dispositivo en
 - No se añadió código de producción ni una migración Room nueva en este paso.
 - No se ejecutaron pruebas de migración ni una compilación exitosa.
 - Mantener el PR #122 sin fusionar. Antes de tocar `AppDatabase.kt`, resolver/aislar el bloqueo de CI y establecer evidencia sobre las versiones realmente distribuidas; después crear el fixture válido de esquema 38 y el arnés de pruebas.
+
+
+## 12. Seguimiento del bloqueo CI y repositorios Gradle (27 de octubre de 2026)
+
+- Inspeccionados los archivos reales `settings.gradle` (blob `128e606e872e86e5a8e67300a1ab4dbe55ea0507`) y `build.gradle` (blob `b5580a14fcd59cf1e69f17150cfbcfe34dee15f1`) de la rama.
+- Los repositorios configurados son los helpers oficiales de Gradle `google()`, `mavenCentral()` y `gradlePluginPortal()`; no se encontró una URL Maven Central escrita manualmente ni un mirror personalizado en esos archivos. Por ello no se cambió el endpoint a ciegas.
+- La documentación oficial de Sonatype indica que un HTTP 403 puede deberse a bloqueo de tráfico/egress, política de uso o incidencia del CDN; debe investigarse con el error exacto y estado del servicio, no sustituir repositorios sin diagnóstico. Referencia: https://central.sonatype.org/faq/403-error-central/
+- Se solicitó volver a ejecutar los jobs fallidos de la ejecución CI `40511465262`. La consulta posterior mostró la ejecución en estado `queued`; el resultado de este reintento queda PENDIENTE y no se afirma que compiló.
+- Se intentó acceder al APK de la release publicada para inspección, pero la descarga del binario no se completó en esta sesión. No se declara verificada la versión Room del APK.
+- Estado: sin cambios de código de producción, sin cambios en repositorios Gradle, sin migración Room nueva, sin build exitoso confirmado. Mantener PR #122 abierto y `main` intacta.
