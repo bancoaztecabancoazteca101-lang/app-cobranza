@@ -648,3 +648,19 @@ Se corrigió en la rama de trabajo la ruta `FiltrarViewModel.guardarRegistroComp
 ### Siguiente paso
 
 Esperar el resultado de CI para este commit. Después, seguir con el arnés de pruebas de integridad sin subir aún `DB_VERSION`: obtener un APK distribuido que pueda inspeccionarse o una exportación de esquema Room auténtica, confirmar cómo probar migración y preservación de `pase_sync_operation_table`, y añadir pruebas para colisión/renombre, fallo remoto y reintento. Mantener PR #122 abierto y Firestore con reglas `deny-all`.
+
+
+## 17. Puerta de pruebas reproducibles Room y sincronización P0 — 27 de octubre de 2026
+
+Se creó `docs/migracion-nube/PUERTA_PRUEBAS_ROOM_Y_SYNC_P0.md` (commit inicial `c7eb4faee824d713d0c41c4649163f19e313071b`, luego precisión de evidencia CI en `88198436d440861349ad020301b736b5eb58a9fc`). El documento convierte el siguiente paso en una puerta verificable, sin elevar la versión de Room.
+
+Evidencia inspeccionada en la rama:
+
+- `AppDatabase.kt`, blob `6a641b399e8ae6071a6e46b4629abc115c5a99f1`: `DB_VERSION=38`, `exportSchema=false`; `MIGRATION_37_38` crea `pase_sync_operation_table` con clave primaria `operationKey` y campos `type`, `oldId`, `newId`.
+- `app/build.gradle`, blob `9a5f44092bf87b94b4a3418839002fa4ed9da55e`: Room 2.6.1; no se observan dependencias de pruebas Room/JUnit/AndroidX Test en el archivo inspeccionado.
+- No se encontró `app/schemas`, `gradle/libs.versions.toml` ni wrapper `gradlew` en las rutas raíz inspeccionadas. El workflow `.github/workflows/build.yml` usa Gradle 8.4 y no ejecuta pruebas automatizadas; compilar variantes no equivale a validar migración ni sincronización.
+- El run de PR `40527045342` fue cancelado; el run `40527186356` vinculado a una actualización documental se observó pendiente. No se declara CI verde para el cambio de código `f7b021314b75bfbc8f624e15b0c167e4e07af659`.
+
+La puerta define pruebas para: migración 37→38 y preservación de datos; colisiones/renombre de Matriz desde Filtrar; fallos remotos/reintentos; cola de operaciones de Pase; y, después, prueba controlada de dos dispositivos. También deja explícito que las llamadas Room/Sheets no son una transacción distribuida, que una respuesta remota ambigua puede requerir reconciliación, y que no se debe asumir versión instalada de los teléfonos sin evidencia.
+
+**Estado:** puerta documentada; todavía no se implementaron pruebas automatizadas ni se confirmó compilación verde del cambio. No se cambió `DB_VERSION`, no se alteraron reglas Firebase, `main` sigue intacta y PR #122 sigue abierto sin merge.
