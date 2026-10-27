@@ -36,9 +36,10 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         manifestPlaceholders = [MAPS_API_KEY: project.findProperty("MAPS_API_KEY") ?: "PENDIENTE_CONFIGURAR"]
-        buildConfigField "String", "BUILD_SHA", "\"${gitShaForBuild}\""
-        buildConfigField "String", "BUILD_NUMBER", "\"${buildNumberForBuild}\""
+        buildConfigField "String", "BUILD_SHA", "\"\u0024{gitShaForBuild}\""
+        buildConfigField "String", "BUILD_NUMBER", "\"\u0024{buildNumberForBuild}\""
     }
     signingConfigs {
         debug {
@@ -87,6 +88,15 @@ android {
         resources { excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/LICENSE.txt', 'META-INF/NOTICE', 'META-INF/NOTICE.txt'] }
     }
 }
+
+// Exporta el esquema que Room genera desde las entidades reales.
+// No se escribe un snapshot manual: debe generarse compilando el código.
+kapt {
+    arguments {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
 dependencies {
     implementation 'androidx.profileinstaller:profileinstaller:1.3.1'
     implementation 'androidx.core:core-ktx:1.12.0'
@@ -119,4 +129,10 @@ dependencies {
     // Firebase BoM: mantiene compatibles las versiones de los SDK de Firebase.
     implementation platform('com.google.firebase:firebase-bom:34.18.0')
     implementation 'com.google.firebase:firebase-messaging'
+
+    // Infraestructura para pruebas de migraciones Room y acceso a base SQLite.
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test:rules:1.5.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.room:room-testing:2.6.1'
 }
