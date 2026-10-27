@@ -552,3 +552,23 @@ Completar el mapa de operaciones por entidad y campo, empezando por:
 ### Estado de verificación
 
 Lectura estática de código. No se ejecutó Gradle ni pruebas de dispositivo en esta continuación. No afirmar compilación ni sincronización global verificada. Mantener Firestore con reglas `deny-all`, no cambiar migraciones Room sin plan de pruebas y no fusionar PR #122 sin autorización.
+
+
+## 11. Verificación adicional P0 — versiones publicadas y bloqueo de CI (27 de octubre de 2026)
+
+### Ejecución CI inspeccionada
+- Ejecución GitHub Actions: [40511465262](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/40511465262), asociada al PR #122 y al commit `e28a32cc27018f09b4b7961d8f1ddaa5608bcd64`.
+- Resultado: `failure`. El log de Gradle muestra respuestas HTTP 403 al descargar dependencias de `repo.maven.apache.org`, entre ellas `jsr305:3.0.2`, `guava:31.1-jre` y `kotlin-stdlib-jdk8:1.8.20-RC2`; termina en `BUILD FAILED` tras 14 segundos.
+- Interpretación: el fallo observado es de resolución/descarga de dependencias desde Maven Central en esa ejecución. No es evidencia de que el código Kotlin haya fallado al compilar por un error de fuente. Tampoco permite declarar la rama compilada; el pipeline no quedó verde.
+- No se cambió configuración de repositorios ni dependencias automáticamente: primero se debe confirmar si el 403 es transitorio, del entorno/rate limit o una política de red y revisar el bloque de repositorios real. No cambiar versiones de dependencias sin evidencia.
+
+### Referencia publicada con APK
+- Release `latest-debug-claude/seguimiento-cartuchos`: [página de release](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/releases/tag/latest-debug-claude/seguimiento-cartuchos).
+- El cuerpo de la release indica que fue generada desde el commit `6d05d8b484c3d7d450f1d100e06fa2a441fe40e2`; publica `app-debug.apk`, `app-release.apk` y `app-optimizado.apk`.
+- El registro de la release no demuestra qué APK está instalado en cada teléfono. Los binarios no se han inspeccionado para extraer el esquema Room; por tanto, aún no se conoce la versión instalada en los dispositivos.
+- El siguiente paso para establecer compatibilidad es obtener y examinar el APK publicado (manifest/clases Room o metadatos equivalentes) y comparar sus migraciones con la rama actual. No inferir la versión instalada a partir del nombre de la etiqueta ni del número de descargas.
+
+### Estado y siguiente acción
+- No se añadió código de producción ni una migración Room nueva en este paso.
+- No se ejecutaron pruebas de migración ni una compilación exitosa.
+- Mantener el PR #122 sin fusionar. Antes de tocar `AppDatabase.kt`, resolver/aislar el bloqueo de CI y establecer evidencia sobre las versiones realmente distribuidas; después crear el fixture válido de esquema 38 y el arnés de pruebas.
