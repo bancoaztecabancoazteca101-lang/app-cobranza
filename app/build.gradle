@@ -38,8 +38,8 @@ android {
         versionName "1.0"
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         manifestPlaceholders = [MAPS_API_KEY: project.findProperty("MAPS_API_KEY") ?: "PENDIENTE_CONFIGURAR"]
-        buildConfigField "String", "BUILD_SHA", "\"\u0024{gitShaForBuild}\""
-        buildConfigField "String", "BUILD_NUMBER", "\"\u0024{buildNumberForBuild}\""
+        buildConfigField "String", "BUILD_SHA", "\"${gitShaForBuild}\""
+        buildConfigField "String", "BUILD_NUMBER", "\"${buildNumberForBuild}\""
     }
     signingConfigs {
         debug {
