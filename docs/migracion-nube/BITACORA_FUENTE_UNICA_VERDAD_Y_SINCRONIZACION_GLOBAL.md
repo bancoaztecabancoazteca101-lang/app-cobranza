@@ -1,6 +1,6 @@
 # BITÁCORA DE CONTINUIDAD — FUENTE ÚNICA DE VERDAD Y SINCRONIZACIÓN GLOBAL
 
-Actualizada: 23 de octubre de 2026 — revisión de estrategia  
+Actualizada: 27 de octubre de 2026 — continuidad técnica y estado de CI  
 Repositorio: `bancoaztecabancoazteca101-lang/app-cobranza`  
 Rama de trabajo: `chatgpt/sincronizacion-integridad-nube`  
 PR: https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/pull/122  
@@ -582,3 +582,11 @@ Lectura estática de código. No se ejecutó Gradle ni pruebas de dispositivo en
 - Se solicitó volver a ejecutar los jobs fallidos de la ejecución CI `40511465262`. La consulta posterior mostró la ejecución en estado `queued`; el resultado de este reintento queda PENDIENTE y no se afirma que compiló.
 - Se intentó acceder al APK de la release publicada para inspección, pero la descarga del binario no se completó en esta sesión. No se declara verificada la versión Room del APK.
 - Estado: sin cambios de código de producción, sin cambios en repositorios Gradle, sin migración Room nueva, sin build exitoso confirmado. Mantener PR #122 abierto y `main` intacta.
+
+
+## 13. Cierre de verificación CI y vigencia de esta bitácora (27 de octubre de 2026)
+
+- Se volvió a consultar la ejecución `40511465262` después de solicitar reintento. GitHub muestra la ejecución como `completed` con conclusión `cancelled`; en la consulta de jobs, el job `build` aún figuraba `queued`. Los estados devueltos son inconsistentes entre ejecución y job, así que el reintento NO se considera una compilación exitosa ni una validación fallida del código fuente. La compilación continúa **SIN CONFIRMAR**.
+- Se actualiza la fecha del encabezado de esta bitácora para que no quede desfasada respecto a las anotaciones de octubre 27.
+- Esta bitácora y los documentos P0 enumerados en `docs/migracion-nube/` son el respaldo versionado del avance, decisiones, riesgos y siguientes pasos. No equivalen a una copia descargable independiente ni a una prueba de build; GitHub conserva el historial por commits en la rama `chatgpt/sincronizacion-integridad-nube`.
+- Estado general: objetivo y estrategia documentados; inventario/auditorías P0 registrados; implementación de nube todavía no completada; binario de la release todavía no inspeccionado; pruebas de migración y pruebas reales entre teléfonos pendientes. No modificar `main` ni fusionar PR #122 sin revisión y autorización explícita.
