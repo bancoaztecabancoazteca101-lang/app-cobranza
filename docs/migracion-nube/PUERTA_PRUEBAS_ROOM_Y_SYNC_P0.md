@@ -9,7 +9,7 @@ Fecha de revisión: 27 de octubre de 2026. Rama: `chatgpt/sincronizacion-integri
 - `app/build.gradle`, blob `9a5f44092bf87b94b4a3418839002fa4ed9da55e`: Room `2.6.1`; no aparecen dependencias de pruebas JUnit, AndroidX Test o `room-testing` en este archivo.
 - `settings.gradle` incluye `:app`; no se encontró `gradle/libs.versions.toml` ni `app/schemas` en esta rama. `exportSchema=false` impide usar una exportación de esquema versionada que no existe en el repositorio.
 - `.github/workflows/build.yml`, blob `c4a817f75d93e66e5ea21a2b807e704459cb7bde`: instala Gradle 8.4 y compila variantes; el workflow no contiene un paso de pruebas unitarias/instrumentadas. El wrapper `gradlew` no se encontró en la raíz en la inspección previa.
-- La compilación del cambio `f7b021314b75bfbc8f624e15b0c167e4e07af659` no se puede considerar aprobada: su ejecución de PR fue cancelada. La ejecución `40527186356` también fue cancelada al actualizarse la rama. La ejecución de commit documental `2e58976abd16eee0ca76c5b73eea9ba2cc98b1d4` (`40527186356`/`40527186356` no es evidencia de build del código final) no sustituye una ejecución verde del HEAD actual. Verificar una ejecución nueva sobre el HEAD actual antes de afirmar compilación.
+- La compilación del cambio `f7b021314b75bfbc8f624e15b0c167e4e07af659` no se puede considerar aprobada: la ejecución de PR `40527045342` fue cancelada. Después se observó una ejecución `40527186356` pendiente asociada al commit documental `2e58976abd16eee0ca76c5b73eea9ba2cc98b1d4`; no demuestra que el código compilara. Verificar una ejecución nueva sobre el HEAD actual antes de afirmar compilación.
 
 ## Regla de seguridad
 
