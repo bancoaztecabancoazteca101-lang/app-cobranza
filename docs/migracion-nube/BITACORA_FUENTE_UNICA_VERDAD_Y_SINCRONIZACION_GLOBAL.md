@@ -664,3 +664,26 @@ Evidencia inspeccionada en la rama:
 La puerta define pruebas para: migración 37→38 y preservación de datos; colisiones/renombre de Matriz desde Filtrar; fallos remotos/reintentos; cola de operaciones de Pase; y, después, prueba controlada de dos dispositivos. También deja explícito que las llamadas Room/Sheets no son una transacción distribuida, que una respuesta remota ambigua puede requerir reconciliación, y que no se debe asumir versión instalada de los teléfonos sin evidencia.
 
 **Estado:** puerta documentada; todavía no se implementaron pruebas automatizadas ni se confirmó compilación verde del cambio. No se cambió `DB_VERSION`, no se alteraron reglas Firebase, `main` sigue intacta y PR #122 sigue abierto sin merge.
+
+
+## 18. Infraestructura inicial para exportar esquema Room — 27 de octubre de 2026
+
+Se abrió la rama aislada `chatgpt/room-test-infrastructure` desde el commit `bfe290630ef9038c9ca4ee91d048de7820760b82`. El propósito de esta rama es habilitar evidencia de esquema/pruebas, sin cambiar el modelo de datos ni fusionar PR #122.
+
+Cambios realizados en esta rama:
+
+- `app/build.gradle`: se añadió `testInstrumentationRunner`, configuración KAPT `room.schemaLocation` apuntando a `app/schemas`, y dependencias AndroidX Test/JUnit y `androidx.room:room-testing:2.6.1`. Se conservaron las dependencias existentes y los campos `BUILD_SHA`/`BUILD_NUMBER`.
+- `app/src/main/java/com/example/matrizapp/AppDatabase.kt`: `exportSchema` cambia de `false` a `true`; `DB_VERSION) sigue en 38 y no se añadió migración.
+- `.github/workflows/build.yml`: después de la compilación, intenta publicar `app/schemas/` como artefacto por 14 días. Si el compilador no genera el directorio, advierte sin bloquear la entrega del APK; por ello la presencia del artefacto se debe verificar en el run.
+- Commits de la rama: `0fd759c79c1d009c4a66cb352d001195c8d96469` (preparación inicial), `f23c0eb83128728f2111a3a2a4a80624923fa04b` (conservar interpolación de build), `b630f62c2b13aa1f8a8b69ca2024f2317a8c88d4` (exportación Room), `083e111bac677548fdf9a5ebebc111e8d451b695` (artefacto de esquema), `b0d3482752500e561ba695b6a0571cfa66113719` (no bloquear APK si falta esquema).
+
+Verificación y límites:
+
+- La edición de archivos se confirmó por GitHub; todavía no hay evidencia de compilación de esta rama ni de que el artefacto `app/schemas` se haya generado. Debe revisarse el CI del HEAD `b0d3482752500e561ba695b6a0571cfa66113719`.
+- Esta infraestructura no sustituye una base de versión 37 auténtica. No crear a mano un snapshot 37 ni afirmar que existe una prueba de migración hasta obtener esquema/base de origen real.
+- Aún no se ha añadido una clase de prueba de migración; las dependencias permiten preparar ese paso, pero por sí solas no validan nada.
+- `main) permanece intacta; PR #122 sigue sin fusionar; Firebase/Firestore no se habilita para datos productivos; Apps Script permanece fuera de alcance.
+
+### Siguiente paso
+
+Verificar el CI y confirmar si se generó el artefacto Room. Si compila, recuperar el esquema 38 generado y versionarlo como salida auténtica. Después buscar una base/esquema 37 de un APK distribuido, y solo entonces implementar la prueba 37→38 con `MigrationTestHelper`. No subir a DB_VERSION 39 hasta que esta puerta esté respaldada por evidencia.
