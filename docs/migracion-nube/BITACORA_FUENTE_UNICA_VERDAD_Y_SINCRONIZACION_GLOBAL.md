@@ -706,3 +706,24 @@ Evidencia comprobada en GitHub Actions:
 **Bloqueo de la prueba de migración:** el esquema 38 ya se verificó dentro del artefacto; todavía no se ha versionado como archivo en el repositorio. No se debe fabricar un esquema 37. Sigue pendiente localizar un esquema o una base de datos de versión 37 generado por una compilación real/distribuida, y verificar que corresponde al código de esa versión. No aumentar `DB_VERSION` ni habilitar Firestore productivo hasta completar esta puerta.
 
 Estado de seguridad y alcance: `main` no se modificó; PR #122 permanece sin merge; Firestore no se habilita para datos productivos; Apps Script sigue fuera del alcance.
+
+
+## 20. Captura del esquema Room 37 y primera prueba SQL — 27 de octubre de 2026
+
+Se creó una rama temporal aislada desde el commit histórico real `c766bea1ef231e02aa0d091d6cbb1f94b7dd8aa1`: `chatgpt/room-schema-v37-capture`. En esa rama solo se habilitó `exportSchema=true`, se configuró `room.schemaLocation` y se publicó el esquema generado por Room como artefacto de CI.
+
+Evidencia del esquema 37:
+- CI run `40543083998`, conclusión `success`: https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/40543083998
+- Artefacto ID `12751194955`, nombre `room-schema-v37-b19c7fec1fac364b129d439c83cedeade2e0cac2`, expira el 10 de noviembre de 2026.
+- El ZIP contiene `com.example.matrizapp.AppDatabase/37.json`; Room declara `database.version=37`, 22 entidades/tablas y hash `6f8d3d12b03c4f57838d8920358aa3a5`.
+- El artefacto 38 previamente inspeccionado contiene `38.json`, versión 38, 23 entidades/tablas y hash `c19a207e422bacd6bdf0258bca1c8ae2`. El nuevo esquema incorpora `PaseSyncOperationEntity`.
+
+Primer paso de prueba añadido a `chatgpt/room-test-infrastructure`:
+- `AppDatabase.kt`: la visibilidad de `MIGRATION_37_38` cambia de privada a interna para permitir prueba.
+- Se agregó `app/src/androidTest/java/com/example/matrizapp/PaseSyncMigrationSqlTest.kt`. La prueba ejecuta el objeto de migración real contra SQLite, comprueba que se crea `pase_sync_operation_table`, que un registro de una tabla preexistente sigue intacto y que la cola inicia vacía.
+- Se añadió al workflow el paso de emulador Android para ejecutar `gradle connectedDebugAndroidTest`.
+- Commits de estos cambios: `7bad05ac7c77a2d1bb1d396de5d3d6cf285ec6e2` (visibilidad de migración), `bf241257e59c227cc9b47262649f302020002cc7` (prueba), `7659ee8da894e024d3154200bab23c041681217e` (workflow de emulador).
+
+Estado al escribir esta nota: la ejecución CI del HEAD `7659ee8da894e024d3154200bab23c041681217e` está pendiente; no se afirma que la prueba compile ni que haya pasado. Esta prueba es deliberadamente acotada: usa una base de prueba mínima y no sustituye todavía `MigrationTestHelper` con el esquema 37 completo. El siguiente paso es comprobar el resultado CI; después incorporar los snapshots auténticos 37/38 al repositorio y construir la prueba integral de migración con validación del esquema completo y conservación de datos.
+
+Sin cambios en `main`; no se fusionó PR #122; no se activó Firestore productivo; Apps Script sigue fuera del alcance.
