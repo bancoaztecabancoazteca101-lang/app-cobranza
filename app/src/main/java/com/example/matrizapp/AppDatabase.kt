@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /** Versión del esquema de Room. ÚNICO lugar donde se cambia: la usa @Database y el respaldo previo a abrir la base. */
 const val DB_VERSION = 38
 
-@Database(entities = [MatrizEntity::class, TicketPagoEntity::class, VisitaMapaEntity::class, PaseEntity::class, PaseSyncOperationEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class, BloqueHorarioEntity::class, ContactoLogEntity::class, PlantillaSmsEntity::class, ConfiguracionAutomatizacionEntity::class, ReglaSemanaEntity::class, RutaIAEntity::class, RutaIAFiltroEntity::class, CanalPagoEntity::class, ContactoExtraEntity::class, VelocidadEntity::class, ComisionEntity::class, BolsaGerenciaEntity::class, CartuchoDiaEntity::class, Sem6RegistroEntity::class], version = DB_VERSION, exportSchema = false)
+@Database(entities = [MatrizEntity::class, TicketPagoEntity::class, VisitaMapaEntity::class, PaseEntity::class, PaseSyncOperationEntity::class, SolicitudEntity::class, FiltroFechaEntity::class, FiltrarEntity::class, ControlEntity::class, BloqueHorarioEntity::class, ContactoLogEntity::class, PlantillaSmsEntity::class, ConfiguracionAutomatizacionEntity::class, ReglaSemanaEntity::class, RutaIAEntity::class, RutaIAFiltroEntity::class, CanalPagoEntity::class, ContactoExtraEntity::class, VelocidadEntity::class, ComisionEntity::class, BolsaGerenciaEntity::class, CartuchoDiaEntity::class, Sem6RegistroEntity::class], version = DB_VERSION, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun matrizDao(): MatrizDao
     abstract fun ticketPagoDao(): TicketPagoDao
