@@ -687,3 +687,22 @@ Verificación y límites:
 ### Siguiente paso
 
 Verificar el CI y confirmar si se generó el artefacto Room. Si compila, recuperar el esquema 38 generado y versionarlo como salida auténtica. Después buscar una base/esquema 37 de un APK distribuido, y solo entonces implementar la prueba 37→38 con `MigrationTestHelper`. No subir a DB_VERSION 39 hasta que esta puerta esté respaldada por evidencia.
+
+
+## 19. Verificación CI de infraestructura Room — 27 de octubre de 2026
+
+Se verificó el HEAD real de `chatgpt/room-test-infrastructure`: commit `55f13f8dfc462d8ee2e99cf3eb862802b45503c6`.
+
+Evidencia comprobada en GitHub Actions:
+
+- Ejecución `40533800777`: conclusión `success`; el job `build` terminó correctamente.
+- Los pasos `Build Debug APK`, `Guardar esquema Room generado` y `Publish stable release with APK` finalizaron correctamente.
+- Se publicó el artefacto `room-schemas-55f13f8dfc462d8ee2e99cf3eb862802b45503c6`, ID `12747461992`, tamaño 3560 bytes, con vencimiento el 10 de noviembre de 2026. Esto confirma que se generó y subió contenido para `app/schemas/`; falta inspeccionar el ZIP y comprobar el JSON exacto incluido.
+- El archivo `app/build.gradle` confirma que `room.schemaLocation` apunta a `app/schemas`, que están declaradas las dependencias `room-testing:2.6.1` y AndroidX Test, y que los campos `BUILD_SHA` y `BUILD_NUMBER` conservan interpolación de Gradle.
+- `AppDatabase.kt` confirma `DB_VERSION=38` y `exportSchema=true`. No se añadió una migración ni una prueba instrumentada en este cambio.
+
+**Qué significa y qué no:** CI demuestra compilación correcta de las variantes configuradas y publicación del artefacto de esquema. No demuestra que la migración 37→38 preserve datos ni que la sincronización global sea correcta. El workflow no ejecuta pruebas instrumentadas de Room. El artefacto debe inspeccionarse y guardarse como evidencia versionada si contiene el esquema 38 válido.
+
+**Bloqueo de la prueba de migración:** no se debe fabricar un esquema 37. Sigue pendiente localizar un esquema o una base de datos de versión 37 generado por una compilación real/distribuida, y verificar que corresponde al código de esa versión. No aumentar `DB_VERSION` ni habilitar Firestore productivo hasta completar esta puerta.
+
+Estado de seguridad y alcance: `main` no se modificó; PR #122 permanece sin merge; Firestore no se habilita para datos productivos; Apps Script sigue fuera del alcance.
