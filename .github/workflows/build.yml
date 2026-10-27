@@ -56,6 +56,15 @@ jobs:
           exit 0
         continue-on-error: false
 
+      - name: Probar migración Room 37 a 38 en emulador
+        if: env.BUILD_FAILED != 'true'
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          profile: pixel_2
+          script: gradle connectedDebugAndroidTest --stacktrace
+
       - name: Guardar esquema Room generado
         if: env.BUILD_FAILED != 'true'
         uses: actions/upload-artifact@v4
