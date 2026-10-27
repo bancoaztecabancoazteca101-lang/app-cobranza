@@ -208,7 +208,7 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("""CREATE TABLE IF NOT EXISTS sem6_registro_table (hoja TEXT NOT NULL, id TEXT NOT NULL, nombre TEXT NOT NULL, sem TEXT NOT NULL, req TEXT NOT NULL, cu TEXT NOT NULL, ubicacion TEXT NOT NULL, imagenUrl TEXT, colonia TEXT NOT NULL, visitas INTEGER NOT NULL, ultimaFechaVisita TEXT NOT NULL, numTT TEXT NOT NULL, seContiene TEXT NOT NULL, susceptible TEXT NOT NULL, observaciones TEXT NOT NULL, capital TEXT NOT NULL, abono TEXT NOT NULL, PRIMARY KEY(hoja, id))""")
             }
         }
-        private val MIGRATION_37_38 = object : Migration(37, 38) {
+        internal val MIGRATION_37_38 = object : Migration(37, 38) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS pase_sync_operation_table (operationKey TEXT NOT NULL PRIMARY KEY, type TEXT NOT NULL, oldId TEXT NOT NULL, newId TEXT)")
             }
