@@ -527,3 +527,28 @@ Se creó `docs/migracion-nube/INVENTARIO_ENTIDADES_NUBE_P0.md` en la rama `chatg
 - Riesgos que se preservan: cambios concurrentes, borrados resucitados, acoplamiento de `SheetsRepository`, falta de Firebase Auth/Firestore en el código actual, adjuntos, datos sensibles y necesidad de outbox idempotente.
 - Próximo paso: P0-A, mapear por módulo los puntos exactos de alta/edición/borrado/lectura y los caminos de subida/descarga; después redactar contrato de datos y elegir el piloto. No agregar dependencias ni código de Firestore hasta cerrar el mapa del piloto.
 - Sin compilación ni pruebas de dispositivos en esta etapa. `main` permanece intacta; PR #122 no se fusionó; Firestore conserva `deny-all`; scripts de llamadas/SMS fuera de alcance.
+
+
+## 8. Continuación P0 — CRUD, borrados y estado local (26-10-2026)
+
+Inspección adicional de `MatrizViewModel.kt`, `Entities.kt`, `DAOs.kt` y `Sem6ViewModel.kt` en la rama actual:
+
+- **Borrado de Matriz:** `eliminarRegistro()` llama primero al borrado en Sheets y elimina Room solo si el repositorio confirma éxito. Si falla, conserva el registro local. El propio código indica que requiere conexión y no usa una cola offline. La nube necesitará una operación durable de borrado y tombstone o mecanismo equivalente.
+- **Visitas del mapa:** `VisitaMapaEntity` declara clave primaria compuesta por `clave` y `fechaDia`; las claves se forman como `M:<id>` o `S6:<id>`. El comentario del modelo dice que este historial es local y no se sincroniza con Sheets. Existe limpieza de registros antiguos (aproximadamente cuatro meses). Si el historial debe compartirse, hay que definir idempotencia y retención global.
+- **Cartucho diario:** `CartuchoDiaEntity` se guarda localmente por fecha. Los teléfonos pueden discrepar para el mismo día; confirmar si el valor es global para el equipo o particular de un usuario antes de definir la política de sincronización.
+- **Semana 6:** `Sem6RegistroEntity` usa clave compuesta `hoja + id`. `Sem6ViewModel` importa inicialmente registros desde hojas y conserva eliminaciones en `Sem6CacheStore` local. Esa marca no comunica por sí sola el borrado a otros dispositivos. Definir si Semana 6 es proyección de Matriz, entidad editable compartida o combinación con campos de origen explícito.
+- **Protección de sincronización de Matriz:** el DAO `markAsClean` compara los campos enviados con los valores actuales antes de limpiar `isDirty`, reduciendo el riesgo de perder una edición local concurrente durante la subida. Sin embargo, las escrituras a Sheets siguen siendo múltiples actualizaciones de celda y no una transacción única del registro.
+- **Ruta IA:** el worker reemplaza el contenido completo de la hoja al detectar cambios locales; no se debe trasladar ese patrón a Firestore sin versionado y resolución de conflictos.
+
+### Próxima tarea concreta
+
+Completar el mapa de operaciones por entidad y campo, empezando por:
+1. rastrear cambios de ID de Matriz y confirmar todas sus rutas de escritura;
+2. definir contrato de borrado offline (Matriz, Pase, Semana 6 y demás entidades compartidas);
+3. mapear qué campos de Semana 6 proceden de Matriz y cuáles se editan de forma independiente;
+4. decidir alcance del cartucho diario y la retención del historial de visitas;
+5. diseñar pruebas de dos teléfonos con datos sintéticos antes de habilitar cualquier lectura/escritura productiva en Firestore.
+
+### Estado de verificación
+
+Lectura estática de código. No se ejecutó Gradle ni pruebas de dispositivo en esta continuación. No afirmar compilación ni sincronización global verificada. Mantener Firestore con reglas `deny-all`, no cambiar migraciones Room sin plan de pruebas y no fusionar PR #122 sin autorización.
