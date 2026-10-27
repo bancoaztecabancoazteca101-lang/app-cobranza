@@ -626,3 +626,25 @@ Se documentaron las reglas propuestas y los casos mínimos de prueba en P0-L. No
 ### Próximo paso
 
 Preparar la puerta de pruebas con esquema Room de origen auténtico y revisar las versiones realmente distribuidas; después, diseñar pruebas que cubran el renombre desde Filtrar, operaciones Pase pendientes, duplicados tras timeout, tombstones y migración preservando filas. No comenzar Room 38→39 hasta que estas pruebas sean reproducibles. Mantener `main` intacta y PR #122 sin fusionar.
+
+
+## 16. Corrección acotada del renombre desde Filtrar — 27 de octubre de 2026
+
+Se corrigió en la rama de trabajo la ruta `FiltrarViewModel.guardarRegistroCompleto()` para alinearla con la política que ya usa `MatrizViewModel.cambiarIdYGuardar()`.
+
+- Archivo: `app/src/main/java/com/example/matrizapp/FiltrarViewModel.kt`.
+- Commit: `f7b021314b75bfbc8f624e15b0c167e4e07af659`.
+- Cambio: antes de renombrar, comprueba si el ID destino ya existe en Room o en Sheets. Si el ID anterior existe remotamente, exige que `renameRowId()` devuelva `true` antes de cambiar la clave local. Si el registro anterior todavía no existe en Sheets, conserva la ruta de alta local pendiente para el siguiente push.
+- Si hay colisión, si Sheets devuelve `false` o si ocurre una excepción, informa el error por `onResult` y no continúa con el cambio local de ID.
+- No se modificaron `AppDatabase.kt`, `DB_VERSION`, dependencias ni reglas Firebase. No se tocaron `main` ni la configuración de Firestore.
+
+### Verificación pendiente
+
+- La lectura posterior de `FiltrarViewModel.kt` confirmó el nuevo blob `4e8fc544e5d2f9e3b0d2d176086f33799c949ea8`.
+- GitHub Actions creó la ejecución `40527045342` para el commit; en la última consulta estaba `pending`. Por tanto, la compilación de este cambio todavía no está confirmada.
+- No existe evidencia de pruebas automatizadas para este flujo ni de prueba entre dos teléfonos. El cambio es una corrección estática acotada, no una garantía de consistencia global.
+- La puerta de pruebas Room y el esquema de origen auténtico siguen pendientes. La versión Room instalada en cada teléfono no se ha establecido.
+
+### Siguiente paso
+
+Esperar el resultado de CI para este commit. Después, seguir con el arnés de pruebas de integridad sin subir aún `DB_VERSION`: obtener un APK distribuido que pueda inspeccionarse o una exportación de esquema Room auténtica, confirmar cómo probar migración y preservación de `pase_sync_operation_table`, y añadir pruebas para colisión/renombre, fallo remoto y reintento. Mantener PR #122 abierto y Firestore con reglas `deny-all`.
