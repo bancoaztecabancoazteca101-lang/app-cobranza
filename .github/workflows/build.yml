@@ -70,7 +70,7 @@ jobs:
       - name: Instalar snapshot Room 37 en esquema de pruebas
         if: env.BUILD_FAILED != 'true'
         run: |
-          set -euo pipefail
+          set -eu
           SCHEMA_DIR="com.example.matrizapp.AppDatabase"
           mkdir -p "app/schemas/$SCHEMA_DIR" "app/src/androidTest/assets/$SCHEMA_DIR"
           cp "/tmp/room-schema-v37/$SCHEMA_DIR/37.json" "app/schemas/$SCHEMA_DIR/37.json"
