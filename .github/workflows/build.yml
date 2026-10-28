@@ -71,11 +71,18 @@ jobs:
         if: env.BUILD_FAILED != 'true'
         run: |
           set -euo pipefail
-          mkdir -p app/schemas/com.example.matrizapp.AppDatabase
-          cp /tmp/room-schema-v37/com.example.matrizapp.AppDatabase/37.json app/schemas/com.example.matrizapp.AppDatabase/37.json
-          test -s app/schemas/com.example.matrizapp.AppDatabase/37.json
-          test -s app/schemas/com.example.matrizapp.AppDatabase/38.json
-          echo "Snapshots Room 37 y 38 listos para MigrationTestHelper"
+          SCHEMA_DIR="com.example.matrizapp.AppDatabase"
+          mkdir -p "app/schemas/$SCHEMA_DIR" "app/src/androidTest/assets/$SCHEMA_DIR"
+          cp "/tmp/room-schema-v37/$SCHEMA_DIR/37.json" "app/schemas/$SCHEMA_DIR/37.json"
+          test -s "app/schemas/$SCHEMA_DIR/37.json"
+          test -s "app/schemas/$SCHEMA_DIR/38.json"
+          # MigrationTestHelper lee los JSON desde los assets del APK de androidTest.
+          # app/schemas no se empaqueta automáticamente en androidTest assets.
+          cp "app/schemas/$SCHEMA_DIR/37.json" "app/src/androidTest/assets/$SCHEMA_DIR/37.json"
+          cp "app/schemas/$SCHEMA_DIR/38.json" "app/src/androidTest/assets/$SCHEMA_DIR/38.json"
+          test -s "app/src/androidTest/assets/$SCHEMA_DIR/37.json"
+          test -s "app/src/androidTest/assets/$SCHEMA_DIR/38.json"
+          echo "Snapshots Room 37 y 38 instalados en los assets que consume MigrationTestHelper"
 
       - name: Probar migración Room 37 a 38 en emulador
         if: env.BUILD_FAILED != 'true'
