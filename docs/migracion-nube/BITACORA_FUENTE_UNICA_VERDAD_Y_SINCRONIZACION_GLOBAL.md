@@ -727,3 +727,43 @@ Primer paso de prueba añadido a `chatgpt/room-test-infrastructure`:
 Estado al escribir esta nota: la ejecución CI del HEAD `7659ee8da894e024d3154200bab23c041681217e` está pendiente; no se afirma que la prueba compile ni que haya pasado. Esta prueba es deliberadamente acotada: usa una base de prueba mínima y no sustituye todavía `MigrationTestHelper` con el esquema 37 completo. El siguiente paso es comprobar el resultado CI; después incorporar los snapshots auténticos 37/38 al repositorio y construir la prueba integral de migración con validación del esquema completo y conservación de datos.
 
 Sin cambios en `main`; no se fusionó PR #122; no se activó Firestore productivo; Apps Script sigue fuera del alcance.
+
+
+## 21. Revisión independiente de Claude contrastada contra el código actual — 2026-10-27/28
+
+Esta sección registra el contraste realizado sobre la rama aislada `chatgpt/room-test-infrastructure`, HEAD `eab7f39a4407fbd81472ae81cdf5c0c104858455`. No sustituye la revisión del commit `9766f42` de `chatgpt/sincronizacion-integridad-nube`: son ramas/estados distintos. No se modificó `main`, no se fusionó PR #122 y no se afirma que la app esté lista para datos productivos.
+
+### Confirmado en el código actual
+
+- `SheetsRepository.refreshMatriz()` obtiene las filas remotas, actualiza/inserta registros y no elimina registros limpios que ya no están en la hoja. La reconciliación de borrados no está resuelta para Matriz.
+- `copiarPaseDesdeMatriz()` filtra por estado PASE y semana actual, usa `getOrigenesYaCopiados()` y genera ID aleatorio para cada copia. No se observa en este método un identificador determinista por origen ni una reconciliación que evite la resurrección después de borrar Pase. La tabla `pase_sync_operation_table` no demuestra que este flujo ya esté conectado a una cola funcional.
+- `SyncWorker.doWork()` empuja cambios locales hacia Sheets y captura `Exception` por módulo; no implementa una descarga global desde la nube. La descarga observada está en los flujos de refresco del repositorio/UI. Debe relanzarse `CancellationException` antes de tratar errores recuperables.
+- `MatrizViewModel.cambiarIdYGuardar()` verifica colisiones local/remota y comprueba el resultado de `renameRowId()`, pero realiza primero el cambio remoto y después el local; no hay transacción distribuida ni evidencia de cola offline para renombres.
+- `app/build.gradle` usa `../debug.keystore` como almacén de firma para las variantes debug, release y optimizada. Debe tratarse como hallazgo de seguridad confirmado y corregirse en un cambio separado, revisando el impacto en la instalación/actualización de teléfonos.
+- La rama de infraestructura tiene `DB_VERSION = 38`, `exportSchema = true`, una migración `MIGRATION_37_38` y la prueba `PaseSyncMigrationRoomTest`. La compilación de Android tests y la descarga/instalación del snapshot auténtico v37 pasaron en el intento consultado; el paso del emulador seguía en curso al registrar esta sección. No declarar la migración probada hasta que el job termine en verde y el log confirme el test.
+
+### Parcial o pendiente de corroborar
+
+- La protección de renombre en `FiltrarViewModel` es una corrección puntual, no resuelve el flujo de renombre de Matriz ni una cola durable/atómica.
+- Las afirmaciones de Claude sobre que el repositorio es público, los valores/configuración de Firebase, las huellas SHA, `oauth_client`, `google-services.json` y la presencia exacta de secretos deben comprobarse con un escaneo seguro de los archivos actuales y consola Firebase. No copiar valores de claves a logs, bitácora ni respuestas. La configuración de firma en Gradle sí está confirmada; no se debe publicar ningún secreto en este documento.
+- Las contradicciones de P0-E sobre tickets, visitas de mapa y otros datos compartidos siguen siendo una decisión de producto abierta. No convertir la frase “todo dato operativo se comparte” en una implementación hasta resolver excepciones explícitas.
+- No hay evidencia actual de pruebas Firebase Rules/Auth con usuarios autorizados/no autorizados ni de sincronización real entre dos teléfonos.
+- No está definido un único exportador de Sheets desde la base central.
+
+### Decisiones técnicas a incorporar al plan
+
+1. Mantener una lista única de decisiones de producto sobre qué datos son globales, locales o derivados; resolver los conflictos entre P0-E, inventario y objetivo general antes del esquema definitivo.
+2. Diseñar borrados con tombstones/versionado y una reconciliación idempotente; no borrar filas locales por ausencia remota sin distinguir borrados reales, errores de lectura y cambios pendientes.
+3. Pase: usar una clave determinista por origen Matriz y definir el ciclo de vida de borrado/edición; agregar pruebas de dos dispositivos y de reintentos.
+4. Sincronización: separar claramente pull, push y outbox; la nube será fuente de verdad y Room caché/outbox. Definir qué capa manda y qué confirma cada operación antes de marcarla limpia.
+5. Renombres: definir un protocolo recuperable ante fallo entre cambio remoto y local; probar colisión, desconexión y reintento.
+6. Seguridad: auditar y restringir API keys, retirar credenciales/keystore de firma comprometidos del repositorio con rotación planificada, y validar Firebase Auth/Rules. No hacer rotación de firma sin plan de actualización/exportación de datos locales.
+7. CI: completar la prueba de migración Room 37→38 y mantener la rama aislada; después añadir pruebas de borrado, Pase y renombre. No iniciar migración productiva ni activar escritura de nube hasta validar reglas y pruebas sintéticas.
+8. Mantener Google Apps Script fuera del alcance actual, según la instrucción del usuario; el destino Sheets futuro es solo exportación/compatibilidad si se confirma necesario.
+
+### Estado
+
+- Contraste de código para borrados de Matriz, copia de Pase, ausencia de pull en Worker, manejo de cancelación y renombre: confirmado como hallazgos vigentes en la rama examinada.
+- Prueba Room 37→38: CI en curso al momento de la consulta; resultado pendiente.
+- Auditoría Firebase/secretos completa: pendiente; se debe hacer sin revelar valores.
+- Implementación de sincronización global, tombstones, IDs deterministas y pruebas con dos teléfonos: pendiente.
