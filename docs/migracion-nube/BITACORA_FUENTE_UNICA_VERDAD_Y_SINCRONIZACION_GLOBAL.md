@@ -900,3 +900,25 @@ El trabajo de código se dividirá para evitar una migración masiva:
 - No investigar Google Apps Script ni los antiguos scripts de llamadas/SMS, salvo petición explícita.
 - No modificar `main`, no fusionar PR #122 sin autorización y no tocar datos productivos.
 - Esta entrada registra inspección de código y plan inmediato; no afirma que Firestore ya esté integrado ni que exista sincronización global funcional.
+
+
+## 28. Rastreo adicional de claves y operaciones Room para preparar el contrato central — 28 de octubre de 2026
+
+Se inspeccionaron directamente `Entities.kt` y `DAOs.kt` de la rama actual. Esta pasada concreta amplía el inventario de identidad y borrados; no equivale todavía a un mapa CRUD completo de pantallas/ViewModels.
+
+### Identidad local observada
+
+- `MatrizEntity`, `TicketPagoEntity`, `PaseEntity`, `SolicitudEntity`, `FiltroFechaEntity` y `FiltrarEntity` usan `id: String` como clave primaria Room.
+- `ControlEntity` usa `semana` como clave; `VisitaMapaEntity` usa clave compuesta `clave + fechaDia`; `CartuchoDiaEntity` usa `fechaDia`; `Sem6RegistroEntity` usa `hoja + id`.
+- Estas claves son identidades locales/funcionales existentes; antes de reutilizarlas como IDs de documentos Firestore debe verificarse su unicidad entre instalaciones y la regla de negocio que las genera. No se asumirá que una clave local es global solo por ser primaria en Room.
+
+### Operaciones con riesgo de borrado o confirmación
+
+- `MatrizDao.deleteById()`, `SolicitudDao.deleteById()`, `PaseDao.deleteById()` y `FiltroFechaDao.deleteAll()`/ `deleteAllClean()` eliminan físicamente filas locales en los métodos inspeccionados. Por sí solos no conservan una lápida compartida que pueda replicarse a otros teléfonos.
+- `MatrizDao.updateId()` cambia la clave local y marca `isDirty = 1`; un renombre global necesita conservar la identidad anterior/operación para no perder el rastro remoto.
+- `PaseSyncOperationDao` conserva operaciones pendientes con `operationKey`, `type`, `oldId` y `newId`, lo que sirve como precedente local para una cola durable, aunque su confirmación actual está ligada al flujo de Sheets y no prueba integración Firestore.
+- Las banderas `isDirty` y `lastSync` existen en varias entidades, pero no constituyen por sí mismas una versión global, una confirmación del servidor ni una estrategia de conflicto.
+
+### Consecuencia para la implementación
+
+No se debe seleccionar un piloto solo porque su entidad sea pequeña. Antes de tocar operaciones reales se requiere rastrear sus pantallas/ViewModels, altas, actualizaciones, renombres, borrados, IDs generados y dependencias con otros módulos. La siguiente unidad de trabajo será cerrar esa trazabilidad para proponer un piloto de bajo riesgo y definir su contrato (ID global, propietario/ámbito, versión, outbox, idempotencia y tombstone). La prueba Room 37→38 sigue en estado pendiente por la infraestructura de emulador.
