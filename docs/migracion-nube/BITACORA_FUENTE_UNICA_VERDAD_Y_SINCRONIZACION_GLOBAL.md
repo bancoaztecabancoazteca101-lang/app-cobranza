@@ -806,7 +806,7 @@ Se inspeccionó la ejecución `40627665133`, job `122616702364`, posterior a la 
 
 ### Cambio aplicado al workflow
 
-- Commit: pendiente de resultado de la llamada de actualización de GitHub en esta sesión.
+- Commit: `dcf105460e19f9172f03fbfe11892d51c8a991b1` — `fix(ci): estabilizar arranque del emulador para pruebas Room`.
 - Archivo: `.github/workflows/build.yml` en la rama `chatgpt/room-test-infrastructure`.
 - Se configura el emulador sin ventana, con renderizado `swiftshader_indirect`, sin audio/animación de arranque y sin cámara trasera. Se activa `disable-animations` y el script espera al dispositivo y a `sys.boot_completed` antes de ejecutar `connectedDebugAndroidTest`.
 - Este ajuste busca reducir fallos de arranque en runners hospedados; no se considera validado hasta observar una nueva ejecución.
@@ -814,3 +814,28 @@ Se inspeccionó la ejecución `40627665133`, job `122616702364`, posterior a la 
 ### Estado
 
 La migración Room 37→38 sigue pendiente de una ejecución instrumentada exitosa. `main` no se modificó y PR #122 no se fusionó.
+
+## 24. Diagnóstico del siguiente CI y corrección del intérprete de shell — 28 de octubre de 2026
+
+Se revisaron las ejecuciones posteriores al ajuste del emulador:
+
+- Ejecución `40636746027`, commit `dcf105460e19f9172f03fbfe11892d51c8a991b1`: quedó **cancelada durante la compilación**, antes de recuperar el esquema 37 o ejecutar la prueba. No aporta resultado sobre la migración.
+- Ejecución `40636753921`, commit de documentación `43431e0e365ce71f161baf7f5ebc8fbd28fd4294`: la compilación y la preparación de ambos esquemas terminaron correctamente. El emulador arrancó y reportó `sys.boot_completed = 1`, pero el paso de prueba se detuvo antes de lanzar Gradle por un error de shell.
+
+### Causa exacta observada
+
+El runner `ReactiveCircus/android-emulator-runner@v2` ejecuta el campo `script` con `/usr/bin/sh`; el comando `set -euo pipefail` no es compatible con ese shell POSIX y produjo:
+
+`/usr/bin/sh: 1: set: Illegal option -o pipefail`
+
+Esto es un error de infraestructura del script, no un fallo de la migración Room. La prueba instrumentada aún no se ha ejecutado con éxito.
+
+### Corrección aplicada
+
+- Commit: `7fe7fa03dd2527042f2507237186b4600dbb451c` — `fix(ci): usar sintaxis POSIX en script del emulador`.
+- Archivo: `.github/workflows/build.yml`, rama `chatgpt/room-test-infrastructure`.
+- Cambio limitado: `set -euo pipefail` → `set -eu`, manteniendo la espera por ADB, la comprobación de arranque y la llamada a `gradle connectedDebugAndroidTest --stacktrace`.
+
+### Estado de validación
+
+Pendiente de la siguiente ejecución de CI en el commit `7fe7fa03dd2527042f2507237186b4600dbb451c`. Solo se podrá cerrar la validación cuando la prueba instrumentada pase y el log confirme que `PaseSyncMigrationRoomTest.migration37To38PreservesPaseAndValidatesEntireSchema` se ejecutó satisfactoriamente. `main` sigue intacta y PR #122 no se ha fusionado.
