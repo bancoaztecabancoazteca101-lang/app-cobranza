@@ -44,9 +44,13 @@ val ESTADOS_MATRIZ = listOf("APP", "Retorno", "Pagado", "PASE", "FILTRAR", "Mano
 
 /** Ubicación leída del GPS con su error estimado en metros. */
 data class UbicacionGps(val coordenadas: String, val precisionM: Float)
-const val PRECISION_BUENA_M = 20f     // con este error se deja de esperar
-const val PRECISION_ACEPTABLE_M = 35f // hasta aquí se guarda sin advertencia
-const val PRECISION_MAXIMA_M = 50f    // peor que esto NUNCA se guarda
+const val PRECISION_BUENA_M = 7f       // lo más cercano: con este error se deja de esperar
+const val PRECISION_ACEPTABLE_M = 9f   // hasta aquí se guarda sin advertencia
+const val PRECISION_MAXIMA_M = 17f     // peor que esto NUNCA se guarda
+const val ESPERA_GPS_GUARDAR_MS = 25_000L // tiempo para que el GPS converja a 7-9 m antes de rendirse
+// Para ORDENAR por cercanía (Ruta IA) no hace falta tanta exactitud como para guardar un punto: se mantiene lo de antes.
+const val PRECISION_ORDENAR_BUENA_M = 20f
+const val PRECISION_ORDENAR_M = 50f
 
 /**
  * Lee el GPS "de verdad" (solo se llama cuando el usuario pulsa un botón de ubicación).
@@ -55,7 +59,11 @@ const val PRECISION_MAXIMA_M = 50f    // peor que esto NUNCA se guarda
  * sin precisión declarada o con más de 30 s de antigüedad. Devuelve null si nada sirve.
  */
 @android.annotation.SuppressLint("MissingPermission")
-suspend fun obtenerUbicacionPrecisa(context: android.content.Context, tiempoMaxMs: Long = 15_000L): UbicacionGps? {
+suspend fun obtenerUbicacionPrecisa(
+    context: android.content.Context,
+    tiempoMaxMs: Long = ESPERA_GPS_GUARDAR_MS,
+    buenaM: Float = PRECISION_BUENA_M
+): UbicacionGps? {
     val client = LocationServices.getFusedLocationProviderClient(context)
     var mejor: android.location.Location? = null
     fun valida(l: android.location.Location): Boolean {
@@ -77,7 +85,7 @@ suspend fun obtenerUbicacionPrecisa(context: android.content.Context, tiempoMaxM
                             if (!valida(l)) continue
                             val actual = mejor
                             if (actual == null || l.accuracy < actual.accuracy) mejor = l
-                            if (l.accuracy <= PRECISION_BUENA_M && cont.isActive) cont.resume(Unit) {}
+                            if (l.accuracy <= buenaM && cont.isActive) cont.resume(Unit) {}
                         }
                     }
                 }
@@ -96,14 +104,15 @@ suspend fun obtenerUbicacionPrecisa(context: android.content.Context, tiempoMaxM
     return mejor?.let { UbicacionGps("${it.latitude}, ${it.longitude}", it.accuracy) }
 }
 
-/** Coordenadas "lat, lng" solo si la precisión es de hasta [PRECISION_MAXIMA_M]; si no, null (para ordenar por cercanía). */
+/** Coordenadas "lat, lng" solo si la precisión es de hasta [PRECISION_ORDENAR_M]; si no, null (para ordenar por cercanía). */
 suspend fun obtenerUbicacionActual(context: android.content.Context): String? =
-    obtenerUbicacionPrecisa(context)?.takeIf { it.precisionM <= PRECISION_MAXIMA_M }?.coordenadas
+    obtenerUbicacionPrecisa(context, 15_000L, PRECISION_ORDENAR_BUENA_M)
+        ?.takeIf { it.precisionM <= PRECISION_ORDENAR_M }?.coordenadas
 
 /**
  * Captura la ubicación de un registro al pulsar el botón y AVISA la precisión en metros.
  * Devuelve la coordenada que debe quedar en el campo: nunca pisa una coordenada guardada con una lectura
- * peor que [PRECISION_MAXIMA_M], y una lectura de 35-50 m solo se guarda si el campo estaba vacío.
+ * peor que [PRECISION_MAXIMA_M], y una lectura de 9-17 m solo se guarda si el campo estaba vacío.
  */
 suspend fun capturarUbicacionRegistro(context: android.content.Context, actual: String?): String? {
     val r = obtenerUbicacionPrecisa(context)
