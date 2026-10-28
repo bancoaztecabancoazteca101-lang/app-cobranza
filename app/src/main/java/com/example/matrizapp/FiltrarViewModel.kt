@@ -254,6 +254,19 @@ class FiltrarViewModel(
         viewModelScope.launch {
             val idFinal = idNuevo.trim().ifBlank { idAnterior }
             if (idFinal != idAnterior) {
+                val nube = MatrizNube.instance
+                if (nube != null && nube.habilitado) {
+                    try {
+                        if (matrizDao.getById(idFinal) != null) {
+                            onResult(false, "El ID $idFinal ya pertenece a otro registro de Matriz"); return@launch
+                        }
+                        if (!nube.renombrar(idAnterior, idFinal)) {
+                            onResult(false, "El ID $idFinal ya existe en la nube"); return@launch
+                        }
+                    } catch (e: Exception) {
+                        onResult(false, "No se pudo cambiar el ID en la nube (revisa tu conexión): ${e.message}"); return@launch
+                    }
+                } else
                 try {
                     // Reutiliza la política de MatrizViewModel: comprobar colisiones y no cambiar
                     // Room si Sheets no confirma el renombre. Si el registro aún no existe en

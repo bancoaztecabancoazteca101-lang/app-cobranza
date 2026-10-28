@@ -193,6 +193,19 @@ class MatrizViewModel(
         viewModelScope.launch {
             val idFinal = idNuevo.trim().ifBlank { idAnterior }
             if (idFinal != idAnterior) {
+                val nube = MatrizNube.instance
+                if (nube != null && nube.habilitado) {
+                    try {
+                        if (matrizDao.getById(idFinal) != null) {
+                            onResult(false, "El ID $idFinal ya pertenece a otro registro de Matriz"); return@launch
+                        }
+                        if (!nube.renombrar(idAnterior, idFinal)) {
+                            onResult(false, "El ID $idFinal ya existe en la nube"); return@launch
+                        }
+                    } catch (e: Exception) {
+                        onResult(false, "No se pudo cambiar el ID en la nube (revisa tu conexión): ${e.message}"); return@launch
+                    }
+                } else
                 try {
                     // Evita que el nuevo ID apunte a otro cliente, tanto en Room como en Sheets.
                     val localConNuevoId = matrizDao.getById(idFinal)
@@ -356,6 +369,12 @@ class MatrizViewModel(
         viewModelScope.launch {
             _deleteInProgress.value = true
             try {
+                val nube = MatrizNube.instance
+                if (nube != null && nube.habilitado) {
+                    nube.eliminar(id)   // lápida en la nube y luego borrado local
+                    onResult(true, null)
+                    return@launch
+                }
                 val eliminadoEnNube = repository.deleteRowById(
                     Constants.SHEET_MATRIZ,
                     id,

@@ -26,6 +26,7 @@ class MainApplication : Application(), coil.ImageLoaderFactory {
         BackupManager.backupBeforeDatabaseOpenIfVersionChanged(this)
         container = AppContainer(this)
         BackupWorker.programar(this)
+        notificationScope.launch { runCatching { container.matrizNube.arrancar() } }
         SmsStatusWorker.programarPeriodicamente(this)
         notificationScope.launch {
             runCatching { MultiDeviceNotificationManager(this@MainApplication).register() }

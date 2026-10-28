@@ -1,0 +1,30 @@
+rules_version = '2';
+// Matriz en la nube. Solo cuentas autorizadas; cada escritura debe subir `version` en 1; no hay borrado físico
+// (los borrados son lápidas: eliminado = true). Todo lo demás sigue cerrado.
+// ANTES DE PUBLICAR: cambia los correos por las cuentas de Google que usan los teléfonos.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autorizado() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['TU_CORREO@gmail.com'];
+    }
+
+    match /matriz/{docId} {
+      allow read: if autorizado();
+      allow create: if autorizado()
+        && request.resource.data.version == 1
+        && request.resource.data.id is string
+        && request.resource.data.eliminado == false;
+      allow update: if autorizado()
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.id == resource.data.id;
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

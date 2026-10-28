@@ -39,6 +39,9 @@ fun DiagnosticoScreen(viewModel: DiagnosticoViewModel) {
         Text("Diagnóstico", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
 
+        MatrizNubeCard()
+        Spacer(Modifier.height(12.dp))
+
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
                 Text("Este teléfono", fontWeight = FontWeight.Bold)

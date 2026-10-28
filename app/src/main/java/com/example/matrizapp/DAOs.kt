@@ -232,6 +232,42 @@ interface MatrizDao {
     )
     @Query("DELETE FROM matriz_table WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    // ---- Matriz en la nube (Firestore como única fuente de verdad) ----
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertarSiNoExiste(item: MatrizEntity): Long
+    // Aplica lo recibido de la nube SOLO si el registro no tiene cambios locales pendientes (atómico).
+    @Query("""UPDATE matriz_table SET nombre = :nombre, semana = :semana, requisito = :requisito, numTT = :numTT,
+        ref1 = :ref1, ref2 = :ref2, observaciones = :observaciones, estado = :estado, ubicacion = :ubicacion,
+        imagenUrl = :imagenUrl, imagenUrl2 = :imagenUrl2, fecha = :fecha, hora = :hora, ruta = :ruta, folioP = :folioP,
+        descuentoPago = :descuentoPago, descuentoAhorro = :descuentoAhorro, ref3 = :ref3, ref4 = :ref4,
+        diaPago = :diaPago, domicilioLaboral = :domicilioLaboral, diasAtraso = :diasAtraso,
+        diasApertura = :diasApertura, montoCobrado = :montoCobrado, lastSync = :syncTime
+        WHERE id = :id AND isDirty = 0""")
+    suspend fun aplicarDesdeNube(
+        id: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String,
+        observaciones: String?, estado: String, ubicacion: String?, imagenUrl: String?, imagenUrl2: String?,
+        fecha: Long?, hora: String?, ruta: String?, folioP: String?, descuentoPago: String?, descuentoAhorro: String?,
+        ref3: String?, ref4: String?, diaPago: String?, domicilioLaboral: String?, diasAtraso: String?,
+        diasApertura: String?, montoCobrado: Double?, syncTime: Long = System.currentTimeMillis()
+    ): Int
+    @Query("SELECT * FROM matriz_table WHERE nombre NOT LIKE '%Pase semana%' AND nombre != ''")
+    suspend fun getTodosParaNube(): List<MatrizEntity>
+    @Query("UPDATE matriz_table SET isDirty = 1 WHERE id = :id")
+    suspend fun marcarSucio(id: String)
+    // Igual que limpiarDescuentosVencidos pero marca isDirty para que la limpieza también llegue a la nube.
+    @Query("UPDATE matriz_table SET descuentoPago = NULL, descuentoAhorro = NULL, isDirty = 1 WHERE (descuentoPago IS NOT NULL AND descuentoPago != '') OR (descuentoAhorro IS NOT NULL AND descuentoAhorro != '')")
+    suspend fun limpiarDescuentosVencidosNube(): Int
+}
+
+@Dao
+interface MatrizNubeMetaDao {
+    @Query("SELECT * FROM matriz_nube_meta_table WHERE id = :id LIMIT 1")
+    suspend fun obtener(id: String): MatrizNubeMetaEntity?
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun guardar(meta: MatrizNubeMetaEntity)
+    @Query("DELETE FROM matriz_nube_meta_table WHERE id = :id")
+    suspend fun borrar(id: String)
 }
 
 @Dao

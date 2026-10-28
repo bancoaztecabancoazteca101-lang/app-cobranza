@@ -20,6 +20,8 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
         suspend fun ejecutarModulo(nombre: String, accion: suspend () -> Unit) {
             try {
                 accion()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 huboErrores = true
                 android.util.Log.e("SyncWorker", "Falló sincronización del módulo $nombre; se reintentará", e)
@@ -44,6 +46,40 @@ class SyncWorker(appContext: Context, workerParams: WorkerParameters) : Coroutin
     }
 
     private suspend fun syncMatriz() {
+        if (container.matrizNube.habilitado) { syncMatrizNube(); return }
+        syncMatrizSheets()
+    }
+
+    /** Matriz con la nube como única fuente de verdad: baja lo nuevo y sube los cambios pendientes, registro por registro. */
+    private suspend fun syncMatrizNube() {
+        val nube = container.matrizNube
+        nube.traerCambios()
+        var fallos = 0
+        var ultimoError: Exception? = null
+        repository.getDirtyMatrizItems().forEach { item ->
+            try {
+                var remoteImg = item.imagenUrl
+                if (item.imagenUrl?.startsWith("content://") == true) remoteImg = driveHelper.uploadFile(Uri.parse(item.imagenUrl!!), Constants.FOLDER_IMAGES, "image/jpeg")
+                var remoteImg2 = item.imagenUrl2
+                if (item.imagenUrl2?.startsWith("content://") == true) remoteImg2 = driveHelper.uploadFile(Uri.parse(item.imagenUrl2!!), Constants.FOLDER_IMAGES, "image/jpeg")
+                val salida = nube.subir(item.copy(imagenUrl = remoteImg, imagenUrl2 = remoteImg2))
+                if (salida.tipo == MatrizNube.Tipo.ELIMINADO_REMOTO) return@forEach
+                container.clientImageStore.adopt(item.imagenUrl, remoteImg, driveHelper)
+                container.clientImageStore.adopt(item.imagenUrl2, remoteImg2, driveHelper)
+                repository.markMatrizAsClean(item, remoteImg, remoteImg2)
+                nube.reconciliarLocal(item.id, salida)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                fallos++; ultimoError = e
+                android.util.Log.e("SyncWorker", "Matriz nube: falló ${item.id}", e)
+            }
+        }
+        // Un registro con problema no bloquea a los demás, pero el ciclo se reintenta.
+        if (fallos > 0) throw (ultimoError ?: IllegalStateException("Falló la subida de $fallos registros de Matriz"))
+    }
+
+    private suspend fun syncMatrizSheets() {
         repository.getDirtyMatrizItems().forEach { item ->
             var remoteImg = item.imagenUrl
             if (item.imagenUrl?.startsWith("content://") == true) remoteImg = driveHelper.uploadFile(Uri.parse(item.imagenUrl!!), Constants.FOLDER_IMAGES, "image/jpeg")

@@ -224,3 +224,11 @@ fun Sem6Item.toEntity(hoja: String) = Sem6RegistroEntity(
     colonia = colonia, visitas = visitas, ultimaFechaVisita = ultimaFechaVisita, numTT = numTT, seContiene = seContiene,
     susceptible = susceptible, observaciones = observaciones, capital = capital, abono = abono
 )
+
+/** Último estado de un registro de Matriz que este teléfono recibió/confirmó de la nube (base de la fusión de 3 vías). */
+@Entity(tableName = "matriz_nube_meta_table")
+data class MatrizNubeMetaEntity(
+    @PrimaryKey val id: String,
+    val version: Long,
+    val baseJson: String
+)

@@ -37,6 +37,9 @@ fun LoginScreen(onSignedIn: () -> Unit) {
                 com.google.android.gms.common.api.Scope(SheetsScopes.SPREADSHEETS),
                 com.google.android.gms.common.api.Scope(DriveScopes.DRIVE)
             )
+            // Para iniciar también sesión en Firebase (Matriz en la nube). Si google-services.json aún no trae
+            // el cliente web, no se pide y la app funciona exactamente como antes.
+            .apply { MatrizNube.webClientId(context)?.let { requestIdToken(it) } }
             .build()
     }
     val googleSignInClient: GoogleSignInClient = remember { GoogleSignIn.getClient(context, gso) }

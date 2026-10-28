@@ -33,12 +33,14 @@ class AppContainer(val context: Context) {
             canalPagoDao = database.canalPagoDao()
         )
     }
+    val matrizNube: MatrizNube by lazy { MatrizNube(context, database) }
     val workManager: WorkManager by lazy { WorkManager.getInstance(context) }
     val llamadaAutomaticaScheduler: LlamadaAutomaticaScheduler by lazy {
         LlamadaAutomaticaScheduler(context, database.bloqueHorarioDao())
     }
 
     init {
+        MatrizNube.instance = matrizNube
         // Siembra las 60 plantillas por defecto (5 semanas x 2 tipos x 6 variantes) solo la
         // primera vez que la tabla está vacía — instalaciones nuevas y las que se actualizan
         // desde una versión sin esta tabla quedan igual cubiertas.

@@ -119,4 +119,7 @@ dependencies {
     // Firebase BoM: mantiene compatibles las versiones de los SDK de Firebase.
     implementation platform('com.google.firebase:firebase-bom:34.18.0')
     implementation 'com.google.firebase:firebase-messaging'
+    // Matriz en la nube: autenticación con Google + base central Cloud Firestore.
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
 }

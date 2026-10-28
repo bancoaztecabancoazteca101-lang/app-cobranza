@@ -54,7 +54,19 @@ class DescuentoLimpiezaAlarmReceiver : BroadcastReceiver() {
                 val dao = (context.applicationContext as MainApplication).container.database.matrizDao()
                 // Dato 100% local (no vive en el Sheet, ver el fix en SheetsRepository.refreshMatriz),
                 // así que no hace falta marcar isDirty ni disparar sync -- solo limpiar Room.
-                dao.limpiarDescuentosVencidos()
+                if (MatrizNube.instance?.habilitado == true) {
+                    // Con la nube, la limpieza también debe llegar a los demás teléfonos: queda pendiente y se sube.
+                    if (dao.limpiarDescuentosVencidosNube() > 0) {
+                        androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+                            "sync_app_data", androidx.work.ExistingWorkPolicy.REPLACE,
+                            androidx.work.OneTimeWorkRequestBuilder<SyncWorker>().setConstraints(
+                                androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build()
+                            ).build()
+                        )
+                    }
+                } else {
+                    dao.limpiarDescuentosVencidos()
+                }
             } catch (e: Exception) {
                 // Sin UI que avisar desde un BroadcastReceiver; se reintenta mañana igual.
             } finally {
