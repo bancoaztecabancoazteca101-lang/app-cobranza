@@ -5,7 +5,6 @@ import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -18,7 +17,7 @@ class PaseSyncMigrationRoomTest {
     private val helper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
         AppDatabase::class.java,
-        listOf(AppDatabase.MIGRATION_37_38),
+        emptyList(),
         FrameworkSQLiteOpenHelperFactory()
     )
 
