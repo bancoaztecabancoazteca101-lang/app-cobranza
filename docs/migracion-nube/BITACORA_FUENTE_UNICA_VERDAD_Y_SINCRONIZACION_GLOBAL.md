@@ -839,3 +839,14 @@ Esto es un error de infraestructura del script, no un fallo de la migración Roo
 ### Estado de validación
 
 Pendiente de la siguiente ejecución de CI en el commit `7fe7fa03dd2527042f2507237186b4600dbb451c`. Solo se podrá cerrar la validación cuando la prueba instrumentada pase y el log confirme que `PaseSyncMigrationRoomTest.migration37To38PreservesPaseAndValidatesEntireSchema` se ejecutó satisfactoriamente. `main` sigue intacta y PR #122 no se ha fusionado.
+
+## 25. Precisión adicional: el cambio inicial no alcanzó el script correcto — 28 de octubre de 2026
+
+Al revisar el log de la ejecución `40721883366` (run #1034), se comprobó que el emulador inició, pero el paso seguía ejecutando `set -euo pipefail` y falló con `/usr/bin/sh: 1: set: Illegal option -o pipefail`.
+
+El análisis de `.github/workflows/build.yml` mostró que el primer reemplazo había cambiado una ocurrencia en otro paso, no la línea del script de migración. Se corrigió de forma dirigida dentro del paso `Probar migración Room 37 a 38 en emulador`.
+
+- Nuevo commit correctivo: `1bbee80317baa457fecba7b2e1047ab91580924d` — `fix(ci): corregir shell del paso de migración Room`.
+- La línea del paso de migración ahora usa `set -eu`; se mantiene la espera por ADB, la comprobación de arranque y la prueba instrumentada.
+- Estado: pendiente de ejecutar el nuevo commit. No se debe considerar validada la migración hasta que la prueba instrumentada pase.
+- `main` sigue intacta y PR #122 continúa sin fusionarse.
