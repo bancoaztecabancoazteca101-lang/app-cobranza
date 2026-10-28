@@ -869,3 +869,34 @@ https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/4073
 Se pausa aquí la reparación del emulador de CI. No hacer más cambios especulativos al workflow ni declarar aprobado Room 37→38. La migración queda marcada como **pendiente de validación instrumentada** y debe resolverse después con diagnóstico especializado del runner/emulador o un entorno de prueba Android fiable.
 
 Podemos continuar en paralelo con la auditoría/diseño de la migración a una fuente única de verdad en la nube, sin desplegar cambios de base de datos que dependan de dar por aprobada esta migración. Mantener `main` intacta y no fusionar PR #122 sin autorización expresa.
+
+
+## 27. Reanudación de migración tras pausar el emulador: verificación directa del código — 28 de octubre de 2026
+
+Se retomó el trabajo en `chatgpt/room-test-infrastructure` leyendo el contenido real de los archivos de la rama, sin usar como evidencia únicamente notas anteriores.
+
+### Hechos verificados en el código actual
+
+- `app/build.gradle`: aplica `com.google.gms.google-services` y declara Firebase BoM `34.18.0` y `com.google.firebase:firebase-messaging`. En el bloque de dependencias inspeccionado **no aparece** `firebase-firestore` ni `firebase-auth`. FCM es mensajería, no almacenamiento operativo.
+- `AppContainer.kt`: el repositorio operativo inyectado es `SheetsRepository`, construido con `Sheets` y DAOs de Room. No hay instancia ni repositorio Firestore.
+- `LoginScreen.kt`: el inicio de sesión usa `GoogleSignInOptions`, solicita scopes de Google Sheets y Drive, y llama a `onSignedIn()`; el código inspeccionado no obtiene un Firebase ID token ni inicia sesión en Firebase Authentication.
+- `SyncWorker.kt`: continúa ejecutando los módulos Matriz, Pase, Ruta IA, Solicitud y Filtro Fecha mediante la arquitectura actual; la integración operativa con Sheets sigue vigente.
+- `SheetsRepository.refreshAll()`: descarga desde Sheets Matriz, Pase, Solicitud, Filtro Fecha, Filtrar, Control y Ruta IA. Esto confirma que Sheets todavía participa como fuente de lectura, no solo como exportación.
+- `AppDatabase.kt`: el esquema local sigue en versión 38 y contiene 23 entidades. La migración Room 37→38 no está validada por la prueba instrumentada porque CI no logra mantener disponible un emulador compatible.
+
+### Decisión inmediata
+
+No añadir todavía una escritura Firestore al flujo productivo ni cambiar el login para fingir que Google Sign-In equivale a Firebase Auth. Antes de conectar datos operativos se debe terminar el contrato mínimo de identidad/autorización y el modelo de datos, y definir un piloto que pueda coexistir temporalmente sin crear dos autoridades.
+
+El trabajo de código se dividirá para evitar una migración masiva:
+1. **Base de autenticación y acceso:** validar el método de Firebase Authentication real y reglas de Firestore cerradas por defecto; comprobar el usuario autenticado en el cliente y no abrir reglas globales.
+2. **Contrato de datos:** inventario final de entidades compartidas, IDs globales, borrados/tombstones, versión/conflicto, auditoría y operaciones idempotentes; separar datos compartidos de configuración específica del teléfono.
+3. **Piloto aislado en entorno de prueba:** seleccionar una entidad solo cuando su flujo CRUD e impacto estén trazados; añadir pruebas de repositorio y validación entre dos dispositivos. No usar datos productivos ni hacer que Sheets y Firestore escriban ambos como autoridad.
+4. **Transición controlada:** migrar y comparar datos; después cambiar lecturas/escrituras del módulo piloto; exportar desde la nube al archivo nuevo de Sheets; ampliar módulo por módulo.
+
+### Límites vigentes
+
+- La prueba Room 37→38 queda pendiente por infraestructura del emulador; no declarar aprobado el esquema ni desplegar una actualización de base de datos que dependa de esa migración.
+- No investigar Google Apps Script ni los antiguos scripts de llamadas/SMS, salvo petición explícita.
+- No modificar `main`, no fusionar PR #122 sin autorización y no tocar datos productivos.
+- Esta entrada registra inspección de código y plan inmediato; no afirma que Firestore ya esté integrado ni que exista sincronización global funcional.
