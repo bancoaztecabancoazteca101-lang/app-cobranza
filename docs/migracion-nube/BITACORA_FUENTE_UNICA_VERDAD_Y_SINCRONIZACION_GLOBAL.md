@@ -790,3 +790,27 @@ Se inspeccionó el log completo del job de GitHub Actions de la rama `chatgpt/ro
 ### Estado de validación
 
 La corrección está registrada en GitHub. La nueva ejecución de CI debe confirmar que ambos JSON se empaquetan como assets, que `MigrationTestHelper` encuentra el esquema 37 y que la migración conserva los datos y valida el esquema 38 completo. Hasta ver ese resultado, la prueba 37→38 continúa **pendiente de confirmación**; no declarar el problema cerrado solo por el commit.
+
+
+## 23. Segundo fallo de CI y endurecimiento del arranque del emulador — 28 de octubre de 2026
+
+Se inspeccionó la ejecución `40627665133`, job `122616702364`, posterior a la corrección de assets.
+
+### Evidencia observada
+
+- La compilación de la app terminó correctamente.
+- La recuperación del esquema Room 37 auténtico terminó correctamente.
+- El paso de instalación confirmó que los snapshots 37 y 38 quedaron en los assets de `androidTest`.
+- La prueba no alcanzó a ejecutar la validación de migración: el job falló al intentar usar el emulador. Los logs registran errores de conexión con ADB, `ShellCommandUnresponsiveException` y `No compatible devices connected`.
+- Por tanto, esta ejecución no demuestra que la migración esté mal ni que esté bien; el bloqueo observado es el dispositivo de prueba no disponible.
+
+### Cambio aplicado al workflow
+
+- Commit: pendiente de resultado de la llamada de actualización de GitHub en esta sesión.
+- Archivo: `.github/workflows/build.yml` en la rama `chatgpt/room-test-infrastructure`.
+- Se configura el emulador sin ventana, con renderizado `swiftshader_indirect`, sin audio/animación de arranque y sin cámara trasera. Se activa `disable-animations` y el script espera al dispositivo y a `sys.boot_completed` antes de ejecutar `connectedDebugAndroidTest`.
+- Este ajuste busca reducir fallos de arranque en runners hospedados; no se considera validado hasta observar una nueva ejecución.
+
+### Estado
+
+La migración Room 37→38 sigue pendiente de una ejecución instrumentada exitosa. `main` no se modificó y PR #122 no se fusionó.
