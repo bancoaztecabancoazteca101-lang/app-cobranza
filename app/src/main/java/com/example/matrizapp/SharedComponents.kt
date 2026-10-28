@@ -44,7 +44,9 @@ val ESTADOS_MATRIZ = listOf("APP", "Retorno", "Pagado", "PASE", "FILTRAR", "Mano
 
 /** Ubicación leída del GPS con su error estimado en metros. */
 data class UbicacionGps(val coordenadas: String, val precisionM: Float)
-const val PRECISION_BUENA_M = 7f       // lo más cercano: con este error se deja de esperar
+const val PRECISION_OPTIMA_M = 4f      // lo mejor que da un celular al aire libre: se corta de inmediato
+const val PRECISION_BUENA_M = 7f       // se corta si ya pasaron ESPERA_MINIMA_BUENA_MS (si no, se sigue buscando bajar de 4 m)
+const val ESPERA_MINIMA_BUENA_MS = 10_000L
 const val PRECISION_ACEPTABLE_M = 9f   // hasta aquí se guarda sin advertencia
 const val PRECISION_MAXIMA_M = 17f     // peor que esto NUNCA se guarda
 const val ESPERA_GPS_GUARDAR_MS = 25_000L // tiempo para que el GPS converja a 7-9 m antes de rendirse
@@ -62,10 +64,12 @@ const val PRECISION_ORDENAR_M = 50f
 suspend fun obtenerUbicacionPrecisa(
     context: android.content.Context,
     tiempoMaxMs: Long = ESPERA_GPS_GUARDAR_MS,
-    buenaM: Float = PRECISION_BUENA_M
+    buenaM: Float = PRECISION_BUENA_M,
+    optimaM: Float = PRECISION_OPTIMA_M
 ): UbicacionGps? {
     val client = LocationServices.getFusedLocationProviderClient(context)
     var mejor: android.location.Location? = null
+    val inicio = android.os.SystemClock.elapsedRealtime()
     fun valida(l: android.location.Location): Boolean {
         if (!l.latitude.isFinite() || !l.longitude.isFinite()) return false
         if (l.latitude !in -90.0..90.0 || l.longitude !in -180.0..180.0) return false
@@ -74,7 +78,7 @@ suspend fun obtenerUbicacionPrecisa(
         return edad in 0L..30_000_000_000L
     }
     val peticion = com.google.android.gms.location.LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_000L)
-        .setMinUpdateIntervalMillis(500L).setMaxUpdates(30).build()
+        .setMinUpdateIntervalMillis(500L).setMaxUpdates(30).setWaitForAccurateLocation(true).build()
     var callback: com.google.android.gms.location.LocationCallback? = null
     try {
         withTimeoutOrNull(tiempoMaxMs) {
@@ -85,7 +89,10 @@ suspend fun obtenerUbicacionPrecisa(
                             if (!valida(l)) continue
                             val actual = mejor
                             if (actual == null || l.accuracy < actual.accuracy) mejor = l
-                            if (l.accuracy <= buenaM && cont.isActive) cont.resume(Unit) {}
+                            val mejorError = mejor?.accuracy ?: l.accuracy
+                            val esperado = android.os.SystemClock.elapsedRealtime() - inicio
+                            val basta = mejorError <= optimaM || (mejorError <= buenaM && esperado >= ESPERA_MINIMA_BUENA_MS)
+                            if (basta && cont.isActive) cont.resume(Unit) {}
                         }
                     }
                 }
@@ -106,7 +113,7 @@ suspend fun obtenerUbicacionPrecisa(
 
 /** Coordenadas "lat, lng" solo si la precisión es de hasta [PRECISION_ORDENAR_M]; si no, null (para ordenar por cercanía). */
 suspend fun obtenerUbicacionActual(context: android.content.Context): String? =
-    obtenerUbicacionPrecisa(context, 15_000L, PRECISION_ORDENAR_BUENA_M)
+    obtenerUbicacionPrecisa(context, 15_000L, PRECISION_ORDENAR_BUENA_M, PRECISION_ORDENAR_BUENA_M)
         ?.takeIf { it.precisionM <= PRECISION_ORDENAR_M }?.coordenadas
 
 /**
