@@ -91,7 +91,14 @@ jobs:
           api-level: 30
           arch: x86_64
           profile: pixel_2
-          script: gradle connectedDebugAndroidTest --stacktrace
+          # Reduce emulator startup instability in hosted GitHub runners.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb wait-for-device
+            adb shell getprop sys.boot_completed | grep -q 1
+            gradle connectedDebugAndroidTest --stacktrace
 
       - name: Guardar esquema Room generado
         if: env.BUILD_FAILED != 'true'
