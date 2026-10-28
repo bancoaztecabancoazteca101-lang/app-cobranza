@@ -850,3 +850,22 @@ El análisis de `.github/workflows/build.yml` mostró que el primer reemplazo ha
 - La línea del paso de migración ahora usa `set -eu`; se mantiene la espera por ADB, la comprobación de arranque y la prueba instrumentada.
 - Estado: pendiente de ejecutar el nuevo commit. No se debe considerar validada la migración hasta que la prueba instrumentada pase.
 - `main` sigue intacta y PR #122 continúa sin fusionarse.
+
+## 26. Último intento de CI: el emulador sigue sin ser compatible/disponible — 28 de octubre de 2026
+
+Se inspeccionó la ejecución **#1036**, run ID `40734922364`, commit `aa3110ace7a14de37856471d56242bf406444255`:
+https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/40734922364
+
+### Resultado comprobado
+
+- El paso de compilación terminó correctamente; al final del log consta `BUILD SUCCESSFUL` para `assembleOptimizado`.
+- La ejecución sí llegó a `Probar migración Room 37 a 38 en emulador`; ya no falló por la sintaxis `set -euo pipefail`. La corrección POSIX `set -eu` evitó ese error anterior.
+- La prueba instrumentada **no pudo ejecutarse/terminar** porque el emulador perdió disponibilidad: los logs contienen repetidos `adb: device offline`, `ShellCommandUnresponsiveException` y finalmente `No compatible devices connected` (1 dispositivo detectado, 0 compatibles).
+- Gradle terminó en `:app:connectedDebugAndroidTest FAILED` por ese problema de dispositivo. En el log no hay evidencia que permita concluir que la migración o el esquema Room estén mal; tampoco se validaron como correctos.
+- La ejecución previa del commit `1bbee80317baa457fecba7b2e1047ab91580924d` (run ID `40734861552`) fue cancelada por la nueva ejecución y no constituye resultado de prueba.
+
+### Decisión para no seguir bloqueados
+
+Se pausa aquí la reparación del emulador de CI. No hacer más cambios especulativos al workflow ni declarar aprobado Room 37→38. La migración queda marcada como **pendiente de validación instrumentada** y debe resolverse después con diagnóstico especializado del runner/emulador o un entorno de prueba Android fiable.
+
+Podemos continuar en paralelo con la auditoría/diseño de la migración a una fuente única de verdad en la nube, sin desplegar cambios de base de datos que dependan de dar por aprobada esta migración. Mantener `main` intacta y no fusionar PR #122 sin autorización expresa.
