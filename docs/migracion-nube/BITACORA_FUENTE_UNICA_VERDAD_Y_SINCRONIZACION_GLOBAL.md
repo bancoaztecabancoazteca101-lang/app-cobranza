@@ -767,3 +767,26 @@ Esta sección registra el contraste realizado sobre la rama aislada `chatgpt/roo
 - Prueba Room 37→38: CI en curso al momento de la consulta; resultado pendiente.
 - Auditoría Firebase/secretos completa: pendiente; se debe hacer sin revelar valores.
 - Implementación de sincronización global, tombstones, IDs deterministas y pruebas con dos teléfonos: pendiente.
+
+## 22. Origen real del fallo de prueba Room 37→38 y corrección de CI — 28 de octubre de 2026
+
+Se inspeccionó el log completo del job de GitHub Actions de la rama `chatgpt/room-test-infrastructure`, ejecución `40614187071`, job `122573096850`, commit probado `880ac4c7891d95a350f9c3684aec7266b3c06376`.
+
+### Diagnóstico confirmado por el log
+
+- La compilación de las variantes de la app terminó con `BUILD SUCCESSFUL`; el fallo no era de compilación Kotlin ni de la migración SQL en sí.
+- La descarga del artefacto con el esquema Room 37 auténtico funcionó, y el paso de CI verificó que existían los JSON de esquema 37 y 38.
+- El emulador sí terminó de arrancar. Los mensajes iniciales `adb: device offline` y `Failed to start Emulator console` fueron transitorios en esta ejecución; no fueron la causa final del job fallido.
+- La prueba `PaseSyncMigrationRoomTest.migration37To38PreservesPaseAndValidatesEntireSchema` sí llegó a ejecutarse y falló con el mensaje exacto: `FileNotFoundException: Cannot find the schema file in the assets folder`, faltaba `com.example.matrizapp.AppDatabase/37.json`.
+- Causa raíz: el workflow copiaba el JSON a `app/schemas/` y comprobaba que existía, pero `MigrationTestHelper` busca los snapshots en los assets empaquetados del APK de pruebas instrumentadas. La presencia del archivo en `app/schemas` no garantiza que ese archivo esté en los assets de `androidTest`.
+
+### Corrección aplicada
+
+- Commit: `956417306655bf47d630fd747b60e56c0d794bab` — `fix(ci): incluir esquemas Room en assets de androidTest`.
+- Archivo cambiado: `.github/workflows/build.yml`.
+- El paso ahora copia los esquemas auténticos 37 y 38 a `app/src/androidTest/assets/com.example.matrizapp.AppDatabase/`, conserva los originales bajo `app/schemas/` y verifica que ambos assets no estén vacíos antes de iniciar las pruebas.
+- La corrección está en la rama aislada `chatgpt/room-test-infrastructure`; no se modificó `main` ni se fusionó PR #122.
+
+### Estado de validación
+
+La corrección está registrada en GitHub. La nueva ejecución de CI debe confirmar que ambos JSON se empaquetan como assets, que `MigrationTestHelper` encuentra el esquema 37 y que la migración conserva los datos y valida el esquema 38 completo. Hasta ver ese resultado, la prueba 37→38 continúa **pendiente de confirmación**; no declarar el problema cerrado solo por el commit.
