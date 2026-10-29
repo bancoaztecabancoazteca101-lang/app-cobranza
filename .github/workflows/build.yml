@@ -56,50 +56,8 @@ jobs:
           exit 0
         continue-on-error: false
 
-      - name: Recuperar snapshot Room 37 auténtico
-        if: env.BUILD_FAILED != 'true'
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          repo: bancoaztecabancoazteca101-lang/app-cobranza
-          run_id: 40543083998
-          name: room-schema-v37-b19c7fec1fac364b129d439c83cedeade2e0cac2
-          path: /tmp/room-schema-v37
-          if_no_artifact_found: fail
-
-      - name: Instalar snapshot Room 37 en esquema de pruebas
-        if: env.BUILD_FAILED != 'true'
-        run: |
-          set -eu
-          SCHEMA_DIR="com.example.matrizapp.AppDatabase"
-          mkdir -p "app/schemas/$SCHEMA_DIR" "app/src/androidTest/assets/$SCHEMA_DIR"
-          cp "/tmp/room-schema-v37/$SCHEMA_DIR/37.json" "app/schemas/$SCHEMA_DIR/37.json"
-          test -s "app/schemas/$SCHEMA_DIR/37.json"
-          test -s "app/schemas/$SCHEMA_DIR/38.json"
-          # MigrationTestHelper lee los JSON desde los assets del APK de androidTest.
-          # app/schemas no se empaqueta automáticamente en androidTest assets.
-          cp "app/schemas/$SCHEMA_DIR/37.json" "app/src/androidTest/assets/$SCHEMA_DIR/37.json"
-          cp "app/schemas/$SCHEMA_DIR/38.json" "app/src/androidTest/assets/$SCHEMA_DIR/38.json"
-          test -s "app/src/androidTest/assets/$SCHEMA_DIR/37.json"
-          test -s "app/src/androidTest/assets/$SCHEMA_DIR/38.json"
-          echo "Snapshots Room 37 y 38 instalados en los assets que consume MigrationTestHelper"
-
-      - name: Probar migración Room 37 a 38 en emulador
-        if: env.BUILD_FAILED != 'true'
-        uses: ReactiveCircus/android-emulator-runner@v2
-        with:
-          api-level: 30
-          arch: x86_64
-          profile: pixel_2
-          # Reduce emulator startup instability in hosted GitHub runners.
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          disable-animations: true
-          script: |
-            set -eu
-            adb wait-for-device
-            adb shell getprop sys.boot_completed | grep -q 1
-            gradle connectedDebugAndroidTest --stacktrace
-
+      # La prueba de migración Room 37→38 con emulador vive ahora en room-migration-test.yml
+      # (separada, para que un emulador inestable no impida publicar el APK).
       - name: Guardar esquema Room generado
         if: env.BUILD_FAILED != 'true'
         uses: actions/upload-artifact@v4
