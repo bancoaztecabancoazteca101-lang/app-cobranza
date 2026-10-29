@@ -14,6 +14,8 @@ if [ "$STATUS" = "0" ] && [ "$TESTS" != "?" ] && [ "${TESTS:-0}" -ge 1 ] && [ "$
 {
   echo "RESULT: $VEREDICTO (gradle exit=$STATUS, tests=$TESTS, failures=$FAILS, errors=$ERRS)"
   echo "run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID  commit: $GITHUB_SHA"
+  echo; echo "### Casos ejecutados (del XML de JUnit)"
+  [ -n "$XML" ] && grep -o '<testcase [^>]*' "$XML" | cut -c1-260
   echo; echo "### Runner"; cat diag/runner.txt 2>/dev/null
   echo; echo "### Dispositivo"; cat diag/device.txt 2>/dev/null
   echo; echo "### Gradle (últimas 70 líneas)"; echo '```'; tail -n 70 diag/gradle.txt 2>/dev/null | cut -c1-300; echo '```'
