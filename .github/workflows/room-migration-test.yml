@@ -71,6 +71,10 @@ jobs:
           path: /tmp/room-schema-v37
           if_no_artifact_found: fail
 
+      - name: Generar el esquema Room 38 desde el código actual
+        # app/schemas no está versionado: 38.json lo genera Room al compilar (exportSchema = true).
+        run: gradle :app:compileDebugKotlin --stacktrace
+
       - name: Instalar snapshots Room 37 y 38 en los assets de androidTest
         run: |
           set -eu
