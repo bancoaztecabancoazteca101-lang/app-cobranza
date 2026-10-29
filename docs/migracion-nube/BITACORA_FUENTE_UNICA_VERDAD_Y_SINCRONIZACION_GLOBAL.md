@@ -922,3 +922,45 @@ Se inspeccionaron directamente `Entities.kt` y `DAOs.kt` de la rama actual. Esta
 ### Consecuencia para la implementación
 
 No se debe seleccionar un piloto solo porque su entidad sea pequeña. Antes de tocar operaciones reales se requiere rastrear sus pantallas/ViewModels, altas, actualizaciones, renombres, borrados, IDs generados y dependencias con otros módulos. La siguiente unidad de trabajo será cerrar esa trazabilidad para proponer un piloto de bajo riesgo y definir su contrato (ID global, propietario/ámbito, versión, outbox, idempotencia y tombstone). La prueba Room 37→38 sigue en estado pendiente por la infraestructura de emulador.
+
+
+## 29. Trazabilidad de sincronización actual: pull, push y operaciones CRUD — 28 de octubre de 2026
+
+Se revisaron los archivos reales `SyncWorker.kt`, `SheetsRepository.kt`, `DAOs.kt` y `FiltrarViewModel.kt` en `chatgpt/room-test-infrastructure`. Esta entrada registra hallazgos concretos; no se modificó el código de la aplicación.
+
+### Flujo de lectura actual
+
+- `SheetsRepository.refreshAll()` intenta actualizar desde Google Sheets los módulos Matriz, Pase, Solicitud, Filtro Fecha, Filtrar, Control y Ruta IA. Por tanto, las lecturas de Sheets siguen alimentando el estado local.
+- `refreshMatriz()` actualiza filas existentes con `MatrizDao.actualizarDesdeSheet()`, cuyo SQL exige `isDirty = 0`, e inserta los IDs nuevos con `insertAll()`. Este filtro evita que el pull pise algunas ediciones locales pendientes, pero no es un protocolo de resolución de conflictos entre dispositivos ni una versión de servidor.
+- `refreshFiltroFecha()` borra los registros locales limpios con `deleteAllClean()` y luego inserta los registros leídos. `refreshControl()` borra toda la tabla local con `deleteAll()` antes de insertar el resultado remoto. Estos comportamientos deben revisarse antes de convertir una nube compartida en la autoridad, para no eliminar datos locales que no correspondan a la instantánea remota o a una operación pendiente.
+- `refreshRutaIA()` reemplaza contenido local en parte de su flujo de actualización; Ruta IA también se sube como reemplazo completo cuando encuentra registros dirty. Es un modelo distinto al CRUD por documento y requiere definir si la ruta diaria es una instantánea derivada o datos operativos editables compartidos.
+
+### Flujo de escritura actual
+
+- `SyncWorker.syncMatriz()` busca una fila por ID; si existe, actualiza varias celdas individualmente; si no existe, agrega una fila. Después llama a `markMatrizAsClean()`. Una interrupción después de que el servidor acepte la escritura pero antes de que Room reciba la confirmación puede provocar que el siguiente intento repita la operación. El append no demuestra idempotencia remota.
+- `SyncWorker.syncPase()` procesa primero las operaciones locales pendientes de renombre/borrado y después actualiza o agrega las filas dirty. La tabla `pase_sync_operation_table` es una base útil para diseñar un outbox general, pero el resultado sigue dependiendo de Sheets y sus filas.
+- `syncSolicitud()` también busca por ID y hace update por celdas o append. `syncFiltroFecha()` conserva el dirty si no encuentra la fila remota, lo cual evita marcar falsamente como sincronizado un registro, pero no resuelve por sí mismo la creación faltante ni la identidad compartida.
+- El renombre de Matriz en `FiltrarViewModel.guardarRegistroCompleto()` primero intenta renombrar la fila remota cuando la encuentra y después cambia la clave local mediante `matrizDao.renameId()`. No se observa en ese flujo una transacción distribuida entre Room y Sheets: una interrupción entre ambos pasos puede dejar temporalmente los IDs distintos. En cambio, el flujo de renombre de Filtrar debe inspeccionarse con su método específico antes de afirmar si verifica o ignora el resultado remoto; no extrapolar el hallazgo de un ViewModel a todos los módulos.
+
+### Borrados: hallazgo confirmado y límite
+
+- `FiltrarViewModel.eliminarRegistro()` elimina Matriz directamente de Sheets y solo después borra Room si la operación remota se confirma. Es un flujo en línea que no permite completar el borrado como operación durable sin conexión.
+- Los DAO revisados tienen borrados físicos; no hay una lápida compartida en esas operaciones por sí solas. En la arquitectura objetivo, el borrado debe ser una operación durable que viaje a la nube y se conserve como tombstone/versionado hasta que los clientes autorizados puedan aplicarlo.
+- Antes de cambiarlo, hay que localizar todos los puntos de borrado de cada módulo y sus dependencias; no sustituir indiscriminadamente los DAO ni asumir que todo dato local debe sincronizarse (por ejemplo, configuraciones propias del teléfono).
+
+### Decisiones técnicas derivadas
+
+1. El piloto no debe reutilizar el patrón actual de “buscar fila y después escribir” como garantía de idempotencia. Necesitamos una clave estable de operación, identidad de documento estable, versión/actualización del servidor y confirmación durable.
+2. Los cambios locales deben registrarse atómicamente con su evento pendiente (outbox); una respuesta ambigua de red debe poder reintentarse sin duplicar datos.
+3. Los borrados y renombres deben modelarse como operaciones explícitas con identidad anterior, identidad nueva cuando aplique, y tombstone/versionado.
+4. El pull de Sheets no puede coexistir indefinidamente como autoridad con Firestore. Durante un piloto se aislará el repositorio y se declarará explícitamente cuál sistema acepta escrituras; no se hará doble escritura productiva.
+5. Aún no se eligió una entidad piloto ni se modificó el código productivo. La siguiente pasada debe completar los puntos de entrada de altas/ediciones/borrados por módulo y confirmar qué entidades son operativas compartidas, cuáles son derivadas y cuáles son específicas del dispositivo.
+
+### Archivos consultados
+
+- `app/src/main/java/com/example/matrizapp/SyncWorker.kt`
+- `app/src/main/java/com/example/matrizapp/SheetsRepository.kt`
+- `app/src/main/java/com/example/matrizapp/DAOs.kt`
+- `app/src/main/java/com/example/matrizapp/FiltrarViewModel.kt`
+
+No se afirma que Firestore esté integrado. No se ejecutó build ni pruebas en esta pasada; la prueba instrumentada Room 37→38 sigue separada y pendiente por el problema de emulador documentado anteriormente.
