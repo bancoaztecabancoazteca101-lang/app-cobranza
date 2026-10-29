@@ -119,4 +119,8 @@ dependencies {
     // Firebase BoM: mantiene compatibles las versiones de los SDK de Firebase.
     implementation platform('com.google.firebase:firebase-bom:34.18.0')
     implementation 'com.google.firebase:firebase-messaging'
+    // Dependencias base para la migración progresiva a autenticación y datos centralizados.
+    // Aún no cambian el flujo de inicio de sesión ni la autoridad de los datos.
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
 }
