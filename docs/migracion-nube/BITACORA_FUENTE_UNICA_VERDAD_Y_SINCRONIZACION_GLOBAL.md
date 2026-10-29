@@ -664,3 +664,31 @@ Evidencia inspeccionada en la rama:
 La puerta define pruebas para: migración 37→38 y preservación de datos; colisiones/renombre de Matriz desde Filtrar; fallos remotos/reintentos; cola de operaciones de Pase; y, después, prueba controlada de dos dispositivos. También deja explícito que las llamadas Room/Sheets no son una transacción distribuida, que una respuesta remota ambigua puede requerir reconciliación, y que no se debe asumir versión instalada de los teléfonos sin evidencia.
 
 **Estado:** puerta documentada; todavía no se implementaron pruebas automatizadas ni se confirmó compilación verde del cambio. No se cambió `DB_VERSION`, no se alteraron reglas Firebase, `main` sigue intacta y PR #122 sigue abierto sin merge.
+
+
+## Continuidad de trabajo — 29-10-2026
+
+### Trabajo realizado en esta continuación
+
+- Se volvió a leer el estado real de esta rama y se confirmó que `chatgpt/sincronizacion-integridad-nube` está 72 commits por delante de `main` y 0 detrás en la comparación consultada. No se modificó `main`.
+- Se inspeccionaron `LoginScreen.kt`, `MainActivity.kt`, `AppContainer.kt`, `SyncWorker.kt`, `SheetsRepository.kt`, `Entities.kt`, `app/build.gradle`, `app/google-services.json` y `AndroidManifest.xml`.
+- Confirmación de código: el inicio de sesión actual usa Google Sign-In con scopes de Google Sheets y Drive; `MainActivity` decide si mostrar la pantalla principal mediante `hasSignedInAccount()`. `AppContainer` construye `SheetsRepository` y los servicios de Sheets/Drive. El `SyncWorker` y `SheetsRepository` continúan sincronizando con Sheets, así que añadir SDK no cambia todavía la fuente de verdad.
+- Cambio aplicado en `app/build.gradle`, commit `29cb424f3d8d9de5fb497e2afc19b6ced1f0cc4f`: se añadieron las dependencias Firebase Authentication y Cloud Firestore bajo el BoM existente. No se cambió el flujo de inicio de sesión, la sincronización, las reglas remotas ni los datos.
+- Se inspeccionó `app/google-services.json`: el cliente Android corresponde al proyecto `app-matriz` y al paquete `com.example.matrizapp`, pero el arreglo `oauth_client` está vacío. Por tanto, aún no está demostrada la configuración OAuth necesaria para obtener una credencial de Google utilizable por Firebase Authentication. No se debe asumir que Firebase Auth ya funciona.
+
+### Estado de verificación
+
+- Cambio de dependencias registrado en GitHub en la rama de migración.
+- **Compilación del commit nuevo: PENDIENTE**. No se afirma que compile hasta comprobar una ejecución de CI para este SHA.
+- **Inicio de sesión Firebase: NO implementado**. Requiere confirmar/configurar el cliente OAuth de tipo web en Firebase/Google Cloud, sin exponer secretos.
+- **Firestore: NO conectado al flujo de datos**. Las reglas deben permanecer cerradas hasta definir y probar autenticación y autorización.
+- **Migración de datos y sincronización global: NO implementadas por este cambio**. Room y Sheets siguen operando como antes.
+- `main` y la fusión del PR #122 no se tocaron.
+
+### Siguiente paso concreto
+
+1. Comprobar la compilación de `29cb424f3d8d9de5fb497e2afc19b6ced1f0cc4f` mediante GitHub Actions.
+2. Resolver la configuración OAuth faltante en Firebase Console/Google Cloud y volver a comprobar `google-services.json` (sin compartir tokens ni claves privadas).
+3. Implementar Firebase Authentication usando la cuenta de Google ya seleccionada, manteniendo intactos los scopes actuales de Sheets/Drive hasta que exista una transición probada.
+4. Solo después, diseñar e implementar un piloto Firestore con datos sintéticos y reglas de acceso restrictivas; no migrar aún módulos productivos.
+
