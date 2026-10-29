@@ -964,3 +964,64 @@ Se revisaron los archivos reales `SyncWorker.kt`, `SheetsRepository.kt`, `DAOs.k
 - `app/src/main/java/com/example/matrizapp/FiltrarViewModel.kt`
 
 No se afirma que Firestore esté integrado. No se ejecutó build ni pruebas en esta pasada; la prueba instrumentada Room 37→38 sigue separada y pendiente por el problema de emulador documentado anteriormente.
+
+## 30. Trazabilidad de altas/ediciones y clasificación preliminar de datos — 28 de octubre de 2026
+
+Se continuó la auditoría en la rama `chatgpt/room-test-infrastructure`, leyendo los ViewModels actuales. Esta sección documenta el comportamiento observado; no modifica código productivo ni selecciona todavía un piloto.
+
+### Solicitud: CRUD local con sincronización de escritura, pero borrado remoto en línea
+
+Archivo: `app/src/main/java/com/example/matrizapp/SolicitudViewModel.kt`.
+
+- `crearRegistro()` genera un ID con UUID recortado a 8 caracteres, inserta en Room con `isDirty = true` y programa `SyncWorker`. Esa clave corta no está demostrada como identidad global ni se verifica en este método una colisión remota antes de insertar.
+- `guardarEstado()` y `guardarRegistroCompleto()` actualizan Room y disparan sincronización.
+- `eliminarRegistro()` primero solicita borrar la fila en Google Sheets; si no confirma, conserva la copia local y reporta error. Si confirma, ejecuta el borrado físico en Room. El flujo no representa una eliminación pendiente durable para uso sin conexión ni conserva tombstone para otros dispositivos.
+- Fotos/audio forman parte del registro, pero el almacenamiento y las URLs de archivos requieren un análisis separado: no asumir que las referencias locales del teléfono son accesibles desde otro dispositivo.
+
+### Filtro Fecha y tickets: mezcla de estado operativo y datos auxiliares
+
+Archivo: `app/src/main/java/com/example/matrizapp/FiltroFechaViewModel.kt`.
+
+- `guardarEstadoYHora()` modifica la entidad Matriz local mediante `MatrizDao.updateEstadoYHora()`; el comentario indica que ese cambio se sube a la hoja Matriz, no a una entidad/hoja Filtro Fecha independiente. Por ello Filtro Fecha se comporta en parte como una vista temporal derivada de Matriz, no como un segundo registro maestro.
+- `registrarPagoDesdeTicket()` puede marcar Pagado y guardar monto/hora en Matriz; además registra el evento de visita en `VisitaMapaDao`. También guarda cada ticket OCR en `TicketPagoEntity`, usando ID derivado de tiempo y hash del texto. El método comprueba duplicados por monto/CU/nombre dentro del día, pero ese control local no garantiza idempotencia entre teléfonos concurrentes.
+- `borrarTicket()` elimina físicamente un ticket local y no programa aquí una sincronización. Por el código inspeccionado, los tickets OCR parecen datos auxiliares/locales de control, pero antes de excluirlos de la nube debe confirmarse si el usuario necesita que el total de tickets sea idéntico entre dispositivos.
+
+### Ruta IA: ruta importada/derivada con estado operativo de visita
+
+Archivo: `app/src/main/java/com/example/matrizapp/RutaIAViewModel.kt`.
+
+- `importarJson()` construye la ruta a partir de un JSON, reemplaza toda la tabla local con `deleteAll()` + `insertAll()` y luego intenta reemplazar el contenido completo de la hoja Ruta IA. Esto se parece a una instantánea regenerable, no a sincronización por documento.
+- `actualizarConfiguracion()`, criterios y orden manual guardan preferencias de orden en Room; al reordenar se programa sincronización de la ruta. La configuración de orden puede ser una preferencia compartida o específica del dispositivo: el código no resuelve la decisión de producto.
+- `alternarVisitado()` actualiza localmente el estado de la parada y, para una parada nueva aún no vinculada a Matriz, puede dar de alta un registro Matriz al marcar Visitado. Por tanto, aunque la composición/orden de Ruta IA sea derivada, el estado Visitado y el alta vinculada tienen efecto operativo y no deben descartarse al regenerar la ruta.
+- `limpiarRutaAhora()` borra la tabla local y después intenta reemplazar la hoja remota por una lista vacía. Si falla la red, el borrado local ya ocurrió y la excepción se ignora; no hay confirmación durable de la operación.
+- La ruta no debe elegirse como primer piloto sin separar primero la instantánea importada de los cambios operativos de visita y alta en Matriz.
+
+### Control: datos derivados, no maestro independiente
+
+Archivo: `app/src/main/java/com/example/matrizapp/ControlViewModel.kt`.
+
+- `itemsHoy` y `itemsSemanaActual` se calculan en memoria desde `MatrizDao.getAllMatriz()`, agrupando el requisito por semana y excluyendo estado PASE. No se encontró escritura desde este ViewModel a `ControlDao`; los resultados mostrados son derivados de Matriz.
+- La tabla/entidad `ControlEntity` no debe migrarse como una fuente operativa independiente sin verificar otras pantallas/lectores. La fuente de los importes es Matriz; el resultado puede recalcularse en cada dispositivo si la copia de Matriz es coherente.
+
+### Clasificación preliminar (sujeta a completar con pantallas y demás escritores)
+
+| Área/dato | Clasificación preliminar | Evidencia y condición |
+|---|---|---|
+| Matriz: cliente, estado, importe, ubicación, fecha/hora | Operativo compartido | Alta/edición local y sincronización actual con Sheets; necesita identidad global, outbox y tombstones. |
+| Solicitud | Operativo compartido candidato | Tiene altas/ediciones/borrados y sincronización; verificar si adjuntos y todos sus campos deben compartirse. |
+| Filtro Fecha | Vista/flujo derivado de Matriz | Cambios de estado/hora van a Matriz; no crear un segundo maestro para los mismos campos. |
+| TicketPago OCR | Auxiliar cuyo alcance está por decidir | El total depende de registros locales; confirmar si debe agregarse globalmente o mantenerse por dispositivo. |
+| Control | Derivado | Los totales inspeccionados se calculan desde Matriz. |
+| Ruta IA importada y orden | Instantánea derivada más preferencias | Se reemplaza completa desde JSON/Sheets; separar preferencias de la ruta y eventos de visita antes de migrar. |
+| Ruta IA: Visitado y alta de cliente nuevo | Operativo compartido | Puede disparar el alta en Matriz; no debe perderse al regenerar la instantánea. |
+| Configuración de orden Ruta IA | Decisión pendiente | El código la persiste localmente y no define si debe compartirse entre teléfonos. |
+| VisitaMapa | Evento/estado auxiliar relacionado con operación | Se registra al crear/editar/visitar Matriz; falta inspeccionar todas las reglas y consumidores antes de decidir su autoridad y retención. |
+
+### Riesgos y siguientes comprobaciones
+
+1. Los IDs generados con UUID truncado o combinaciones de tiempo/hash no deben considerarse globales sin estrategia de colisión e idempotencia.
+2. Los borrados físicos de Solicitud y tickets no son equivalentes: Solicitud se borra tras confirmar Sheets; ticket se borra localmente sin sincronización visible en este método. Debe definirse si el ticket es personal o compartido.
+3. Ruta IA no es un piloto sencillo mientras una importación pueda reemplazar la lista y el estado Visitado pueda crear clientes en Matriz.
+4. Continuar trazando `Pase`, `Semana 6`, `VisitaMapa` y `CartuchoDia`, así como todos los puntos de escritura/borrado desde pantallas y otros ViewModels. Confirmar también si el borrado/renombre tiene otros consumidores.
+5. No se eligió todavía el piloto, no se integró Firestore y no se ejecutó build/prueba en esta pasada. La prueba instrumentada Room 37→38 sigue pendiente por la disponibilidad del emulador; no se solapó el trabajo de Claude en esa prueba.
+6. `main` permanece intacta y PR #122 no se fusiona sin autorización expresa.
