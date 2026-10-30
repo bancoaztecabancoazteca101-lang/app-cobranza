@@ -899,3 +899,31 @@ Este cambio no implementa Firebase Authentication ni conecta Firestore con datos
 5. Mantener Firestore deny-all, Room v38, Sheets como mecanismo actual y PR #122 abierto/no fusionado. No migrar datos productivos.
 
 **Estado:** Auth fue retirado temporalmente para validar Firestore por separado. El build del commit b1b2016... todavía debe consultarse; no hay APK ni autenticación Firebase confirmados.
+
+
+---
+
+## 21. Ensayo controlado de compatibilidad Firebase Auth + Firestore — 29-10-2026
+
+### 21.1 Investigación de versiones
+
+Se consultó la documentación oficial de Firebase Android Release Notes. La tabla oficial muestra que Firebase BoM 32.7.4 alinea Firebase Authentication 22.3.1 y Cloud Firestore 24.9.1. La referencia oficial también documenta que BoM 32.6.0 ya usaba Auth 22.3.0 y Firestore 24.9.1. Esto hace que 32.7.4 sea una candidata histórica anterior a las versiones Auth 23.2.1 y 24.2.0 que produjeron errores de metadatos Kotlin en este proyecto.
+
+Fuente: https://firebase.google.com/support/release-notes/android
+
+La tabla de versiones no demuestra por sí sola compatibilidad con Kotlin Gradle Plugin 1.9.0; esa comprobación requiere compilar el repositorio real.
+
+### 21.2 Cambio de prueba aplicado
+
+- Rama: `chatgpt/sincronizacion-integridad-nube`.
+- Archivo: `app/build.gradle`.
+- Se cambió Firebase BoM de 33.14.0 a 32.7.4.
+- Se reincorporó `firebase-auth` junto con `firebase-firestore`, ambos administrados por el BoM.
+- No se modificaron Kotlin Gradle Plugin 1.9.0, AGP 8.1.1, Compose Compiler 1.5.1, Room v38, LoginScreen, SyncWorker, SheetsRepository ni reglas de Firestore.
+- El objetivo exclusivo es comprobar si ambos SDK compilan en el toolchain actual.
+
+### 21.3 Límites de esta prueba
+
+Este cambio NO implementa Firebase Authentication, NO conecta Firestore a datos operativos, NO modifica el inicio de sesión, NO cambia la autoridad actual de Sheets y NO habilita acceso a Firestore. Las reglas deben permanecer deny-all hasta que autenticación, UID y autorización estén implementados y probados.
+
+Resultado CI: pendiente de ejecución y revisión. No declarar compatibilidad ni APK válido hasta tener run verde asociado al commit exacto y artefacto verificable.
