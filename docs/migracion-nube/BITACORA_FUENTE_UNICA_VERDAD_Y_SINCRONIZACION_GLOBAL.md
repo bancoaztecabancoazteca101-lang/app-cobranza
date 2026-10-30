@@ -944,3 +944,47 @@ Enlaces:
 - PR 1066: https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/41008776325
 
 **Estado actualizado:** dependencias Auth + Firestore compatibles con la compilación Debug del toolchain actual, validadas por CI. Próxima fase: inspeccionar y diseñar el intercambio Google Sign-In → Firebase Auth en el código real, pero antes confirmar configuración OAuth web y mantener reglas Firestore cerradas. No conectar aún datos operativos ni cambiar Room/SyncWorker/Sheets.
+
+
+---
+
+## 22. Revisión directa del flujo Google Sign-In y preparación de Firebase Auth — 30-10-2026
+
+Se relee el estado actual de la rama antes de cualquier modificación funcional. No se modifica `main`, no se fusiona PR #122 y no se cambia el login en esta revisión.
+
+### Archivos verificados en la rama
+
+- `app/src/main/java/com/example/matrizapp/LoginScreen.kt` — blob SHA `5d2b59b95e27a1dc8e1a2d2954d982afd8e1bb2c`.
+- `app/src/main/java/com/example/matrizapp/MainActivity.kt` — blob SHA `f4a9608a0ba90f49ef6aa604e0102a680c4cd4d7`.
+- `app/google-services.json` — blob SHA `e499626e662e0219996201df46ff451cc7ca188a`.
+- `app/build.gradle` — blob SHA `14a4bb0424093467c6802f54745e4fe5d73c0bd2`.
+
+### Hechos confirmados en el código actual
+
+1. `LoginScreen.kt` construye `GoogleSignInOptions.DEFAULT_SIGN_IN`, solicita correo y los scopes completos de Sheets y Drive (`SPREADSHEETS` y `DRIVE`). Al regresar del selector obtiene el `GoogleSignInAccount`, pero descarta el resultado: no solicita ID token, no crea `GoogleAuthProvider.getCredential(...)` y no llama a `FirebaseAuth.signInWithCredential(...)`.
+2. `hasSignedInAccount(context)` únicamente comprueba que exista una cuenta Google y que tenga los scopes de Sheets/Drive. No comprueba `FirebaseAuth.getInstance().currentUser`, ni UID Firebase.
+3. `MainActivity.onCreate()` inicializa el estado `signedIn` con `hasSignedInAccount(this)`; si es verdadero deja entrar a la app. Por tanto, actualmente el acceso a pantallas depende de Google Sign-In/Scopes, no de una sesión Firebase.
+4. La búsqueda de referencias en el código de la rama no encontró llamadas a `FirebaseAuth`, `requestIdToken` ni lógica de cierre de sesión Firebase. Las dependencias Auth y Firestore sí están declaradas en Gradle tras la validación de CI de la sección 21.4.
+5. El `google-services.json` versionado tiene `oauth_client: []` y `other_platform_oauth_client: []`. Esto demuestra que el archivo descargado/configurado en esta rama no incluye clientes OAuth en esas listas. No permite deducir cuál cliente web existe en Google Cloud/Firebase Console ni inventar un ID.
+6. El App ID Android presente en ese archivo es `1:542876060274:android:d334e9f168a8ab2ce890eb`, paquete `com.example.matrizapp`, proyecto `app-matriz`. Coincide con el App ID que el usuario confirmó como correcto.
+7. Los scopes actuales de Sheets/Drive deben preservarse durante la transición mientras `SheetsRepository` siga siendo el mecanismo operativo. No retirar esos permisos en el mismo cambio que integra Firebase Auth.
+
+### Diagnóstico
+
+La autenticación Google existente y Firebase Authentication son dos estados distintos. La app actualmente permite entrar cuando Google Sign-In tiene los scopes requeridos, pero no establece identidad Firebase. El siguiente paso de implementación no debe cambiar la autoridad de datos ni iniciar sincronización Firestore: debe convertir el resultado de Google Sign-In en una credencial Firebase y hacer que el guard de entrada dependa de una sesión Firebase válida, manteniendo el acceso de Sheets/Drive necesario para la operación actual.
+
+### Bloqueo de configuración externa
+
+Antes de implementar el intercambio Google→Firebase hay que verificar el cliente OAuth de tipo **Web** asociado al proyecto `app-matriz` y comprobar que el `server client ID` correspondiente esté disponible para `requestIdToken(...)`. No se debe confundir el OAuth client Android con el Web client. El archivo actual no proporciona ese ID. La verificación de Console/Google Cloud requiere confirmación visual del usuario o una configuración descargada actualizada; no se inventará ni se reutilizará un ID de otro proyecto.
+
+### Próximos pasos seguros
+
+1. Confirmar en Firebase Console/Google Cloud el OAuth 2.0 Client ID de tipo Web del proyecto `app-matriz`; el usuario puede compartir solo el ID público del cliente, nunca secretos/contraseñas.
+2. Volver a descargar el `google-services.json` de la única app Android registrada y comparar si incorpora la configuración OAuth necesaria. No reemplazarlo hasta verificar proyecto, paquete y App ID.
+3. Implementar en una modificación acotada: solicitar ID token con el Web client ID; intercambiarlo por credencial Firebase Google; esperar éxito de Firebase Auth; propagar errores sin dejar entrar; conservar scopes Sheets/Drive; cambiar el guard de `MainActivity` para exigir Firebase currentUser. Definir también cómo se recupera la sesión y cómo se cierra sesión sin dejar estados inconsistentes.
+4. Añadir pruebas de autenticación y comprobar UID real en dispositivo/emulador con cuenta autorizada. No registrar tokens en logs ni en la bitácora.
+5. Mantener Firestore deny-all y sin lecturas/escrituras de negocio hasta tener UID, política de autorización y reglas verificadas.
+
+### Límites y estado al cierre
+
+Esta revisión no cambió código funcional, no ejecutó build nuevo, no creó APK, no probó Firebase Auth en dispositivo y no accedió a Firebase Console. El último build confirmado sigue siendo el Debug CI de la sección 21.4. Firestore no está conectado a datos operativos; Room permanece v38 y Sheets continúa siendo el mecanismo actual. El siguiente paso es resolver/verificar el OAuth Web client, después implementar Auth de forma aislada y validarla antes de conectar Firestore.
