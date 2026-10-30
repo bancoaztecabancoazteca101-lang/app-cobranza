@@ -692,3 +692,13 @@ La puerta define pruebas para: migración 37→38 y preservación de datos; coli
 3. Implementar Firebase Authentication usando la cuenta de Google ya seleccionada, manteniendo intactos los scopes actuales de Sheets/Drive hasta que exista una transición probada.
 4. Solo después, diseñar e implementar un piloto Firestore con datos sintéticos y reglas de acceso restrictivas; no migrar aún módulos productivos.
 
+
+
+## Corrección de compatibilidad Firebase/Kotlin — 29-10-2026
+
+- La compilación del commit `29cb424f3d8d9de5fb497e2afc19b6ced1f0cc4f` falló en `compileDebugKotlin` y `compileReleaseKotlin`.
+- El registro de CI identificó el motivo: `firebase-auth-24.2.0` contiene metadatos Kotlin 2.3.0, mientras el proyecto usa Kotlin Gradle Plugin 1.9.0 (esperaba metadatos 1.9.0).
+- Se confirmó en el código que el proyecto usa AGP 8.1.1, Kotlin 1.9.0 y Compose Compiler 1.5.1. Para no actualizar toda la cadena Kotlin/Compose durante esta etapa, se cambió únicamente Firebase BoM de 34.18.0 a 33.14.0, que asigna Firebase Auth 23.2.1 según las notas oficiales.
+- Commit correctivo: `c1591914e2e7a023c1d30da144b75d4f4e218b20`.
+- Pendiente obligatorio: ejecutar y verificar CI para este commit. El cambio de BoM es una corrección propuesta, no una compilación validada.
+- No se modificó el flujo de inicio de sesión, Firestore no recibe escrituras, no se cambiaron reglas de seguridad, no se migraron datos y no se modificó `main`.
