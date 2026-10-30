@@ -870,3 +870,32 @@ Cada etapa se considera cerrada únicamente con evidencia concreta:
 - bitácora actualizada.
 
 **Estado al corte 29-10-2026:** objetivo y arquitectura decididos; Firebase elegido y proyecto/configuración inicial existentes; dependencias Auth/Firestore añadidas y luego ajustadas a BoM 33.14.0; compatibilidad de ese ajuste aún sin build confirmado; autenticación Firebase no implementada; Firestore no conectado a datos operativos; Room sigue en versión 38; Sheets continúa siendo el mecanismo actual; migración global, piloto y pruebas de dos dispositivos pendientes. La prioridad inmediata es desbloquear y validar CI antes de tocar el flujo de autenticación o datos.
+
+
+---
+
+## 20. Resultado del build 1054 y aislamiento temporal de Firebase Auth — 29/30 de octubre de 2026
+
+### 20.1 Resultado verificado
+
+El workflow Build APK, run 40988854333 (run number 1054), sobre el commit c1591914e2e7a023c1d30da144b75d4f4e218b20, terminó con conclusión failure. El paso Build Debug APK figura completado, pero Gradle falló; el paso Fail job if build failed ejecutó exit 1. No existe APK válido confirmado para este SHA/run.
+
+El log del job 123886101547 muestra que firebase-auth-23.2.1-api.jar fue compilado con metadata Kotlin 2.1.0, mientras el proyecto espera 1.9.0. La reducción de Firebase BoM 34.18.0 a 33.14.0 no resolvió el conflicto.
+
+Run: https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/40988854333
+
+### 20.2 Cambio de aislamiento
+
+Commit b1b2016a7a6e55d760ee49c53f78d4715c89f5b8, archivo app/build.gradle: se retiró temporalmente firebase-auth y se conserva firebase-firestore con BoM 33.14.0. El propósito es comprobar si Firestore compila sin que Auth bloquee el toolchain actual.
+
+Este cambio no implementa Firebase Authentication ni conecta Firestore con datos operativos. No se debe modificar login ni habilitar lecturas/escrituras hasta tener build válido, identidad verificada y reglas seguras.
+
+### 20.3 Siguientes pasos obligatorios
+
+1. Consultar CI del commit b1b2016a7a6e55d760ee49c53f78d4715c89f5b8.
+2. Si compila, verificar APK/artefacto, SHA, run y variante. Esto solo valida compilación de dependencias, no autenticación ni sincronización.
+3. Si falla, extraer el primer error real y aislar la dependencia responsable.
+4. Investigar una versión de Auth compatible con Kotlin 1.9.0 o una actualización coordinada y probada del toolchain; no adivinar versiones.
+5. Mantener Firestore deny-all, Room v38, Sheets como mecanismo actual y PR #122 abierto/no fusionado. No migrar datos productivos.
+
+**Estado:** Auth fue retirado temporalmente para validar Firestore por separado. El build del commit b1b2016... todavía debe consultarse; no hay APK ni autenticación Firebase confirmados.
