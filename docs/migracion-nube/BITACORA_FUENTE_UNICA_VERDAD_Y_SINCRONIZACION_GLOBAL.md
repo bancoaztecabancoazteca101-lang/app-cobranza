@@ -927,3 +927,20 @@ La tabla de versiones no demuestra por sí sola compatibilidad con Kotlin Gradle
 Este cambio NO implementa Firebase Authentication, NO conecta Firestore a datos operativos, NO modifica el inicio de sesión, NO cambia la autoridad actual de Sheets y NO habilita acceso a Firestore. Las reglas deben permanecer deny-all hasta que autenticación, UID y autorización estén implementados y probados.
 
 Resultado CI: pendiente de ejecución y revisión. No declarar compatibilidad ni APK válido hasta tener run verde asociado al commit exacto y artefacto verificable.
+
+
+### 21.4 Resultado de CI — validación de dependencias (30-10-2026)
+
+- Commit probado: `becec8f6bd0bdae3624bccda79e4f98b6ded6a33`.
+- Workflow push: run **1065**, ID `41008768087`, conclusión **success**.
+- Workflow pull_request: run **1066**, ID `41008776325`, conclusión **success**.
+- Job `build`: conclusión **success** en run 1066; paso `Build Debug APK`: **success**.
+- No se encontraron artefactos publicados para run 1066 (consulta de artifacts: lista vacía). Por ello se confirma compilación Debug exitosa, pero no se afirma que exista un APK descargable de este run.
+- El build verde confirma que Firebase BoM 32.7.4 con Firebase Auth y Firestore, junto con el toolchain actual Kotlin 1.9.0 / AGP 8.1.1 / Compose Compiler 1.5.1, supera la compilación Debug de CI. No demuestra inicio de sesión Firebase, lectura/escritura Firestore, reglas de seguridad ni sincronización multi-dispositivo.
+- No se ejecutaron pruebas instrumentadas/funcionales de Auth o Firestore; el workflow mostrado es de build APK.
+
+Enlaces:
+- Push 1065: https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/41008768087
+- PR 1066: https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/41008776325
+
+**Estado actualizado:** dependencias Auth + Firestore compatibles con la compilación Debug del toolchain actual, validadas por CI. Próxima fase: inspeccionar y diseñar el intercambio Google Sign-In → Firebase Auth en el código real, pero antes confirmar configuración OAuth web y mantener reglas Firestore cerradas. No conectar aún datos operativos ni cambiar Room/SyncWorker/Sheets.
