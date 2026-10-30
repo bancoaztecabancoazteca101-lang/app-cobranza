@@ -702,3 +702,171 @@ La puerta define pruebas para: migración 37→38 y preservación de datos; coli
 - Commit correctivo: `c1591914e2e7a023c1d30da144b75d4f4e218b20`.
 - Pendiente obligatorio: ejecutar y verificar CI para este commit. El cambio de BoM es una corrección propuesta, no una compilación validada.
 - No se modificó el flujo de inicio de sesión, Firestore no recibe escrituras, no se cambiaron reglas de seguridad, no se migraron datos y no se modificó `main`.
+
+
+## 19. Corte integral de continuidad, hallazgos y puntos de control — 29 de octubre de 2026
+
+> Esta sección es el estado de continuidad más reciente. Conserva las anotaciones históricas anteriores; cuando exista diferencia, prevalece el estado actualizado aquí descrito. Su propósito es que el trabajo pueda retomarse sin repetir auditorías ni omitir riesgos.
+
+### 19.1 Estado ejecutivo: dónde estamos y qué está detenido
+
+**Objetivo que no cambia:** Firestore debe convertirse en la única fuente de verdad de los datos operativos compartidos de Matriz. Todos los teléfonos autorizados deben consultar y modificar el mismo conjunto de datos. Room será caché local y outbox persistente para operaciones pendientes/offline. Google Sheets será una salida de exportación/reportes y puente de transición, no autoridad operativa. El archivo de Sheets antiguo se conserva como respaldo mientras se migra y verifica; no borrarlo ni desconectarlo anticipadamente.
+
+**Punto exacto actual:** se inició la preparación técnica de Firebase en la rama `chatgpt/sincronizacion-integridad-nube`, pero la integración real aún no ha comenzado. Se agregaron SDK de Auth y Firestore; la primera compilación reveló incompatibilidad de Kotlin. Se propuso bajar Firebase BoM para conservar Kotlin 1.9.0, pero la ejecución CI de ese commit fue cancelada antes de ejecutar la tarea de build. Por tanto, **la compatibilidad de la nueva BoM sigue sin validar**.
+
+Queda en pausa, hasta tener build verificable:
+- implementar o cambiar el flujo de inicio de sesión;
+- crear repositorios Firestore o escribir/leer datos operativos;
+- modificar reglas de Firestore;
+- modificar entidades, DAOs o versión/migraciones Room;
+- cambiar SyncWorker/SheetsRepository para sustituir Sheets;
+- migrar datos reales o habilitar sincronización entre dispositivos.
+
+No es una pausa del objetivo ni una cancelación del proyecto: es una puerta de seguridad para no construir sobre dependencias sin compilar.
+
+### 19.2 Commits y evidencia exacta de la preparación Firebase
+
+- Rama: `chatgpt/sincronizacion-integridad-nube`.
+- PR: [#122](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/pull/122), debe permanecer abierto y sin merge hasta completar revisión y pruebas.
+- Commit de dependencias inicial: `29cb424f3d8d9de5fb497e2afc19b6ced1f0cc4f` — agregó `firebase-auth` y `firebase-firestore` bajo Firebase BoM 34.18.0.
+- Workflow [40952602143 / run 1050](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/40952602143): primer intento se canceló; después se reintentó el job. En el intento repetido, el paso `Build Debug APK` ejecutó Gradle y fallaron `compileDebugKotlin` y `compileReleaseKotlin`.
+- Error preciso de ese build: el artefacto `firebase-auth-24.2.0` incluye metadatos Kotlin 2.3.0, pero el proyecto compila con Kotlin Gradle Plugin 1.9.0 y esperaba metadatos 1.9.0. No fue un error de lógica de LoginScreen ni de código Firestore; la incompatibilidad aparece al compilar el SDK Firebase Auth.
+- Se verificaron los archivos de configuración Gradle de la rama: `build.gradle` usa Android Gradle Plugin 8.1.1 y Kotlin Gradle Plugin 1.9.0; `app/build.gradle` usa Compose Compiler 1.5.1 y Kotlin JVM target 1.8.
+- Commit correctivo: `c1591914e2e7a023c1d30da144b75d4f4e218b20` — cambió únicamente Firebase BoM de 34.18.0 a 33.14.0, manteniendo las dependencias Auth/Firestore. La intención es evitar actualizar toda la cadena Kotlin/Compose sin necesidad.
+- Commit documental previo de la corrección: `7988f612926944b34b40fb7b48636e76a14b6984`.
+- Workflow [40988854333 / run 1054](https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/actions/runs/40988854333): terminó `cancelled`; el paso `Build Debug APK` también quedó cancelado. No llegó a demostrar si BoM 33.14.0 compila.
+- **Resultado vigente:** no hay build exitoso confirmado para la incorporación de Auth/Firestore. No existe APK nuevo validado de estos cambios. No confundir un paso de configuración exitoso o una ejecución cancelada con compilación verde.
+
+### 19.3 Código real inspeccionado en esta continuación
+
+Se leyeron en la rama los archivos:
+- `app/src/main/java/com/example/matrizapp/LoginScreen.kt`
+- `app/src/main/java/com/example/matrizapp/MainActivity.kt`
+- `app/src/main/java/com/example/matrizapp/MainApplication.kt`
+- `app/src/main/java/com/example/matrizapp/AppContainer.kt`
+- `app/src/main/java/com/example/matrizapp/SyncWorker.kt`
+- `app/src/main/java/com/example/matrizapp/SheetsRepository.kt`
+- `app/src/main/java/com/example/matrizapp/Entities.kt`
+- `app/src/main/AndroidManifest.xml`
+- `app/build.gradle`
+- `app/google-services.json`
+- además de `build.gradle`, `settings.gradle` y `gradle.properties`.
+
+Hechos confirmados:
+1. `LoginScreen.kt` usa Google Sign-In clásico. Solicita email y scopes `SheetsScopes.SPREADSHEETS` y `DriveScopes.DRIVE`; al volver de la actividad obtiene la cuenta con `GoogleSignIn.getSignedInAccountFromIntent()`, pero no obtiene un ID token para Firebase ni crea una credencial `GoogleAuthProvider`.
+2. `hasSignedInAccount()` solo verifica que haya una cuenta Google y que tenga los scopes de Sheets/Drive. No verifica `FirebaseAuth.currentUser`.
+3. `MainActivity` decide mostrar LoginScreen o la pantalla principal mediante `hasSignedInAccount(this)`. El flujo debe rediseñarse con cuidado para no bloquear el acceso actual ni perder los scopes necesarios durante la transición.
+4. `AppContainer` construye servicios de Google Sheets/Drive y `SheetsRepository`; no se observó un repositorio de datos Firestore conectado.
+5. `SyncWorker` y `SheetsRepository` siguen usando Sheets para sincronización operativa. Agregar SDK Firebase no modifica este comportamiento ni cambia la fuente de verdad.
+6. `app/google-services.json` corresponde al proyecto Firebase `app-matriz` y al paquete Android `com.example.matrizapp`. Su arreglo `oauth_client` aparece vacío en la copia inspeccionada. La configuración de proveedor Google habilitado en Firebase Console, por sí sola, no demuestra que la credencial OAuth necesaria esté completa.
+7. No copiar API keys, tokens, secretos ni contenido sensible de `google-services.json` a bitácoras o mensajes. No pedir al usuario que pegue tokens privados.
+8. No se creó todavía código que lea o escriba Firestore. No se cambió la lógica de autenticación ni se alteró la sincronización existente.
+
+### 19.4 Configuración Firebase conocida y límites de lo confirmado
+
+Datos aportados/confirmados previamente por el usuario:
+- Proyecto Firebase: `app-matriz`, nombre visible “App Matriz”, plan Spark.
+- Aplicación Android registrada: `com.example.matrizapp`.
+- Base Firestore `(default)` creada.
+- El usuario indicó que ingresó reglas cerradas: `allow read, write: if false`; se conserva como postura segura hasta probar reglas por usuario autenticado. La publicación efectiva de esas reglas debe verificarse en consola, no inferirse de una captura o de una acción anterior.
+- Proveedor Google aparece habilitado en Authentication.
+- App ID Android reportado por el usuario: `1:542876060274:android:d334e9f168a8ab2ce890eb`.
+- Huellas SHA-1/SHA-256 de debug se habían proporcionado en el trabajo previo y están registradas en el contexto de continuidad; no repetirlas en documentación pública ni volver a registrar huellas sin verificar el certificado usado por el APK distribuido.
+- La configuración OAuth sigue siendo un punto abierto: confirmar cliente OAuth de tipo Web y su relación con la app Android/proveedor Google. No inventar IDs ni colocar un client ID supuesto.
+
+**Seguridad:** Firestore no debe quedar con reglas públicas o `allow read, write: if true`. Antes de habilitar lecturas/escrituras: definir UID autorizado, reglas restrictivas, pruebas de usuario autorizado/no autorizado, y revisar App Check, cuotas/costos y respaldo. Mantener deny-all mientras no exista autenticación y autorización verificadas.
+
+### 19.5 Arquitectura objetivo y decisiones que siguen vigentes
+
+- Firestore: backend central y única fuente de verdad de los datos operativos compartidos.
+- Firebase Authentication: identidad del usuario/dispositivos autorizados; no confundir Google Sign-In con Firebase Auth hasta intercambiar y validar credencial.
+- Room: caché, lectura local y outbox persistente; no autoridad separada por teléfono.
+- Outbox: operaciones de negocio con ID estable, tipo, entidad/registro, payload o referencia de cambio, fecha, estado, intentos, error y confirmación remota. Definir el modelo exacto a partir de los DAOs/entidades reales; no sembrar una cola genérica sin mapear operaciones.
+- Idempotencia: cada operación debe poder reintentarse sin crear duplicados.
+- Borrados: representar borrado lógico/tombstone o mecanismo equivalente con versión/fecha; no permitir que una descarga antigua resucite un registro.
+- Conflictos: definir comportamiento de edición del mismo campo y de campos distintos; no asumir que la sincronización offline de Firestore resuelve las reglas de negocio. Last-write-wins no basta para integridad de Matriz.
+- Sheets: exportación unidireccional desde Firestore a un archivo NUEVO; la hoja antigua se conserva durante transición. Cualquier integración de entrada se debe aprobar y diseñar como comando controlado, no como una segunda autoridad.
+- Todos los teléfonos autorizados consultan el mismo conjunto de datos; no crear colecciones separadas por dispositivo para los registros operativos compartidos. Los datos puramente locales/de interfaz deben clasificarse expresamente.
+
+### 19.6 Hallazgos de integridad anteriores que no deben perderse
+
+Los siguientes riesgos siguen abiertos hasta que exista evidencia de corrección y pruebas:
+- Matriz: el flujo anterior puede anexar una fila si no encuentra el ID remoto; un estado local obsoleto puede recrear registros borrados. Las escrituras por celda no son una transacción de registro.
+- Matriz: verificar ID estable global y comportamiento de renombre; probar alta/edición/renombre/borrado en dos dispositivos.
+- Matriz: existe una protección local en DAO `markAsClean` que compara campos enviados con valores actuales antes de limpiar `isDirty`; reduce una carrera local, pero no garantiza consistencia remota ni transacción entre campos.
+- Pase: el ID de alta observado se genera aleatoriamente con 12 caracteres; la deduplicación local por `origenMatrizId` no demuestra unicidad entre teléfonos. No hay descarga completa confirmada dentro de `syncPase()`; verificar si existe otra ruta de descarga antes de concluir el inventario.
+- Pase: en RENAME, la cola puede marcar operación completa antes de que el upsert posterior confirme la fila nueva; cerrar ventana de fallo y probar caída/reintento.
+- Pase: `appendRow()` no proporciona clave idempotente remota; una respuesta perdida tras aceptar el append puede causar duplicado en reintento.
+- Pase conserva ciclo de vida independiente: borrar o editar Matriz no debe modificar automáticamente Pase.
+- Filtrar: se documentó corrección en `FiltrarViewModel.guardarRegistroCompleto()` para comprobar colisiones y exigir resultado verdadero de `renameRowId()` antes de cambiar ID local. El commit histórico es `f7b021314b75bfbc8f624e15b0c167e4e07af659`; CI y pruebas de dos dispositivos deben verificarse, no dar por hecho que el caso está cerrado.
+- Ruta IA: el patrón actual reemplaza el contenido completo de la hoja al detectar cambios locales; no migrar ese patrón a Firestore sin versionado y resolución de conflictos.
+- Filtro Fecha: conservar operación pendiente si no se encuentra ID remoto; verificar renombre y reintentos.
+- SyncWorker: aislamiento de errores por módulo fue documentado en el commit `9537eb953155c918b0d9b63e7338c0a2032eeb36`; compilar y verificar comportamiento de reintento sigue siendo necesario.
+- Otras rutas de sincronización: revisar módulos que limpian dirty sin confirmar comparación/resultado remoto.
+- No asumir que botón “Descargar”, Worker o pestaña Sheets significan sincronización bidireccional completa.
+
+### 19.7 Room y compatibilidad de datos: puerta obligatoria
+
+- Room observado: `DB_VERSION = 38`, 23 entidades en el inventario previo, `exportSchema = false`.
+- Migración 37→38 observada: crea `pase_sync_operation_table` con clave `operationKey` y campos `type`, `oldId`, `newId`.
+- Se documentaron saltos históricos en la cadena de migraciones (2→3 y 3→4 no aparecen como pasos separados; la cadena observada salta de 1→2 a 4→5). Debe verificarse toda la cadena y el origen real de los esquemas, no corregirla por intuición.
+- No se encontró `app/schemas`, `gradle/libs.versions.toml` ni wrapper `gradlew` en las rutas raíz inspeccionadas.
+- No se encontró infraestructura suficiente de pruebas Room/JUnit/AndroidX Test en `app/build.gradle` inspeccionado; el workflow actual compila y no ejecuta las pruebas funcionales de migración descritas.
+- No subir `DB_VERSION` a 39 ni tocar `AppDatabase.kt` hasta obtener esquema de origen auténtico, verificar APK realmente distribuido/instalado, crear fixtures y probar migración preservando datos y cola de Pase.
+- No declarar migración Room probada por un build verde.
+
+### 19.8 Inventario funcional todavía pendiente de cerrar
+
+El inventario previo enumera, entre otras, entidades/módulos de Matriz, tickets de pago, visitas de mapa, Pase, Solicitud, Filtro Fecha, Filtrar, Control, horarios, logs de contacto, plantillas SMS, configuración de automatización, reglas semanales, Ruta IA, filtros Ruta IA, canales de pago, contactos extra, Velocidad/Penalización, Comisión, Bolsa Gerencia, cartucho del día y Semana 6.
+
+Para cada entidad/campo falta dejar explícito:
+- si es operativo compartido, catálogo compartido, configuración por dispositivo, dato derivado o caché temporal;
+- dónde se crea, edita, renombra y borra;
+- ID/clave funcional y restricciones de unicidad;
+- quién lo consume y en qué pantallas;
+- fuente actual y rutas reales de lectura/escritura;
+- si hoy sube, baja, o solo permanece local;
+- comportamiento offline, conflictos, borrado, reintento y confirmación;
+- si debe migrarse, calcularse, exportarse o permanecer local, con justificación.
+
+Preguntas de negocio abiertas que no se deben decidir por suposición:
+- Cartucho del día: alcance compartido, fecha efectiva, fuente y retención/historial.
+- Campos locales de Matriz: cuáles son estrictamente de dispositivo y cuáles son datos operativos que deben compartirse.
+- Semana 6: qué campos son derivados de Matriz y cuáles son editables/independientes; evitar duplicar datos derivados.
+- Visitas de mapa: si son historial operativo compartido, cómo se identifican y retienen; no confundir con ubicación temporal del dispositivo.
+- Roles y autorización: el usuario es actualmente el único operador, pero se debe diseñar acceso para dispositivos autorizados y posible compartición futura sin abrir la base.
+- Canales de pago/catálogos: confirmar fuente real y política de actualización.
+- ID número de cliente: identificador heredado de Sheets/AppSheet; conservarlo como referencia de puente mientras se define un ID global estable, no reemplazarlo a ciegas.
+
+### 19.9 Alcance expresamente excluido
+
+- No volver a auditar Google Apps Script ni los scripts de llamadas/SMS por iniciativa propia. El usuario confirmó que los scripts ya no son operativos/relevantes y que la app realiza llamadas/SMS. Solo retomarlos si el usuario lo pide expresamente o si se identifica una dependencia real que impida una función concreta.
+- No asumir que todos los datos locales son “personales” o descartables: el usuario aclaró que los datos operativos deben pertenecer a la base compartida. La clasificación se hace entidad por entidad.
+- No cambiar `main`, no cerrar ni fusionar PR #122 sin autorización.
+- No desplegar reglas abiertas, no migrar datos productivos ni retirar hojas antiguas durante la etapa de preparación.
+- No proponer código genérico sin inspeccionar los archivos y rutas reales de la rama.
+
+### 19.10 Próximas acciones en orden exacto al reanudar
+
+1. Consultar de nuevo el workflow del commit `c1591914e2e7a023c1d30da144b75d4f4e218b20`. Su run 1054 quedó cancelado, por lo que se necesita una ejecución nueva del job `build` o un nuevo push correctivo que active CI. No afirmar que el cambio BoM 33.14.0 compiló.
+2. Si el build vuelve a ejecutarse y falla, inspeccionar el log exacto y resolver la causa sin actualizar Kotlin/Compose de forma amplia salvo que la evidencia lo exija. Si pasa, registrar SHA, run, job, variante y artefacto verificable.
+3. Confirmar con Firebase Console el cliente OAuth web asociado al proveedor Google y a la app Android. Después comprobar que el archivo de configuración actualizado incluya la información necesaria; no exponer secretos.
+4. Diseñar el intercambio de credencial Google→Firebase Auth en el flujo real de `LoginScreen.kt` y `MainActivity.kt`, conservando temporalmente scopes Sheets/Drive. Probar inicio/cierre/recuperación de sesión y UID autorizado antes de conectar Firestore.
+5. Diseñar reglas deny-by-default y pruebas de acceso autorizado/no autorizado; no permitir lecturas/escrituras hasta tener identidad y reglas verificadas.
+6. Completar inventario P0 de entidades, DAOs, pantallas, hojas y rutas CRUD; escoger módulo piloto de bajo riesgo basado en evidencia.
+7. Definir esquema Firestore, IDs, versionado, tombstones, outbox e idempotencia con datos sintéticos.
+8. Crear piloto aislado y probar online/offline, dos dispositivos, reintentos, colisiones, ediciones concurrentes, borrados y recuperación.
+9. Solo tras aceptación del piloto, migrar módulos gradualmente y diseñar exportación unidireccional a Sheets nuevo.
+10. Actualizar esta bitácora con cada commit, resultado de CI, prueba, decisión y riesgo; nunca registrar como completado lo que solo está planeado.
+
+### 19.11 Criterio para declarar avance real
+
+Cada etapa se considera cerrada únicamente con evidencia concreta:
+- commit y archivos exactos;
+- build CI exitoso asociado al SHA;
+- pruebas automatizadas pertinentes y su resultado;
+- pruebas funcionales en dispositivos cuando corresponda;
+- evidencia de que no se perdieron ni duplicaron registros;
+- bitácora actualizada.
+
+**Estado al corte 29-10-2026:** objetivo y arquitectura decididos; Firebase elegido y proyecto/configuración inicial existentes; dependencias Auth/Firestore añadidas y luego ajustadas a BoM 33.14.0; compatibilidad de ese ajuste aún sin build confirmado; autenticación Firebase no implementada; Firestore no conectado a datos operativos; Room sigue en versión 38; Sheets continúa siendo el mecanismo actual; migración global, piloto y pruebas de dos dispositivos pendientes. La prioridad inmediata es desbloquear y validar CI antes de tocar el flujo de autenticación o datos.
