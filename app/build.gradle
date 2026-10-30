@@ -117,7 +117,7 @@ dependencies {
     implementation 'com.google.zxing:core:3.5.3'
 
     // Firebase BoM: mantiene compatibles las versiones de los SDK de Firebase.
-    implementation platform('com.google.firebase:firebase-bom:34.18.0')
+    implementation platform('com.google.firebase:firebase-bom:33.14.0')
     implementation 'com.google.firebase:firebase-messaging'
     // Dependencias base para la migración progresiva a autenticación y datos centralizados.
     // Aún no cambian el flujo de inicio de sesión ni la autoridad de los datos.
