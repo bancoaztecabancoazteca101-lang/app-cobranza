@@ -23,6 +23,11 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
     val fila by viewModel.item.collectAsState()
     var mostrarEditor by remember { mutableStateOf(false) }
     val calculo = fila.calcular()
+    // Lectura por OCR de las capturas de "Resumen del Gestor" (una sola captura no trae todos los datos).
+    var lectura1 by remember { mutableStateOf<LecturaVelocidad?>(null) }
+    var lectura2 by remember { mutableStateOf<LecturaVelocidad?>(null) }
+    var mensajeOcr by remember { mutableStateOf<String?>(null) }
+    var revisarLectura by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Row(
@@ -34,6 +39,27 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
             IconButton(onClick = { mostrarEditor = true }) {
                 Icon(Icons.Default.Edit, contentDescription = "Editar datos")
             }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ClayCard {
+            Text("Leer desde capturas (OCR)", fontWeight = FontWeight.Bold)
+            Text(
+                "App del banco > Resumen del Gestor. Una captura no trae todo: usa la parte de arriba en la 1 y la de abajo en la 2.",
+                style = MaterialTheme.typography.bodySmall, color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BotonLecturaFoto("Captura 1 (arriba)", modifier = Modifier.weight(1f),
+                    onPalabras = { lectura1 = leerResumenGestor(it); mensajeOcr = null }, onError = { mensajeOcr = it })
+                BotonLecturaFoto("Captura 2 (abajo)", modifier = Modifier.weight(1f),
+                    onPalabras = { lectura2 = leerResumenGestor(it); mensajeOcr = null }, onError = { mensajeOcr = it })
+            }
+            lectura1?.let { Text(if (it.vacia) "Captura 1: no se leyó nada, prueba con una más nítida" else "Captura 1 leyó: ${it.camposLeidos.joinToString(", ")}", style = MaterialTheme.typography.bodySmall) }
+            lectura2?.let { Text(if (it.vacia) "Captura 2: no se leyó nada, prueba con una más nítida" else "Captura 2 leyó: ${it.camposLeidos.joinToString(", ")}", style = MaterialTheme.typography.bodySmall) }
+            mensajeOcr?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = { revisarLectura = true }, enabled = lectura1?.vacia == false || lectura2?.vacia == false) { Text("Revisar y aplicar") }
         }
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -70,6 +96,15 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    if (revisarLectura) {
+        RevisarLecturaVelocidadDialog(
+            actual = fila,
+            lectura = (lectura1 ?: LecturaVelocidad()).fusionar(lectura2),
+            onDismiss = { revisarLectura = false },
+            onAplicar = { nuevo -> viewModel.guardar(nuevo); revisarLectura = false; lectura1 = null; lectura2 = null }
+        )
     }
 
     if (mostrarEditor) {

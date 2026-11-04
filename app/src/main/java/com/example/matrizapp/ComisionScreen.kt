@@ -27,6 +27,9 @@ fun ComisionScreen(viewModel: ComisionViewModel, metaPlan: Double = 0.0) {
     val fila = filaGuardada.copy(meta = metaPlan)
     var mostrarEditor by remember { mutableStateOf(false) }
     val calculo = fila.calcular()
+    // Lectura por OCR de la captura "Cobranza del gestor" (Al momento / Indirecta por semana de atraso).
+    var lecturaCom by remember { mutableStateOf<LecturaComision?>(null) }
+    var mensajeOcr by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Row(
@@ -38,6 +41,24 @@ fun ComisionScreen(viewModel: ComisionViewModel, metaPlan: Double = 0.0) {
             IconButton(onClick = { mostrarEditor = true }) {
                 Icon(Icons.Default.Edit, contentDescription = "Editar datos")
             }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ClayCard {
+            Text("Leer desde captura (OCR)", fontWeight = FontWeight.Bold)
+            Text(
+                "App del banco > Cobranza del gestor (tabla Cobranza por semana de atraso).",
+                style = MaterialTheme.typography.bodySmall, color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            BotonLecturaFoto("Leer captura", modifier = Modifier.fillMaxWidth(),
+                onPalabras = {
+                    val l = leerComisionGestor(it)
+                    if (l.vacia) mensajeOcr = "No se pudo leer la tabla. Usa una captura nítida donde se vean los encabezados Al momento / Indirecta."
+                    else { lecturaCom = l; mensajeOcr = null }
+                },
+                onError = { mensajeOcr = it })
+            mensajeOcr?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         }
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -66,6 +87,15 @@ fun ComisionScreen(viewModel: ComisionViewModel, metaPlan: Double = 0.0) {
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    lecturaCom?.let { l ->
+        RevisarLecturaComisionDialog(
+            actual = filaGuardada,
+            lectura = l,
+            onDismiss = { lecturaCom = null },
+            onAplicar = { nuevo -> viewModel.guardar(nuevo); lecturaCom = null }
+        )
     }
 
     if (mostrarEditor) {
