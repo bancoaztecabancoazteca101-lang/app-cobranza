@@ -37,7 +37,8 @@ data class LecturaVelocidad(
     val capitalPase: Double? = null, // $ Capital (Suma del saldo capital)
     val reque36: Double? = null,     // Requerido Pisado  <- "Requerido Gestionado" (3 a 6 semanas)
     val monto36: Double? = null,     // Requerido Cobrado <- "Cobranza" (3 a 6 semanas)
-    val alcance: Double? = null      // "Alcance de plan" en % (solo para comprobar que Plan y Cobranza cuadran)
+    val alcance: Double? = null,     // "Alcance de plan" en % (solo para comprobar que Plan y Cobranza cuadran)
+    val cuPaseDeducido: Boolean = false // true si no se leyó el número pero $ Capital = 0 obliga a que sean 0 cuentas
 ) {
     val vacia: Boolean get() = plan == null && cobrado == null && cuPase == null && capitalPase == null && reque36 == null && monto36 == null && alcance == null
     val camposLeidos: List<String> get() = listOfNotNull(
@@ -51,7 +52,8 @@ data class LecturaVelocidad(
     fun fusionar(otra: LecturaVelocidad?): LecturaVelocidad = if (otra == null) this else LecturaVelocidad(
         plan = otra.plan ?: plan, cobrado = otra.cobrado ?: cobrado, cuPase = otra.cuPase ?: cuPase,
         capitalPase = otra.capitalPase ?: capitalPase, reque36 = otra.reque36 ?: reque36, monto36 = otra.monto36 ?: monto36,
-        alcance = otra.alcance ?: alcance
+        alcance = otra.alcance ?: alcance,
+        cuPaseDeducido = if (otra.cuPase != null) otra.cuPaseDeducido else cuPaseDeducido
     )
 }
 
@@ -183,11 +185,29 @@ fun leerResumenGestor(palabrasOcr: List<PalabraOcr>): LecturaVelocidad {
     }
     if (cobrado == null || plan == null) {
         val limite = listOfNotNull(titPase?.arriba, titEfec?.arriba).minOrNull() ?: Int.MAX_VALUE
+        // Tarjeta "Plan de cobranza": dos cajas en la MISMA fila, Cobranza a la izquierda y Plan a la derecha.
+        // Se exige la etiqueta "Plan" encima de la caja derecha para no confundirla con la tabla de Efectividad
+        // ni con la palabra "Plan" del título de la tarjeta ("Plan de cobranza").
+        for (l in lineas.filter { it.abajo < limite }) {
+            val m = montosEn(l).sortedBy { it.caja.cx }
+            if (m.size != 2) continue
+            val der = m[1].caja
+            val etiquetaPlan = palabras.any {
+                norm(it) == "plan" && it.abajo <= der.arriba && der.arriba - it.abajo <= 8 * hMed && abs(it.cx - der.cx) <= maxOf(der.der - der.izq, 4 * hMed)
+            }
+            val etiquetaOtra = palabras.any {
+                val n = norm(it); (n == "requerido" || n == "gestionado" || n == "efectividad") && it.abajo <= der.arriba && der.arriba - it.abajo <= 8 * hMed
+            }
+            if (etiquetaPlan || !etiquetaOtra) { cobrado = m[0].valor; plan = m[1].valor; break }
+        }
+    }
+    if (cobrado == null || plan == null) {
+        val limite = listOfNotNull(titPase?.arriba, titEfec?.arriba).minOrNull() ?: Int.MAX_VALUE
         fun valorBajo(etiqueta: String): Double? {
-            val lab = palabras.firstOrNull { norm(it) == etiqueta && it.abajo < limite } ?: return null
+            val lab = palabras.firstOrNull { norm(it) == etiqueta && it.abajo < limite && montos.any { m -> m.caja.arriba >= it.abajo - hMed / 2 && m.caja.arriba - it.abajo <= 8 * hMed && abs(m.caja.cx - it.cx) <= maxOf(it.der - it.izq, 4 * hMed) } } ?: return null
             return montos.filter {
-                it.caja.arriba >= lab.abajo - hMed / 2 && it.caja.arriba - lab.abajo <= 15 * hMed &&
-                    abs(it.caja.cx - lab.cx) <= maxOf(lab.der - lab.izq, 6 * hMed)
+                it.caja.arriba >= lab.abajo - hMed / 2 && it.caja.arriba - lab.abajo <= 8 * hMed &&
+                    abs(it.caja.cx - lab.cx) <= maxOf(lab.der - lab.izq, 4 * hMed)
             }.minByOrNull { it.caja.arriba }?.valor
         }
         if (cobrado == null) cobrado = valorBajo("cobranza")
@@ -208,6 +228,7 @@ fun leerResumenGestor(palabrasOcr: List<PalabraOcr>): LecturaVelocidad {
 
     // 2) "Pase de clientes": Número de clientes | Suma del saldo capital (columnas por posición de sus encabezados).
     var cuPase: Int? = null
+    var cuPaseDeducido = false
     var capitalPase: Double? = null
     if (titPase != null) {
         val fin = titEfec?.takeIf { it.arriba > titPase.arriba }?.arriba ?: Int.MAX_VALUE
@@ -219,9 +240,21 @@ fun leerResumenGestor(palabrasOcr: List<PalabraOcr>): LecturaVelocidad {
         val cxDer = encDer.centroPromedio()
         val debajo = region.filter { it.arriba >= yEnc - hMed / 2 }
         val montosReg = agruparLineas(debajo).flatMap { montosEn(it) }
-        capitalPase = (if (cxDer != null) montosReg.minByOrNull { abs(it.caja.cx - cxDer) } else montosReg.maxByOrNull { it.caja.cx })?.valor
+        val capMonto = if (cxDer != null) montosReg.minByOrNull { abs(it.caja.cx - cxDer) } else montosReg.maxByOrNull { it.caja.cx }
+        capitalPase = capMonto?.valor
         val enteros = debajo.mapNotNull { w -> entero(w.texto)?.let { w to it } }
-        cuPase = (if (cxIzq != null) enteros.minByOrNull { abs(it.first.cx - cxIzq) } else enteros.minByOrNull { it.first.cx })?.second
+        val anchoCol = if (cxIzq != null && cxDer != null) abs(cxDer - cxIzq) * 0.4 else Double.MAX_VALUE
+        cuPase = when {
+            capMonto != null -> enteros.filter {
+                abs(it.first.cy - capMonto.caja.cy) <= hMed * 1.2 && it.first.cx < capMonto.caja.cx &&
+                    (cxIzq == null || abs(it.first.cx - cxIzq) <= anchoCol)
+            }.minByOrNull { if (cxIzq != null) abs(it.first.cx - cxIzq) else it.first.cx }?.second
+            cxIzq != null -> enteros.filter { it.first.arriba - yEnc <= 6 * hMed && abs(it.first.cx - cxIzq) <= anchoCol }
+                .minByOrNull { abs(it.first.cx - cxIzq) }?.second
+            else -> null
+        }
+        // Un "0" suelto se pierde fácil en el OCR; pero con $ Capital = 0 no puede haber cuentas de Pase.
+        if (cuPase == null && capitalPase == 0.0) { cuPase = 0; cuPaseDeducido = true }
     }
 
     // 3) "Efectividad de cobranza 3 a 6 semanas": Cobranza | Requerido Gestionado | Efectividad.
@@ -247,7 +280,7 @@ fun leerResumenGestor(palabrasOcr: List<PalabraOcr>): LecturaVelocidad {
             }
         } else if (montosReg.size >= 2) { monto36 = montosReg[0].valor; reque36 = montosReg[1].valor }
     }
-    return LecturaVelocidad(plan = plan, cobrado = cobrado, cuPase = cuPase, capitalPase = capitalPase, reque36 = reque36, monto36 = monto36, alcance = alcance)
+    return LecturaVelocidad(plan = plan, cobrado = cobrado, cuPase = cuPase, capitalPase = capitalPase, reque36 = reque36, monto36 = monto36, alcance = alcance, cuPaseDeducido = cuPaseDeducido)
 }
 
 // ------------------------------------------------------------------------------- Cobranza del gestor

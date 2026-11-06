@@ -119,10 +119,10 @@ internal fun dineroTexto(v: Double?): String = when {
 private fun numLeido(texto: String, actual: Double): Double = texto.replace(",", "").replace("$", "").trim().toDoubleOrNull() ?: actual
 
 @Composable
-private fun CampoLectura(etiqueta: String, valor: String, leido: Boolean, onChange: (String) -> Unit) {
+private fun CampoLectura(etiqueta: String, valor: String, leido: Boolean, nota: String? = null, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = valor, onValueChange = onChange, label = { Text(etiqueta) }, singleLine = true,
-        supportingText = { Text(if (leido) "Leído de la captura" else "No se leyó: se conserva el valor actual") },
+        supportingText = { Text(nota ?: if (leido) "Leído de la captura" else "No se leyó: se conserva el valor actual") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.fillMaxWidth()
     )
@@ -167,7 +167,8 @@ fun RevisarLecturaVelocidadDialog(
                 CampoLectura("Total Cobrado", cobrado, lectura.cobrado != null) { cobrado = it }
                 CampoLectura("Requerido Pisado (Requerido Gestionado 3 a 6)", reque36, lectura.reque36 != null) { reque36 = it }
                 CampoLectura("Requerido Cobrado (Cobranza 3 a 6)", monto36, lectura.monto36 != null) { monto36 = it }
-                CampoLectura("Cuentas de Pase (Número de clientes)", cuPase, lectura.cuPase != null) { cuPase = it }
+                CampoLectura("Cuentas de Pase (Número de clientes)", cuPase, lectura.cuPase != null,
+                    if (lectura.cuPaseDeducido) "Deducido: \$ Capital es 0, así que son 0 cuentas (confírmalo en la captura)" else null) { cuPase = it }
                 CampoLectura("\$ Capital (Suma del saldo capital)", capital, lectura.capitalPase != null) { capital = it }
                 if (diagnostico.isNotBlank()) {
                     TextButton(onClick = { verTexto = !verTexto }) { Text(if (verTexto) "Ocultar texto leído" else "Ver texto leído (diagnóstico)") }
