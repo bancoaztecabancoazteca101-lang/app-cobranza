@@ -21,10 +21,16 @@ import kotlin.math.abs
  * aviso cuando el Cumplimiento del plan no llega al 85%: la comisión se calcula en $0 aunque el
  * resto de los datos esté capturado. */
 @Composable
-fun BolsaGerenciaScreen(viewModel: BolsaGerenciaViewModel) {
+fun BolsaGerenciaScreen(viewModel: BolsaGerenciaViewModel, totalCobradoVelocidades: Double = 0.0) {
     val fila by viewModel.item.collectAsState()
     var mostrarEditor by remember { mutableStateOf(false) }
-    val calculo = fila.calcular()
+    // Cobranza 1 a 9 Gestor = Total Cobrado de la Tabla de Velocidades (se toma de ahí, no se captura).
+    val filaEf = if (totalCobradoVelocidades > 0.0) fila.copy(cobranza1a9Gestor = totalCobradoVelocidades) else fila
+    val calculo = filaEf.calcular()
+    // Lectura por OCR de la captura "Gerencia ... Plan de cobranza 1 a 9" de la app del banco.
+    var lecturaBolsa by remember { mutableStateOf<LecturaVelocidad?>(null) }
+    var diagBolsa by remember { mutableStateOf("") }
+    var mensajeOcr by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Row(
@@ -36,6 +42,24 @@ fun BolsaGerenciaScreen(viewModel: BolsaGerenciaViewModel) {
             IconButton(onClick = { mostrarEditor = true }) {
                 Icon(Icons.Default.Edit, contentDescription = "Editar datos")
             }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ClayCard {
+            Text("Leer desde captura (OCR)", fontWeight = FontWeight.Bold)
+            Text(
+                "App del banco > Gerencia > Acumulado (tarjeta Plan de cobranza 1 a 9 semanas, con Cobranza y Plan).",
+                style = MaterialTheme.typography.bodySmall, color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            BotonLecturaFoto("Leer captura", modifier = Modifier.fillMaxWidth(),
+                onPalabras = {
+                    val l = leerResumenGestor(it)
+                    if (l.cobrado == null && l.plan == null) mensajeOcr = "No se pudo leer Cobranza y Plan (deben verse las dos cajas). Texto que vio el OCR:\n${textoDiagnostico(it)}"
+                    else { lecturaBolsa = l; diagBolsa = textoDiagnostico(it); mensajeOcr = null }
+                },
+                onError = { mensajeOcr = it })
+            mensajeOcr?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         }
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -65,7 +89,7 @@ fun BolsaGerenciaScreen(viewModel: BolsaGerenciaViewModel) {
             FilaDatoBolsaGerencia("Bolsa de la Gerencia", formatMoneyBolsaGerencia(calculo.bolsaGerencia))
             FilaDatoBolsaGerencia("Bolsa a Repartir", formatMoneyBolsaGerencia(calculo.bolsaARepartir))
             Divider(modifier = Modifier.padding(vertical = 6.dp))
-            FilaDatoBolsaGerencia("Cobranza 1 a 9 Gestor", formatMoneyBolsaGerencia(fila.cobranza1a9Gestor))
+            FilaDatoBolsaGerencia("Cobranza 1 a 9 Gestor", formatMoneyBolsaGerencia(filaEf.cobranza1a9Gestor))
             FilaDatoBolsaGerencia("Cobranza 1 a 9 Gerencia", formatMoneyBolsaGerencia(fila.cobranza1a9Gerencia))
             FilaDatoBolsaGerencia("% Cumplimiento 1 a 9", formatPercentBolsaGerencia(calculo.porcentajeCumplimiento1a9))
         }
@@ -73,9 +97,21 @@ fun BolsaGerenciaScreen(viewModel: BolsaGerenciaViewModel) {
         Spacer(modifier = Modifier.height(8.dp))
     }
 
+    lecturaBolsa?.let { l ->
+        RevisarLecturaBolsaDialog(
+            actual = fila,
+            lectura = l,
+            totalVelocidades = totalCobradoVelocidades,
+            diagnostico = diagBolsa,
+            onDismiss = { lecturaBolsa = null },
+            onAplicar = { nuevo -> viewModel.guardar(nuevo); lecturaBolsa = null }
+        )
+    }
+
     if (mostrarEditor) {
         EditorBolsaGerenciaDialog(
             inicial = fila,
+            totalVelocidades = totalCobradoVelocidades,
             onDismiss = { mostrarEditor = false },
             onGuardar = { nuevo -> viewModel.guardar(nuevo); mostrarEditor = false }
         )
@@ -94,7 +130,7 @@ private fun FilaDatoBolsaGerencia(etiqueta: String, valor: String) {
 }
 
 @Composable
-private fun EditorBolsaGerenciaDialog(inicial: BolsaGerenciaEntity, onDismiss: () -> Unit, onGuardar: (BolsaGerenciaEntity) -> Unit) {
+private fun EditorBolsaGerenciaDialog(inicial: BolsaGerenciaEntity, totalVelocidades: Double, onDismiss: () -> Unit, onGuardar: (BolsaGerenciaEntity) -> Unit) {
     var cobranzaGerencia by remember { mutableStateOf(numTextoBolsaGerencia(inicial.cobranzaGerencia)) }
     var cumplimientoPlan by remember { mutableStateOf(if (inicial.cumplimientoPlan == 0.0) "" else (inicial.cumplimientoPlan * 100).let { if (it == it.toLong().toDouble()) it.toLong().toString() else it.toString() }) }
     var montoBase by remember { mutableStateOf(numTextoBolsaGerencia(inicial.montoBase)) }
@@ -114,7 +150,11 @@ private fun EditorBolsaGerenciaDialog(inicial: BolsaGerenciaEntity, onDismiss: (
                 CampoNumeroBolsaGerencia("Cumplimiento del plan (%)", cumplimientoPlan) { cumplimientoPlan = it }
                 CampoNumeroBolsaGerencia("Monto Base", montoBase) { montoBase = it }
                 CampoNumeroBolsaGerencia("Número de Gestores", numeroGestores) { numeroGestores = it }
-                CampoNumeroBolsaGerencia("Cobranza 1 a 9 Gestor", cobranza1a9Gestor) { cobranza1a9Gestor = it }
+                if (totalVelocidades > 0.0) {
+                    Text("Cobranza 1 a 9 Gestor: ${formatMoneyBolsaGerencia(totalVelocidades)} (se toma de Tabla de Velocidades > Total Cobrado)", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    CampoNumeroBolsaGerencia("Cobranza 1 a 9 Gestor", cobranza1a9Gestor) { cobranza1a9Gestor = it }
+                }
                 CampoNumeroBolsaGerencia("Cobranza 1 a 9 Gerencia", cobranza1a9Gerencia) { cobranza1a9Gerencia = it }
             }
         },

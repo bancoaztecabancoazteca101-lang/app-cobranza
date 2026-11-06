@@ -383,7 +383,10 @@ class MainActivity : ComponentActivity() {
                                 ComisionScreen(comisionVm, metaPlan = velocidadActual.plan100, totalCobrado = velocidadActual.total)
                             }
                             composable(Screen.Avance.route) { AvanceScreen(controlVm) }
-                            composable(Screen.BolsaGerencia.route) { BolsaGerenciaScreen(bolsaGerenciaVm) }
+                            composable(Screen.BolsaGerencia.route) {
+                                val velocidadActual by penalizacionVm.item.collectAsState()
+                                BolsaGerenciaScreen(bolsaGerenciaVm, totalCobradoVelocidades = velocidadActual.total)
+                            }
                             composable(Screen.Ubi.route) { UbiScreen(matrizVm) }
                             composable(Screen.Mapa.route) { MapaScreen(container.database.matrizDao(), container.database.visitaMapaDao(), onOpenMatriz = { id -> mapaOpenId = id; navController.navigate(Screen.Matriz.route) { launchSingleTop = true } }) }
                             composable(Screen.Sem6.route) { Sem6Screen(sem6Vm, searchQuery, onOpenMatriz = { id -> mapaOpenId = id; navController.navigate(Screen.Matriz.route) { launchSingleTop = true } }) }

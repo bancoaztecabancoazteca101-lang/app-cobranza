@@ -257,5 +257,74 @@ fun RevisarLecturaComisionDialog(
     )
 }
 
+/** Muestra lo leído de la captura de Gerencia (tarjeta "Plan de cobranza 1 a 9") para confirmarlo ANTES de guardar. */
+@Composable
+fun RevisarLecturaBolsaDialog(
+    actual: BolsaGerenciaEntity,
+    lectura: LecturaVelocidad,
+    totalVelocidades: Double,
+    diagnostico: String = "",
+    onDismiss: () -> Unit,
+    onAplicar: (BolsaGerenciaEntity) -> Unit
+) {
+    var verTexto by remember { mutableStateOf(false) }
+    var cobranza by remember { mutableStateOf(dineroTexto(lectura.cobrado ?: actual.cobranzaGerencia)) }
+    var plan by remember { mutableStateOf(dineroTexto(lectura.plan)) }
+    val cobranzaN = numLeido(cobranza, actual.cobranzaGerencia)
+    val planN = numLeido(plan, 0.0)
+    val cumplimiento: Double? = if (planN > 0.0) cobranzaN / planN else null   // fracción (0.7154 = 71.54%)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Revisar lo leído") },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Compara con la captura antes de guardar.", style = MaterialTheme.typography.bodySmall)
+                if (lectura.alcance != null && cumplimiento != null && kotlin.math.abs(lectura.alcance - cumplimiento * 100) > 1.5) {
+                    Text(
+                        "Ojo: el Alcance leído (${"%.1f".format(lectura.alcance)}%) no coincide con Cobranza ÷ Plan (${"%.1f".format(cumplimiento * 100)}%). Revisa que Cobranza y Plan estén bien.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error
+                    )
+                }
+                CampoLectura("Cobranza Gerencia (Cobranza de la captura)", cobranza, lectura.cobrado != null) { cobranza = it }
+                CampoLectura("Plan (de la captura)", plan, lectura.plan != null,
+                    if (lectura.plan == null) "No se leyó: escríbelo para calcular el cumplimiento" else null) { plan = it }
+                Text(
+                    if (cumplimiento != null) "Cumplimiento del plan = Cobranza ÷ Plan = ${"%.2f".format(cumplimiento * 100)}%" +
+                        (if (cumplimiento < 0.85) ". Es menor a 85%: la comisión quedará en \$0." else "")
+                    else "Cumplimiento del plan: sin el Plan no se puede calcular; se conserva ${"%.2f".format(actual.cumplimientoPlan * 100)}%.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text("Cobranza 1 a 9 Gerencia = Cobranza Gerencia (\$${"%,.0f".format(cobranzaN)})", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    if (totalVelocidades > 0.0) "Cobranza 1 a 9 Gestor = Total Cobrado de Tabla de Velocidades (\$${"%,.0f".format(totalVelocidades)}), automático"
+                    else "Cobranza 1 a 9 Gestor: aún no hay Total Cobrado en Tabla de Velocidades; se conserva el valor actual",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (diagnostico.isNotBlank()) {
+                    TextButton(onClick = { verTexto = !verTexto }) { Text(if (verTexto) "Ocultar texto leído" else "Ver texto leído (diagnóstico)") }
+                    if (verTexto) Text(diagnostico, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onAplicar(
+                    actual.copy(
+                        cobranzaGerencia = cobranzaN,
+                        cumplimientoPlan = cumplimiento ?: actual.cumplimientoPlan,
+                        cobranza1a9Gerencia = cobranzaN,
+                        cobranza1a9Gestor = if (totalVelocidades > 0.0) totalVelocidades else actual.cobranza1a9Gestor
+                    )
+                )
+            }) { Text("Aplicar") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
 private fun mutableStateListOfTexto(n: Int, inicial: (Int) -> String) =
     androidx.compose.runtime.mutableStateListOf<String>().apply { repeat(n) { add(inicial(it)) } }
