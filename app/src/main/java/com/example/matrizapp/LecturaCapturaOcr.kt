@@ -219,8 +219,20 @@ fun RevisarLecturaComisionDialog(
                 etiquetas.forEachIndexed { i, et ->
                     Text("Semanas $et", style = MaterialTheme.typography.titleSmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Column(Modifier.weight(1f)) { CampoLectura("Al momento", momento[i], lectura.momento[i] != null) { momento[i] = it } }
-                        Column(Modifier.weight(1f)) { CampoLectura("Indirecta", indirecta[i], lectura.indirecta[i] != null) { indirecta[i] = it } }
+                        Column(Modifier.weight(1f)) {
+                            CampoLectura("Al momento", momento[i], lectura.momento[i] != null,
+                                if (lectura.momentoDeducido[i]) "Deducido: Total − Indirecta" else null) { momento[i] = it }
+                        }
+                        Column(Modifier.weight(1f)) {
+                            CampoLectura("Indirecta", indirecta[i], lectura.indirecta[i] != null,
+                                if (lectura.indirectaDeducida[i]) "Deducido: Total − Al momento" else null) { indirecta[i] = it }
+                        }
+                    }
+                    // Total de la captura = Al momento + Indirecta: si no cuadra, hay un dato mal leído en esa fila.
+                    val totalCaptura = lectura.total[i]
+                    if (totalCaptura != null && kotlin.math.abs(numLeido(momento[i], 0.0) + numLeido(indirecta[i], 0.0) - totalCaptura) > 1.0) {
+                        Text("Ojo: Al momento + Indirecta no suma el Total de la captura (${dineroTexto(totalCaptura)}). Revisa esta fila.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                 }
                 if (diagnostico.isNotBlank()) {

@@ -57,8 +57,18 @@ data class LecturaVelocidad(
     )
 }
 
-/** Comisión: 4 renglones en orden (1 a 2, 3, 4 a 6, 7 a 9); cada valor es null si no se leyó. */
-data class LecturaComision(val momento: List<Double?>, val indirecta: List<Double?>, val renglonesEncontrados: Int) {
+/**
+ * Comisión: 4 renglones en orden (1 a 2, 3, 4 a 6, 7 a 9); cada valor es null si no se leyó.
+ * [total] es la 3.ª columna de la captura (Total = Al momento + Indirecta) y sirve para comprobar y completar.
+ */
+data class LecturaComision(
+    val momento: List<Double?>,
+    val indirecta: List<Double?>,
+    val renglonesEncontrados: Int,
+    val total: List<Double?> = List(4) { null },
+    val momentoDeducido: List<Boolean> = List(4) { false },
+    val indirectaDeducida: List<Boolean> = List(4) { false }
+) {
     val vacia: Boolean get() = momento.all { it == null } && indirecta.all { it == null }
     companion object { val VACIA = LecturaComision(List(4) { null }, List(4) { null }, 0) }
 }
@@ -287,6 +297,9 @@ fun leerResumenGestor(palabrasOcr: List<PalabraOcr>): LecturaVelocidad {
 
 private val ETIQUETAS_SEMANAS = listOf(Regex("^[1li|!]a2$"), Regex("^3$"), Regex("^4a6$"), Regex("^7a9$"))
 
+/** "$0" mal leído por el OCR ("0)", "O", "$O", "S0", "(O).") — dentro de la tabla cuenta como 0. */
+private val RE_CERO_SUCIO = Regex("^[(\\[]?[" + "$" + "S]?[0OoQD][)\\].,]*$")
+
 fun leerComisionGestor(palabrasOcr: List<PalabraOcr>): LecturaComision {
     if (palabrasOcr.isEmpty()) return LecturaComision.VACIA
     val palabras = corregirInclinacion(palabrasOcr)
@@ -294,13 +307,27 @@ fun leerComisionGestor(palabrasOcr: List<PalabraOcr>): LecturaComision {
     val lineas = agruparLineas(palabras)
     val wMom = palabras.firstOrNull { normaliza(it.texto) == "momento" } ?: return LecturaComision.VACIA
     val wInd = palabras.firstOrNull { normaliza(it.texto) == "indirecta" && abs(it.cy - wMom.cy) <= 3 * hMed } ?: return LecturaComision.VACIA
-    val cxMom = wMom.cx
+    val wTot = palabras.firstOrNull { normaliza(it.texto) == "total" && abs(it.cy - wMom.cy) <= 3 * hMed }
     val cxInd = wInd.cx
+    val cxTot = wTot?.cx
+    // El encabezado "Al momento" son dos palabras: el centro de la columna es el de ambas juntas.
+    val wAl = palabras.firstOrNull { normaliza(it.texto) == "al" && abs(it.cy - wMom.cy) <= hMed && it.der <= wMom.izq + hMed }
+    val cxMom = if (wAl != null) (wAl.izq + wMom.der) / 2 else wMom.cx
     val brecha = (cxInd - cxMom).coerceAtLeast(10)
     val tol = (brecha * 0.4).toInt()
-    val yEnc = maxOf(wMom.abajo, wInd.abajo)
+    val yEnc = listOfNotNull(wMom.abajo, wInd.abajo, wTot?.abajo).max()
+    val columnas = listOfNotNull(cxMom, cxInd, cxTot)
+    fun enColumna(x: Int) = columnas.any { abs(x - it) <= tol }
 
-    val montos = lineas.flatMap { montosEn(it) }.filter { it.caja.arriba > yEnc && (abs(it.caja.cx - cxMom) <= tol || abs(it.caja.cx - cxInd) <= tol) }
+    val montos = lineas.flatMap { montosEn(it) }.filter { it.caja.arriba > yEnc && enColumna(it.caja.cx) }.toMutableList()
+    // Un "$0" mal leído se pierde fácil: dentro del alto de la tabla se acepta como 0 lo que luzca a cero.
+    val ultimoMonto = montos.maxOfOrNull { it.caja.cy }
+    val limiteTabla = if (ultimoMonto != null) ultimoMonto + (4 * hMed).coerceAtLeast(hMed * 3) else yEnc
+    for (w in palabras) {
+        if (w.arriba > yEnc && w.cy <= limiteTabla && enColumna(w.cx) && RE_CERO_SUCIO.matches(w.texto.trim()) && montos.none { it.caja === w }) {
+            if (montos.none { abs(it.caja.cx - w.cx) < hMed * 2 && abs(it.caja.cy - w.cy) < hMed }) montos.add(Monto(0.0, w))
+        }
+    }
     fun etiquetaDe(p: PalabraOcr) = ETIQUETAS_SEMANAS.indexOfFirst { r -> r.matches(p.texto.lowercase().replace(" ", "")) }
     val etiquetas = palabras.filter { it.arriba > yEnc && it.cx < cxMom - brecha / 2 && etiquetaDe(it) >= 0 }
 
@@ -317,11 +344,23 @@ fun leerComisionGestor(palabrasOcr: List<PalabraOcr>): LecturaComision {
     val ordenados = renglones.sortedBy { it.cy }
     val momento = MutableList<Double?>(4) { null }
     val indirecta = MutableList<Double?>(4) { null }
+    val total = MutableList<Double?>(4) { null }
     fun asignar(idx: Int, r: Renglon) {
         r.montos.filter { abs(it.caja.cx - cxMom) <= tol }.minByOrNull { abs(it.caja.cx - cxMom) }?.let { momento[idx] = it.valor }
         r.montos.filter { abs(it.caja.cx - cxInd) <= tol }.minByOrNull { abs(it.caja.cx - cxInd) }?.let { indirecta[idx] = it.valor }
+        if (cxTot != null) r.montos.filter { abs(it.caja.cx - cxTot) <= tol }.minByOrNull { abs(it.caja.cx - cxTot) }?.let { total[idx] = it.valor }
     }
     if (ordenados.size == 4) ordenados.forEachIndexed { i, r -> asignar(i, r) }
     else ordenados.forEach { r -> r.etiqueta?.takeIf { it in 0..3 }?.let { asignar(it, r) } }
-    return LecturaComision(momento, indirecta, ordenados.size)
+
+    // Total = Al momento + Indirecta: si falta uno de los dos, se completa con el Total de la captura.
+    val momDed = MutableList(4) { false }
+    val indDed = MutableList(4) { false }
+    for (i in 0..3) {
+        val tt = total[i] ?: continue
+        if (momento[i] == null && indirecta[i] != null && tt - indirecta[i]!! >= -0.5) { momento[i] = (tt - indirecta[i]!!).coerceAtLeast(0.0); momDed[i] = true }
+        else if (indirecta[i] == null && momento[i] != null && tt - momento[i]!! >= -0.5) { indirecta[i] = (tt - momento[i]!!).coerceAtLeast(0.0); indDed[i] = true }
+        else if (momento[i] == null && indirecta[i] == null && tt == 0.0) { momento[i] = 0.0; indirecta[i] = 0.0; momDed[i] = true; indDed[i] = true }
+    }
+    return LecturaComision(momento, indirecta, ordenados.size, total, momDed, indDed)
 }
