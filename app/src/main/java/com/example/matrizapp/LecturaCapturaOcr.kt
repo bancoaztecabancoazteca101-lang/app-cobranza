@@ -29,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -43,9 +44,13 @@ import java.io.File
 suspend fun leerPalabrasDeImagen(context: Context, uri: Uri): List<PalabraOcr> = withContext(Dispatchers.Default) {
     val image = OcrImagen.cargar(context, uri)
     val texto = OcrImagen.reconocedor.process(image).await()
-    texto.textBlocks.flatMap { it.lines }.flatMap { it.elements }.mapNotNull { e ->
-        val caja = e.boundingBox ?: return@mapNotNull null
-        PalabraOcr(e.text, caja.left, caja.top, caja.right, caja.bottom)
+    var idLinea = 0
+    texto.textBlocks.flatMap { it.lines }.flatMap { linea ->
+        val id = idLinea++
+        linea.elements.mapNotNull { e ->
+            val caja = e.boundingBox ?: return@mapNotNull null
+            PalabraOcr(e.text, caja.left, caja.top, caja.right, caja.bottom, id)
+        }
     }
 }
 
@@ -128,9 +133,11 @@ private fun CampoLectura(etiqueta: String, valor: String, leido: Boolean, onChan
 fun RevisarLecturaVelocidadDialog(
     actual: VelocidadEntity,
     lectura: LecturaVelocidad,
+    diagnostico: String = "",
     onDismiss: () -> Unit,
     onAplicar: (VelocidadEntity) -> Unit
 ) {
+    var verTexto by remember { mutableStateOf(false) }
     var plan by remember { mutableStateOf(dineroTexto(lectura.plan ?: actual.plan100)) }
     var cobrado by remember { mutableStateOf(dineroTexto(lectura.cobrado ?: actual.total)) }
     var reque36 by remember { mutableStateOf(dineroTexto(lectura.reque36 ?: actual.reque36)) }
@@ -147,12 +154,25 @@ fun RevisarLecturaVelocidadDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text("Compara cada dato con la captura antes de guardar.", style = MaterialTheme.typography.bodySmall)
+                val planN = numLeido(plan, actual.plan100)
+                val cobradoN = numLeido(cobrado, actual.total)
+                val alcanceCalc = if (planN > 0.0) cobradoN / planN * 100 else null
+                if (lectura.alcance != null && alcanceCalc != null && kotlin.math.abs(lectura.alcance - alcanceCalc) > 1.5) {
+                    Text(
+                        "Ojo: el Alcance leído (${"%.1f".format(lectura.alcance)}%) no cuadra con Cobranza ÷ Plan (${"%.1f".format(alcanceCalc)}%). Revisa Meta Plan y Total Cobrado.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error
+                    )
+                }
                 CampoLectura("Meta Plan", plan, lectura.plan != null) { plan = it }
                 CampoLectura("Total Cobrado", cobrado, lectura.cobrado != null) { cobrado = it }
                 CampoLectura("Requerido Pisado (Requerido Gestionado 3 a 6)", reque36, lectura.reque36 != null) { reque36 = it }
                 CampoLectura("Requerido Cobrado (Cobranza 3 a 6)", monto36, lectura.monto36 != null) { monto36 = it }
                 CampoLectura("Cuentas de Pase (Número de clientes)", cuPase, lectura.cuPase != null) { cuPase = it }
                 CampoLectura("\$ Capital (Suma del saldo capital)", capital, lectura.capitalPase != null) { capital = it }
+                if (diagnostico.isNotBlank()) {
+                    TextButton(onClick = { verTexto = !verTexto }) { Text(if (verTexto) "Ocultar texto leído" else "Ver texto leído (diagnóstico)") }
+                    if (verTexto) Text(diagnostico, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                }
             }
         },
         confirmButton = {
@@ -175,9 +195,11 @@ fun RevisarLecturaVelocidadDialog(
 fun RevisarLecturaComisionDialog(
     actual: ComisionEntity,
     lectura: LecturaComision,
+    diagnostico: String = "",
     onDismiss: () -> Unit,
     onAplicar: (ComisionEntity) -> Unit
 ) {
+    var verTexto by remember { mutableStateOf(false) }
     val etiquetas = listOf("1 a 2", "3", "4 a 6", "7 a 9")
     val momentoActual = listOf(actual.momento12, actual.momento3, actual.momento46, actual.momento79)
     val indirectaActual = listOf(actual.indirecta12, actual.indirecta3, actual.indirecta46, actual.indirecta79)
@@ -199,6 +221,10 @@ fun RevisarLecturaComisionDialog(
                         Column(Modifier.weight(1f)) { CampoLectura("Al momento", momento[i], lectura.momento[i] != null) { momento[i] = it } }
                         Column(Modifier.weight(1f)) { CampoLectura("Indirecta", indirecta[i], lectura.indirecta[i] != null) { indirecta[i] = it } }
                     }
+                }
+                if (diagnostico.isNotBlank()) {
+                    TextButton(onClick = { verTexto = !verTexto }) { Text(if (verTexto) "Ocultar texto leído" else "Ver texto leído (diagnóstico)") }
+                    if (verTexto) Text(diagnostico, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
                 }
             }
         },

@@ -380,7 +380,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Penalizacion.route) { PenalizacionScreen(penalizacionVm) }
                             composable(Screen.Comision.route) {
                                 val velocidadActual by penalizacionVm.item.collectAsState()
-                                ComisionScreen(comisionVm, metaPlan = velocidadActual.plan100)
+                                ComisionScreen(comisionVm, metaPlan = velocidadActual.plan100, totalCobrado = velocidadActual.total)
                             }
                             composable(Screen.Avance.route) { AvanceScreen(controlVm) }
                             composable(Screen.BolsaGerencia.route) { BolsaGerenciaScreen(bolsaGerenciaVm) }

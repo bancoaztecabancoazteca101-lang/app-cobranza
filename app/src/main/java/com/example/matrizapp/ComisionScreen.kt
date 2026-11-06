@@ -21,14 +21,18 @@ import kotlin.math.abs
  * por segmento de semana de atraso abajo. Mismo patrón de captura (lápiz -> AlertDialog) que
  * PenalizacionScreen.kt. */
 @Composable
-fun ComisionScreen(viewModel: ComisionViewModel, metaPlan: Double = 0.0) {
+fun ComisionScreen(viewModel: ComisionViewModel, metaPlan: Double = 0.0, totalCobrado: Double = 0.0) {
     val filaGuardada by viewModel.item.collectAsState()
     // La meta del periodo ya no se captura aquí: se toma de "Meta Plan" en Tabla de Velocidades
     val fila = filaGuardada.copy(meta = metaPlan)
     var mostrarEditor by remember { mutableStateOf(false) }
     val calculo = fila.calcular()
+    // Encabezado = lo mismo que Tabla de Velocidades (Total Cobrado de Meta Plan y su Avance vs plan);
+    // la comisión en pesos queda abajo, en la tabla.
+    val avancePlan = if (metaPlan > 0.0) totalCobrado / metaPlan else 0.0
     // Lectura por OCR de la captura "Cobranza del gestor" (Al momento / Indirecta por semana de atraso).
     var lecturaCom by remember { mutableStateOf<LecturaComision?>(null) }
+    var diagCom by remember { mutableStateOf("") }
     var mensajeOcr by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
@@ -54,8 +58,8 @@ fun ComisionScreen(viewModel: ComisionViewModel, metaPlan: Double = 0.0) {
             BotonLecturaFoto("Leer captura", modifier = Modifier.fillMaxWidth(),
                 onPalabras = {
                     val l = leerComisionGestor(it)
-                    if (l.vacia) mensajeOcr = "No se pudo leer la tabla. Usa una captura nítida donde se vean los encabezados Al momento / Indirecta."
-                    else { lecturaCom = l; mensajeOcr = null }
+                    if (l.vacia) mensajeOcr = "No se pudo leer la tabla (deben verse los encabezados Al momento / Indirecta). Texto que vio el OCR:\n${textoDiagnostico(it)}"
+                    else { lecturaCom = l; diagCom = textoDiagnostico(it); mensajeOcr = null }
                 },
                 onError = { mensajeOcr = it })
             mensajeOcr?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
@@ -64,17 +68,17 @@ fun ComisionScreen(viewModel: ComisionViewModel, metaPlan: Double = 0.0) {
 
         ClayCard {
             Text(
-                "${formatMoneyComision(calculo.totalGeneral)} de ${formatMoneyComision(fila.meta)}",
+                "${formatMoneyComision(totalCobrado)} de ${formatMoneyComision(metaPlan)}",
                 style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(10.dp))
             LinearProgressIndicator(
-                progress = calculo.avance.toFloat().coerceIn(0f, 1f),
+                progress = avancePlan.toFloat().coerceIn(0f, 1f),
                 modifier = Modifier.fillMaxWidth().height(10.dp),
                 color = ClayPrimary
             )
             Spacer(modifier = Modifier.height(6.dp))
-            Text("Alcance del plan ${formatPercentComision(calculo.avance)}", color = Color.Gray)
+            Text("Alcance del plan ${"%.1f".format(avancePlan * 100)}%", color = Color.Gray)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -93,6 +97,7 @@ fun ComisionScreen(viewModel: ComisionViewModel, metaPlan: Double = 0.0) {
         RevisarLecturaComisionDialog(
             actual = filaGuardada,
             lectura = l,
+            diagnostico = diagCom,
             onDismiss = { lecturaCom = null },
             onAplicar = { nuevo -> viewModel.guardar(nuevo); lecturaCom = null }
         )
@@ -130,7 +135,7 @@ private fun FilaComision(fila: ComisionFila) {
 @Composable
 private fun FilaTotalComision(total: Double) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("Total", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Comisión total", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(formatMoneyComision(total), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = ClayPrimary)
     }
 }

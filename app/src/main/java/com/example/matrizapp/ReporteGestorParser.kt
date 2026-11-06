@@ -12,7 +12,8 @@ import kotlin.math.abs
  * como "1 a 2" -> "la2" o "$0" -> "(O)". Todo lo que no se pueda leer queda en null: nunca se inventa un valor.
  */
 
-data class PalabraOcr(val texto: String, val izq: Int, val arriba: Int, val der: Int, val abajo: Int) {
+/** [linea] = id de la línea que detectó el OCR (-1 si no se sabe); sirve para medir la inclinación de una foto. */
+data class PalabraOcr(val texto: String, val izq: Int, val arriba: Int, val der: Int, val abajo: Int, val linea: Int = -1) {
     val cx: Int get() = (izq + der) / 2
     val cy: Int get() = (arriba + abajo) / 2
     val alto: Int get() = (abajo - arriba).coerceAtLeast(1)
@@ -35,19 +36,22 @@ data class LecturaVelocidad(
     val cuPase: Int? = null,         // Cuentas de Pase (Número de clientes, 6 a 7 semanas)
     val capitalPase: Double? = null, // $ Capital (Suma del saldo capital)
     val reque36: Double? = null,     // Requerido Pisado  <- "Requerido Gestionado" (3 a 6 semanas)
-    val monto36: Double? = null      // Requerido Cobrado <- "Cobranza" (3 a 6 semanas)
+    val monto36: Double? = null,     // Requerido Cobrado <- "Cobranza" (3 a 6 semanas)
+    val alcance: Double? = null      // "Alcance de plan" en % (solo para comprobar que Plan y Cobranza cuadran)
 ) {
-    val vacia: Boolean get() = plan == null && cobrado == null && cuPase == null && capitalPase == null && reque36 == null && monto36 == null
+    val vacia: Boolean get() = plan == null && cobrado == null && cuPase == null && capitalPase == null && reque36 == null && monto36 == null && alcance == null
     val camposLeidos: List<String> get() = listOfNotNull(
         "Meta Plan".takeIf { plan != null }, "Total Cobrado".takeIf { cobrado != null },
         "Cuentas de Pase".takeIf { cuPase != null }, "\$ Capital".takeIf { capitalPase != null },
-        "Requerido Pisado".takeIf { reque36 != null }, "Requerido Cobrado".takeIf { monto36 != null }
+        "Requerido Pisado".takeIf { reque36 != null }, "Requerido Cobrado".takeIf { monto36 != null },
+        "Alcance".takeIf { alcance != null }
     )
 
     /** Combina dos capturas: lo que trae la segunda tiene prioridad si ambas leen el mismo campo. */
     fun fusionar(otra: LecturaVelocidad?): LecturaVelocidad = if (otra == null) this else LecturaVelocidad(
         plan = otra.plan ?: plan, cobrado = otra.cobrado ?: cobrado, cuPase = otra.cuPase ?: cuPase,
-        capitalPase = otra.capitalPase ?: capitalPase, reque36 = otra.reque36 ?: reque36, monto36 = otra.monto36 ?: monto36
+        capitalPase = otra.capitalPase ?: capitalPase, reque36 = otra.reque36 ?: reque36, monto36 = otra.monto36 ?: monto36,
+        alcance = otra.alcance ?: alcance
     )
 }
 
@@ -65,6 +69,41 @@ internal fun normaliza(s: String): String =
     Normalizer.normalize(s.lowercase(), Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").replace(Regex("[^a-z0-9 ]"), "").replace(Regex("\\s+"), " ").trim()
 
 private fun mediana(v: List<Int>): Int = if (v.isEmpty()) 20 else v.sorted()[v.size / 2]
+
+/**
+ * Una FOTO tomada con cámara a otra pantalla casi nunca sale derecha: el texto queda ligeramente girado y las
+ * columnas/renglones dejan de alinearse. Se mide el giro con las líneas del propio OCR (primer vs. último
+ * elemento de cada línea) y se endereza antes de interpretar. En una captura de pantalla no cambia nada.
+ */
+fun corregirInclinacion(palabras: List<PalabraOcr>): List<PalabraOcr> {
+    if (palabras.size < 4) return palabras
+    val hMed = mediana(palabras.map { it.alto })
+    val angulos = palabras.filter { it.linea >= 0 }.groupBy { it.linea }.values.mapNotNull { g ->
+        val o = g.sortedBy { it.cx }
+        val dx = (o.last().cx - o.first().cx).toDouble()
+        if (o.size >= 2 && dx >= 4 * hMed) Math.atan2((o.last().cy - o.first().cy).toDouble(), dx) else null
+    }
+    if (angulos.size < 2) return palabras
+    val theta = angulos.sorted()[angulos.size / 2]
+    if (abs(theta) < Math.toRadians(0.4) || abs(theta) > Math.toRadians(15.0)) return palabras
+    val cx0 = palabras.map { it.cx }.average()
+    val cy0 = palabras.map { it.cy }.average()
+    val c = Math.cos(theta)
+    val s = Math.sin(theta)
+    return palabras.map { p ->
+        val dx = p.cx - cx0
+        val dy = p.cy - cy0
+        val nx = cx0 + dx * c + dy * s
+        val ny = cy0 - dx * s + dy * c
+        val mw = (p.der - p.izq) / 2.0
+        val mh = (p.abajo - p.arriba) / 2.0
+        PalabraOcr(p.texto, Math.round(nx - mw).toInt(), Math.round(ny - mh).toInt(), Math.round(nx + mw).toInt(), Math.round(ny + mh).toInt(), p.linea)
+    }
+}
+
+/** Texto tal como lo vio el OCR, de arriba abajo (para poder revisar qué leyó cuando un dato sale mal). */
+fun textoDiagnostico(palabras: List<PalabraOcr>): String =
+    agruparLineas(corregirInclinacion(palabras)).joinToString("\n") { l -> "y${l.cy}: ${l.texto}" }
 
 internal fun agruparLineas(palabras: List<PalabraOcr>): List<LineaOcr> {
     if (palabras.isEmpty()) return emptyList()
@@ -124,8 +163,9 @@ private fun cercano(cx: Int, centros: List<Pair<String, Int>>): String? = centro
 
 private fun List<PalabraOcr>.centroPromedio(): Int? = map { it.cx }.average().takeIf { !it.isNaN() }?.toInt()
 
-fun leerResumenGestor(palabras: List<PalabraOcr>): LecturaVelocidad {
-    if (palabras.isEmpty()) return LecturaVelocidad()
+fun leerResumenGestor(palabrasOcr: List<PalabraOcr>): LecturaVelocidad {
+    if (palabrasOcr.isEmpty()) return LecturaVelocidad()
+    val palabras = corregirInclinacion(palabrasOcr)
     val lineas = agruparLineas(palabras)
     val hMed = mediana(palabras.map { it.alto })
     val montos = lineas.flatMap { montosEn(it) }
@@ -152,6 +192,18 @@ fun leerResumenGestor(palabras: List<PalabraOcr>): LecturaVelocidad {
         }
         if (cobrado == null) cobrado = valorBajo("cobranza")
         if (plan == null) plan = valorBajo("plan")
+    }
+
+    // 1b) "Alcance de plan 12.1%": solo sirve para comprobar que Plan y Cobranza se leyeron bien.
+    var alcance: Double? = null
+    run {
+        val limite = listOfNotNull(titPase?.arriba, titEfec?.arriba).minOrNull() ?: Int.MAX_VALUE
+        val et = palabras.firstOrNull { norm(it) == "alcance" && it.abajo < limite }
+        if (et != null) {
+            val porc = palabras.filter { it.abajo < limite && it.arriba >= et.arriba - hMed && it.arriba - et.arriba <= 14 * hMed }
+                .mapNotNull { w -> Regex("^(\\d{1,3}(?:[.,]\\d{1,2})?)%$").matchEntire(w.texto.trim())?.let { w to it.groupValues[1].replace(',', '.').toDouble() } }
+            alcance = porc.minByOrNull { (w, _) -> abs(w.cy - et.cy) + abs(w.cx - et.cx) / 4 }?.second
+        }
     }
 
     // 2) "Pase de clientes": Número de clientes | Suma del saldo capital (columnas por posición de sus encabezados).
@@ -195,15 +247,16 @@ fun leerResumenGestor(palabras: List<PalabraOcr>): LecturaVelocidad {
             }
         } else if (montosReg.size >= 2) { monto36 = montosReg[0].valor; reque36 = montosReg[1].valor }
     }
-    return LecturaVelocidad(plan = plan, cobrado = cobrado, cuPase = cuPase, capitalPase = capitalPase, reque36 = reque36, monto36 = monto36)
+    return LecturaVelocidad(plan = plan, cobrado = cobrado, cuPase = cuPase, capitalPase = capitalPase, reque36 = reque36, monto36 = monto36, alcance = alcance)
 }
 
 // ------------------------------------------------------------------------------- Cobranza del gestor
 
 private val ETIQUETAS_SEMANAS = listOf(Regex("^[1li|!]a2$"), Regex("^3$"), Regex("^4a6$"), Regex("^7a9$"))
 
-fun leerComisionGestor(palabras: List<PalabraOcr>): LecturaComision {
-    if (palabras.isEmpty()) return LecturaComision.VACIA
+fun leerComisionGestor(palabrasOcr: List<PalabraOcr>): LecturaComision {
+    if (palabrasOcr.isEmpty()) return LecturaComision.VACIA
+    val palabras = corregirInclinacion(palabrasOcr)
     val hMed = mediana(palabras.map { it.alto })
     val lineas = agruparLineas(palabras)
     val wMom = palabras.firstOrNull { normaliza(it.texto) == "momento" } ?: return LecturaComision.VACIA

@@ -26,6 +26,8 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
     // Lectura por OCR de las capturas de "Resumen del Gestor" (una sola captura no trae todos los datos).
     var lectura1 by remember { mutableStateOf<LecturaVelocidad?>(null) }
     var lectura2 by remember { mutableStateOf<LecturaVelocidad?>(null) }
+    var diag1 by remember { mutableStateOf("") }
+    var diag2 by remember { mutableStateOf("") }
     var mensajeOcr by remember { mutableStateOf<String?>(null) }
     var revisarLectura by remember { mutableStateOf(false) }
 
@@ -51,12 +53,12 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 BotonLecturaFoto("Captura 1 (arriba)", modifier = Modifier.weight(1f),
-                    onPalabras = { lectura1 = leerResumenGestor(it); mensajeOcr = null }, onError = { mensajeOcr = it })
+                    onPalabras = { lectura1 = leerResumenGestor(it); diag1 = textoDiagnostico(it); mensajeOcr = null }, onError = { mensajeOcr = it })
                 BotonLecturaFoto("Captura 2 (abajo)", modifier = Modifier.weight(1f),
-                    onPalabras = { lectura2 = leerResumenGestor(it); mensajeOcr = null }, onError = { mensajeOcr = it })
+                    onPalabras = { lectura2 = leerResumenGestor(it); diag2 = textoDiagnostico(it); mensajeOcr = null }, onError = { mensajeOcr = it })
             }
-            lectura1?.let { Text(if (it.vacia) "Captura 1: no se leyó nada, prueba con una más nítida" else "Captura 1 leyó: ${it.camposLeidos.joinToString(", ")}", style = MaterialTheme.typography.bodySmall) }
-            lectura2?.let { Text(if (it.vacia) "Captura 2: no se leyó nada, prueba con una más nítida" else "Captura 2 leyó: ${it.camposLeidos.joinToString(", ")}", style = MaterialTheme.typography.bodySmall) }
+            lectura1?.let { Text(if (it.vacia) "Captura 1: no se leyó ningún dato. Texto que vio el OCR:\n$diag1" else "Captura 1 leyó: ${it.camposLeidos.joinToString(", ")}", style = MaterialTheme.typography.bodySmall) }
+            lectura2?.let { Text(if (it.vacia) "Captura 2: no se leyó ningún dato. Texto que vio el OCR:\n$diag2" else "Captura 2 leyó: ${it.camposLeidos.joinToString(", ")}", style = MaterialTheme.typography.bodySmall) }
             mensajeOcr?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = { revisarLectura = true }, enabled = lectura1?.vacia == false || lectura2?.vacia == false) { Text("Revisar y aplicar") }
@@ -102,6 +104,7 @@ fun PenalizacionScreen(viewModel: PenalizacionViewModel) {
         RevisarLecturaVelocidadDialog(
             actual = fila,
             lectura = (lectura1 ?: LecturaVelocidad()).fusionar(lectura2),
+            diagnostico = "CAPTURA 1\n$diag1\n\nCAPTURA 2\n$diag2",
             onDismiss = { revisarLectura = false },
             onAplicar = { nuevo -> viewModel.guardar(nuevo); revisarLectura = false; lectura1 = null; lectura2 = null }
         )
