@@ -1,0 +1,1641 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 37,
+    "identityHash": "6f8d3d12b03c4f57838d8920358aa3a5",
+    "entities": [
+      {
+        "tableName": "matriz_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `nombre` TEXT NOT NULL, `semana` TEXT NOT NULL, `requisito` TEXT NOT NULL, `numTT` TEXT NOT NULL, `ref1` TEXT NOT NULL, `ref2` TEXT NOT NULL, `observaciones` TEXT, `estado` TEXT NOT NULL, `ubicacion` TEXT, `imagenUrl` TEXT, `imagenUrl2` TEXT, `fecha` INTEGER, `hora` TEXT, `ruta` TEXT, `folioP` TEXT, `descuentoPago` TEXT, `descuentoAhorro` TEXT, `ref3` TEXT, `ref4` TEXT, `diaPago` TEXT, `domicilioLaboral` TEXT, `diasAtraso` TEXT, `diasApertura` TEXT, `montoCobrado` REAL, `isDirty` INTEGER NOT NULL, `lastSync` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "semana",
+            "columnName": "semana",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requisito",
+            "columnName": "requisito",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "numTT",
+            "columnName": "numTT",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ref1",
+            "columnName": "ref1",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ref2",
+            "columnName": "ref2",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "observaciones",
+            "columnName": "observaciones",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "estado",
+            "columnName": "estado",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ubicacion",
+            "columnName": "ubicacion",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "imagenUrl",
+            "columnName": "imagenUrl",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "imagenUrl2",
+            "columnName": "imagenUrl2",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "fecha",
+            "columnName": "fecha",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "hora",
+            "columnName": "hora",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ruta",
+            "columnName": "ruta",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "folioP",
+            "columnName": "folioP",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "descuentoPago",
+            "columnName": "descuentoPago",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "descuentoAhorro",
+            "columnName": "descuentoAhorro",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ref3",
+            "columnName": "ref3",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ref4",
+            "columnName": "ref4",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "diaPago",
+            "columnName": "diaPago",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "domicilioLaboral",
+            "columnName": "domicilioLaboral",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "diasAtraso",
+            "columnName": "diasAtraso",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "diasApertura",
+            "columnName": "diasApertura",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "montoCobrado",
+            "columnName": "montoCobrado",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "isDirty",
+            "columnName": "isDirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSync",
+            "columnName": "lastSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "ticket_pago_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `fecha` INTEGER NOT NULL, `nombre` TEXT, `cu` TEXT, `monto` REAL NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fecha",
+            "columnName": "fecha",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "cu",
+            "columnName": "cu",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "monto",
+            "columnName": "monto",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "visita_mapa_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`clave` TEXT NOT NULL, `fechaDia` INTEGER NOT NULL, `nombre` TEXT NOT NULL, `ubicacion` TEXT NOT NULL, `matrizId` TEXT, `cartucho` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL, PRIMARY KEY(`clave`, `fechaDia`))",
+        "fields": [
+          {
+            "fieldPath": "clave",
+            "columnName": "clave",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fechaDia",
+            "columnName": "fechaDia",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ubicacion",
+            "columnName": "ubicacion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matrizId",
+            "columnName": "matrizId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "cartucho",
+            "columnName": "cartucho",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "clave",
+            "fechaDia"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "pase_cartera_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `nombre` TEXT NOT NULL, `semana` TEXT NOT NULL, `requisito` TEXT NOT NULL, `numTT` TEXT NOT NULL, `ref1` TEXT NOT NULL, `ref2` TEXT NOT NULL, `observaciones` TEXT, `estado` TEXT NOT NULL, `ubicacion` TEXT, `imagenUrl` TEXT, `imagenUrl2` TEXT, `fecha` INTEGER, `hora` TEXT, `ruta` TEXT, `folioP` TEXT, `origenMatrizId` TEXT NOT NULL, `contiene` TEXT, `capitales` TEXT, `isDirty` INTEGER NOT NULL, `lastSync` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "semana",
+            "columnName": "semana",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requisito",
+            "columnName": "requisito",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "numTT",
+            "columnName": "numTT",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ref1",
+            "columnName": "ref1",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ref2",
+            "columnName": "ref2",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "observaciones",
+            "columnName": "observaciones",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "estado",
+            "columnName": "estado",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ubicacion",
+            "columnName": "ubicacion",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "imagenUrl",
+            "columnName": "imagenUrl",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "imagenUrl2",
+            "columnName": "imagenUrl2",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "fecha",
+            "columnName": "fecha",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "hora",
+            "columnName": "hora",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ruta",
+            "columnName": "ruta",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "folioP",
+            "columnName": "folioP",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "origenMatrizId",
+            "columnName": "origenMatrizId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contiene",
+            "columnName": "contiene",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "capitales",
+            "columnName": "capitales",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "isDirty",
+            "columnName": "isDirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSync",
+            "columnName": "lastSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "solicitud_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `nombre` TEXT NOT NULL, `numero` TEXT, `sucursal` TEXT, `ubicacionRaw` TEXT, `imageUrl` TEXT, `imageUrl2` TEXT, `nombreRef1` TEXT, `ref1` TEXT, `nombreRef2` TEXT, `ref2` TEXT, `observaciones` TEXT, `audioUrl` TEXT, `estado` TEXT NOT NULL, `imageUrl3` TEXT, `imageUrl4` TEXT, `gestorAsignado` TEXT NOT NULL, `fechaHora` INTEGER, `isDirty` INTEGER NOT NULL, `lastSync` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "numero",
+            "columnName": "numero",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "sucursal",
+            "columnName": "sucursal",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ubicacionRaw",
+            "columnName": "ubicacionRaw",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "imageUrl",
+            "columnName": "imageUrl",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "imageUrl2",
+            "columnName": "imageUrl2",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "nombreRef1",
+            "columnName": "nombreRef1",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ref1",
+            "columnName": "ref1",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "nombreRef2",
+            "columnName": "nombreRef2",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ref2",
+            "columnName": "ref2",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "observaciones",
+            "columnName": "observaciones",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "audioUrl",
+            "columnName": "audioUrl",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "estado",
+            "columnName": "estado",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageUrl3",
+            "columnName": "imageUrl3",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "imageUrl4",
+            "columnName": "imageUrl4",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "gestorAsignado",
+            "columnName": "gestorAsignado",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fechaHora",
+            "columnName": "fechaHora",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "isDirty",
+            "columnName": "isDirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSync",
+            "columnName": "lastSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "filtro_fecha_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `nombre` TEXT NOT NULL, `estado` TEXT NOT NULL, `observaciones` TEXT, `numTT` TEXT NOT NULL, `fecha` INTEGER NOT NULL, `hora` TEXT, `imagenUrl` TEXT, `ref1` TEXT, `ref2` TEXT, `ubicacion` TEXT, `req` TEXT, `isDirty` INTEGER NOT NULL, `lastSync` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "estado",
+            "columnName": "estado",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "observaciones",
+            "columnName": "observaciones",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "numTT",
+            "columnName": "numTT",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fecha",
+            "columnName": "fecha",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hora",
+            "columnName": "hora",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "imagenUrl",
+            "columnName": "imagenUrl",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ref1",
+            "columnName": "ref1",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ref2",
+            "columnName": "ref2",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ubicacion",
+            "columnName": "ubicacion",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "req",
+            "columnName": "req",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "isDirty",
+            "columnName": "isDirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSync",
+            "columnName": "lastSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "filtrar_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `nombre` TEXT NOT NULL, `semana` TEXT NOT NULL, `requerido` TEXT NOT NULL, `numTT` TEXT NOT NULL, `referencias` TEXT, `observaciones` TEXT, `estado` TEXT NOT NULL, `ubicacion` TEXT, `imagen` TEXT, `fecha` INTEGER, `hora` TEXT, `isDirty` INTEGER NOT NULL, `lastSync` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "semana",
+            "columnName": "semana",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requerido",
+            "columnName": "requerido",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "numTT",
+            "columnName": "numTT",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referencias",
+            "columnName": "referencias",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "observaciones",
+            "columnName": "observaciones",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "estado",
+            "columnName": "estado",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ubicacion",
+            "columnName": "ubicacion",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "imagen",
+            "columnName": "imagen",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "fecha",
+            "columnName": "fecha",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "hora",
+            "columnName": "hora",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "isDirty",
+            "columnName": "isDirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSync",
+            "columnName": "lastSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "control_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`semana` TEXT NOT NULL, `requerido` TEXT NOT NULL, `lastSync` INTEGER NOT NULL, PRIMARY KEY(`semana`))",
+        "fields": [
+          {
+            "fieldPath": "semana",
+            "columnName": "semana",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requerido",
+            "columnName": "requerido",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSync",
+            "columnName": "lastSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "semana"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "bloques_horario_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `hora` INTEGER NOT NULL, `minuto` INTEGER NOT NULL, `activo` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hora",
+            "columnName": "hora",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minuto",
+            "columnName": "minuto",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activo",
+            "columnName": "activo",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "contacto_log_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `clienteId` TEXT NOT NULL, `fechaDia` INTEGER NOT NULL, `bloqueIndex` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clienteId",
+            "columnName": "clienteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fechaDia",
+            "columnName": "fechaDia",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bloqueIndex",
+            "columnName": "bloqueIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_contacto_log_table_clienteId_fechaDia",
+            "unique": false,
+            "columnNames": [
+              "clienteId",
+              "fechaDia"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_contacto_log_table_clienteId_fechaDia` ON `${TABLE_NAME}` (`clienteId`, `fechaDia`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "plantilla_sms_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tipo` TEXT NOT NULL, `semana` INTEGER NOT NULL, `slot` INTEGER NOT NULL, `texto` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tipo",
+            "columnName": "tipo",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "semana",
+            "columnName": "semana",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "slot",
+            "columnName": "slot",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "texto",
+            "columnName": "texto",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_plantilla_sms_table_tipo_semana_slot",
+            "unique": true,
+            "columnNames": [
+              "tipo",
+              "semana",
+              "slot"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_plantilla_sms_table_tipo_semana_slot` ON `${TABLE_NAME}` (`tipo`, `semana`, `slot`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "config_automatizacion_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `simSeleccionada` INTEGER, `ocultarNumero` INTEGER NOT NULL, `segundosPausaEntreLlamadas` INTEGER NOT NULL, `duracionMaximaLlamada` INTEGER NOT NULL, `simSms` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "simSeleccionada",
+            "columnName": "simSeleccionada",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "ocultarNumero",
+            "columnName": "ocultarNumero",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "segundosPausaEntreLlamadas",
+            "columnName": "segundosPausaEntreLlamadas",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "duracionMaximaLlamada",
+            "columnName": "duracionMaximaLlamada",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "simSms",
+            "columnName": "simSms",
+            "affinity": "INTEGER",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "regla_semana_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`semana` INTEGER NOT NULL, `offsets` TEXT NOT NULL, `catchupActivo` INTEGER NOT NULL, PRIMARY KEY(`semana`))",
+        "fields": [
+          {
+            "fieldPath": "semana",
+            "columnName": "semana",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "offsets",
+            "columnName": "offsets",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "catchupActivo",
+            "columnName": "catchupActivo",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "semana"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "ruta_ia_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `nombre` TEXT NOT NULL, `cu` TEXT, `direccion` TEXT NOT NULL, `coloniaCp` TEXT, `diasAtraso` INTEGER, `pagoRequerido` REAL, `saldoAtraso` REAL, `lat` REAL, `lng` REAL, `orden` INTEGER NOT NULL, `esNuevo` INTEGER NOT NULL, `cuMatrizMatch` TEXT, `fechaDia` INTEGER NOT NULL, `estado` TEXT NOT NULL, `fotoOrigenUrl` TEXT, `isDirty` INTEGER NOT NULL, `lastSync` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cu",
+            "columnName": "cu",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "direccion",
+            "columnName": "direccion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coloniaCp",
+            "columnName": "coloniaCp",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "diasAtraso",
+            "columnName": "diasAtraso",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "pagoRequerido",
+            "columnName": "pagoRequerido",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "saldoAtraso",
+            "columnName": "saldoAtraso",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lat",
+            "columnName": "lat",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lng",
+            "columnName": "lng",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "orden",
+            "columnName": "orden",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "esNuevo",
+            "columnName": "esNuevo",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cuMatrizMatch",
+            "columnName": "cuMatrizMatch",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "fechaDia",
+            "columnName": "fechaDia",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "estado",
+            "columnName": "estado",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fotoOrigenUrl",
+            "columnName": "fotoOrigenUrl",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "isDirty",
+            "columnName": "isDirty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSync",
+            "columnName": "lastSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "ruta_ia_filtro_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `criteriosOrden` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "criteriosOrden",
+            "columnName": "criteriosOrden",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "canal_pago_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `nombre` TEXT NOT NULL, `empresa` TEXT, `direccion` TEXT, `lat` REAL NOT NULL, `lng` REAL NOT NULL, `lastSync` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "empresa",
+            "columnName": "empresa",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "direccion",
+            "columnName": "direccion",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "lat",
+            "columnName": "lat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lng",
+            "columnName": "lng",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSync",
+            "columnName": "lastSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "contacto_extra_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `clienteId` TEXT NOT NULL, `telefono` TEXT NOT NULL, `nombreOrigen` TEXT NOT NULL, `fechaAgregado` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clienteId",
+            "columnName": "clienteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "telefono",
+            "columnName": "telefono",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombreOrigen",
+            "columnName": "nombreOrigen",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fechaAgregado",
+            "columnName": "fechaAgregado",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_contacto_extra_table_clienteId",
+            "unique": false,
+            "columnNames": [
+              "clienteId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_contacto_extra_table_clienteId` ON `${TABLE_NAME}` (`clienteId`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "velocidad_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `rk` TEXT NOT NULL, `plan100` REAL NOT NULL, `total` REAL NOT NULL, `reque36` REAL NOT NULL, `monto36` REAL NOT NULL, `cuPase` INTEGER NOT NULL, `capital` REAL NOT NULL, `diasOp` INTEGER NOT NULL, `lastUpdate` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rk",
+            "columnName": "rk",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "plan100",
+            "columnName": "plan100",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "total",
+            "columnName": "total",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reque36",
+            "columnName": "reque36",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "monto36",
+            "columnName": "monto36",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cuPase",
+            "columnName": "cuPase",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capital",
+            "columnName": "capital",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "diasOp",
+            "columnName": "diasOp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUpdate",
+            "columnName": "lastUpdate",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "comision_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `momento12` REAL NOT NULL, `indirecta12` REAL NOT NULL, `momento3` REAL NOT NULL, `indirecta3` REAL NOT NULL, `momento46` REAL NOT NULL, `indirecta46` REAL NOT NULL, `momento79` REAL NOT NULL, `indirecta79` REAL NOT NULL, `meta` REAL NOT NULL, `lastUpdate` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "momento12",
+            "columnName": "momento12",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "indirecta12",
+            "columnName": "indirecta12",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "momento3",
+            "columnName": "momento3",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "indirecta3",
+            "columnName": "indirecta3",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "momento46",
+            "columnName": "momento46",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "indirecta46",
+            "columnName": "indirecta46",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "momento79",
+            "columnName": "momento79",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "indirecta79",
+            "columnName": "indirecta79",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "meta",
+            "columnName": "meta",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUpdate",
+            "columnName": "lastUpdate",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "bolsa_gerencia_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `cobranzaGerencia` REAL NOT NULL, `cumplimientoPlan` REAL NOT NULL, `montoBase` REAL NOT NULL, `numeroGestores` INTEGER NOT NULL, `cobranza1a9Gestor` REAL NOT NULL, `cobranza1a9Gerencia` REAL NOT NULL, `lastUpdate` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cobranzaGerencia",
+            "columnName": "cobranzaGerencia",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cumplimientoPlan",
+            "columnName": "cumplimientoPlan",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "montoBase",
+            "columnName": "montoBase",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "numeroGestores",
+            "columnName": "numeroGestores",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cobranza1a9Gestor",
+            "columnName": "cobranza1a9Gestor",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cobranza1a9Gerencia",
+            "columnName": "cobranza1a9Gerencia",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUpdate",
+            "columnName": "lastUpdate",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "cartucho_dia_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`fechaDia` INTEGER NOT NULL, `cartuchoActivo` INTEGER NOT NULL, PRIMARY KEY(`fechaDia`))",
+        "fields": [
+          {
+            "fieldPath": "fechaDia",
+            "columnName": "fechaDia",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cartuchoActivo",
+            "columnName": "cartuchoActivo",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "fechaDia"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "sem6_registro_table",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`hoja` TEXT NOT NULL, `id` TEXT NOT NULL, `nombre` TEXT NOT NULL, `sem` TEXT NOT NULL, `req` TEXT NOT NULL, `cu` TEXT NOT NULL, `ubicacion` TEXT NOT NULL, `imagenUrl` TEXT, `colonia` TEXT NOT NULL, `visitas` INTEGER NOT NULL, `ultimaFechaVisita` TEXT NOT NULL, `numTT` TEXT NOT NULL, `seContiene` TEXT NOT NULL, `susceptible` TEXT NOT NULL, `observaciones` TEXT NOT NULL, `capital` TEXT NOT NULL, `abono` TEXT NOT NULL, PRIMARY KEY(`hoja`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "hoja",
+            "columnName": "hoja",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nombre",
+            "columnName": "nombre",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sem",
+            "columnName": "sem",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "req",
+            "columnName": "req",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cu",
+            "columnName": "cu",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ubicacion",
+            "columnName": "ubicacion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imagenUrl",
+            "columnName": "imagenUrl",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "colonia",
+            "columnName": "colonia",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "visitas",
+            "columnName": "visitas",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ultimaFechaVisita",
+            "columnName": "ultimaFechaVisita",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "numTT",
+            "columnName": "numTT",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seContiene",
+            "columnName": "seContiene",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "susceptible",
+            "columnName": "susceptible",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "observaciones",
+            "columnName": "observaciones",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capital",
+            "columnName": "capital",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "abono",
+            "columnName": "abono",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "hoja",
+            "id"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6f8d3d12b03c4f57838d8920358aa3a5')"
+    ]
+  }
+}
