@@ -28,10 +28,13 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import kotlinx.coroutines.sync.withPermit
 import java.util.Locale
@@ -39,12 +42,109 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 val ESTADOS_MATRIZ = listOf("APP", "Retorno", "Pagado", "PASE", "FILTRAR", "Mano")
 
-suspend fun obtenerUbicacionActual(context: android.content.Context): String? {
-    return try {
-        val client = LocationServices.getFusedLocationProviderClient(context)
-        val location = client.lastLocation.await() ?: return null
-        "${location.latitude}, ${location.longitude}"
-    } catch (e: SecurityException) { null } catch (e: Exception) { null }
+/** Ubicación leída del GPS con su error estimado en metros. */
+data class UbicacionGps(val coordenadas: String, val precisionM: Float)
+const val PRECISION_OPTIMA_M = 4f      // lo mejor que da un celular al aire libre: se corta de inmediato
+const val PRECISION_BUENA_M = 7f       // se corta si ya pasaron ESPERA_MINIMA_BUENA_MS (si no, se sigue buscando bajar de 4 m)
+const val ESPERA_MINIMA_BUENA_MS = 10_000L
+const val PRECISION_ACEPTABLE_M = 9f   // hasta aquí se guarda sin advertencia
+const val PRECISION_MAXIMA_M = 17f     // peor que esto NUNCA se guarda
+const val ESPERA_GPS_GUARDAR_MS = 25_000L // tiempo para que el GPS converja a 7-9 m antes de rendirse
+// Para ORDENAR por cercanía (Ruta IA) no hace falta tanta exactitud como para guardar un punto: se mantiene lo de antes.
+const val PRECISION_ORDENAR_BUENA_M = 20f
+const val PRECISION_ORDENAR_M = 50f
+
+/**
+ * Lee el GPS "de verdad" (solo se llama cuando el usuario pulsa un botón de ubicación).
+ * Pide lecturas nuevas con máxima precisión, se queda con la MEJOR dentro de [tiempoMaxMs] y corta
+ * en cuanto el error baja a [PRECISION_BUENA_M]. Descarta lecturas con coordenadas fuera de rango,
+ * sin precisión declarada o con más de 30 s de antigüedad. Devuelve null si nada sirve.
+ */
+@android.annotation.SuppressLint("MissingPermission")
+suspend fun obtenerUbicacionPrecisa(
+    context: android.content.Context,
+    tiempoMaxMs: Long = ESPERA_GPS_GUARDAR_MS,
+    buenaM: Float = PRECISION_BUENA_M,
+    optimaM: Float = PRECISION_OPTIMA_M
+): UbicacionGps? {
+    val client = LocationServices.getFusedLocationProviderClient(context)
+    var mejor: android.location.Location? = null
+    val inicio = android.os.SystemClock.elapsedRealtime()
+    fun valida(l: android.location.Location): Boolean {
+        if (!l.latitude.isFinite() || !l.longitude.isFinite()) return false
+        if (l.latitude !in -90.0..90.0 || l.longitude !in -180.0..180.0) return false
+        if (!l.hasAccuracy() || !l.accuracy.isFinite() || l.accuracy <= 0f) return false
+        val edad = android.os.SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos
+        return edad in 0L..30_000_000_000L
+    }
+    val peticion = com.google.android.gms.location.LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_000L)
+        .setMinUpdateIntervalMillis(500L).setMaxUpdates(30).setWaitForAccurateLocation(true).build()
+    var callback: com.google.android.gms.location.LocationCallback? = null
+    try {
+        withTimeoutOrNull(tiempoMaxMs) {
+            suspendCancellableCoroutine<Unit> { cont ->
+                val cb = object : com.google.android.gms.location.LocationCallback() {
+                    override fun onLocationResult(resultado: com.google.android.gms.location.LocationResult) {
+                        for (l in resultado.locations) {
+                            if (!valida(l)) continue
+                            val actual = mejor
+                            if (actual == null || l.accuracy < actual.accuracy) mejor = l
+                            val mejorError = mejor?.accuracy ?: l.accuracy
+                            val esperado = android.os.SystemClock.elapsedRealtime() - inicio
+                            val basta = mejorError <= optimaM || (mejorError <= buenaM && esperado >= ESPERA_MINIMA_BUENA_MS)
+                            if (basta && cont.isActive) cont.resume(Unit) {}
+                        }
+                    }
+                }
+                callback = cb
+                client.requestLocationUpdates(peticion, cb, android.os.Looper.getMainLooper())
+                cont.invokeOnCancellation { client.removeLocationUpdates(cb) }
+            }
+        }
+    } catch (e: SecurityException) {
+        return null
+    } catch (e: Exception) {
+        // se usa lo que se haya alcanzado a leer
+    } finally {
+        callback?.let { try { client.removeLocationUpdates(it) } catch (_: Exception) { } }
+    }
+    return mejor?.let { UbicacionGps("${it.latitude}, ${it.longitude}", it.accuracy) }
+}
+
+/** Coordenadas "lat, lng" solo si la precisión es de hasta [PRECISION_ORDENAR_M]; si no, null (para ordenar por cercanía). */
+suspend fun obtenerUbicacionActual(context: android.content.Context): String? =
+    obtenerUbicacionPrecisa(context, 15_000L, PRECISION_ORDENAR_BUENA_M, PRECISION_ORDENAR_BUENA_M)
+        ?.takeIf { it.precisionM <= PRECISION_ORDENAR_M }?.coordenadas
+
+/**
+ * Captura la ubicación de un registro al pulsar el botón y AVISA la precisión en metros.
+ * Devuelve la coordenada que debe quedar en el campo: nunca pisa una coordenada guardada con una lectura
+ * peor que [PRECISION_MAXIMA_M], y una lectura de 9-17 m solo se guarda si el campo estaba vacío.
+ */
+suspend fun capturarUbicacionRegistro(context: android.content.Context, actual: String?): String? {
+    val r = obtenerUbicacionPrecisa(context)
+    val tieneGuardada = parseLatLngOrden(actual) != null
+    fun aviso(texto: String, largo: Boolean) =
+        Toast.makeText(context, texto, if (largo) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+    return when {
+        r == null -> {
+            aviso("No se pudo obtener el GPS. Revisa que esté activo y sal al aire libre.", true)
+            actual
+        }
+        r.precisionM <= PRECISION_ACEPTABLE_M -> {
+            aviso("Ubicación guardada (±${r.precisionM.toInt()} m)", false)
+            r.coordenadas
+        }
+        r.precisionM <= PRECISION_MAXIMA_M && !tieneGuardada -> {
+            aviso("Ubicación guardada con poca precisión (±${r.precisionM.toInt()} m). Conviene repetirla al aire libre.", true)
+            r.coordenadas
+        }
+        else -> {
+            val resto = if (tieneGuardada) "se conservó la ubicación anterior" else "no se guardó"
+            aviso("GPS impreciso (±${r.precisionM.toInt()} m): $resto. Intenta de nuevo al aire libre.", true)
+            actual
+        }
+    }
 }
 
 fun getStatusColor(estado: String): Color {
@@ -382,7 +482,7 @@ fun MatrizFullFormDialog(
     var diasApertura by remember { mutableStateOf(item?.diasApertura ?: "") }
     var buscandoUbicacionLaboral by remember { mutableStateOf(false) }
     var estadoMenuExpanded by remember { mutableStateOf(false) }
-    var buscandoUbicacion by remember { mutableStateOf(esNuevo && prefill?.ubicacion.isNullOrBlank()) }
+    var buscandoUbicacion by remember { mutableStateOf(false) }
     var activePhotoSlot by remember { mutableStateOf(1) }
     // Buscar domicilio escribiendo la dirección (sin necesidad de estar en el sitio): se
     // geocodifica el texto igual que en Ruta IA y se llena el campo con "lat,lng".
@@ -585,7 +685,7 @@ fun MatrizFullFormDialog(
                 )
                 LaunchedEffect(buscandoUbicacion) {
                     if (buscandoUbicacion) {
-                        ubicacion = obtenerUbicacionActual(context) ?: ubicacion
+                        ubicacion = capturarUbicacionRegistro(context, ubicacion) ?: ubicacion
                         buscandoUbicacion = false
                     }
                 }
@@ -627,7 +727,7 @@ fun MatrizFullFormDialog(
                     )
                     LaunchedEffect(buscandoUbicacionLaboral) {
                         if (buscandoUbicacionLaboral) {
-                            domicilioLaboral = obtenerUbicacionActual(context) ?: domicilioLaboral
+                            domicilioLaboral = capturarUbicacionRegistro(context, domicilioLaboral) ?: domicilioLaboral
                             buscandoUbicacionLaboral = false
                         }
                     }

@@ -44,7 +44,7 @@ class RutaIAViewModel(
                 _criterios.value = parsearCriteriosRutaIA(guardado.criteriosOrden)
             }
         }
-        viewModelScope.launch { parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it } }
+        // La ubicación del dispositivo solo se obtiene cuando el usuario pulsa el botón GPS.
     }
 
     val rutaOrdenada: StateFlow<List<RutaIAEntity>> = combine(rutaList, _configuracion, _ubicacionActual) { items, config, ubicacion ->
@@ -61,8 +61,7 @@ class RutaIAViewModel(
     }
 
     private suspend fun guardarOrdenActualYSincronizar(config: FiltrosRutaIA) {
-        val ubicacion = _ubicacionActual.value ?: parseLatLngOrden(obtenerUbicacionActual(context))
-        if (ubicacion != null) _ubicacionActual.value = ubicacion
+        val ubicacion = _ubicacionActual.value
         val ordenados = construirRutaIAConfigurada(rutaList.value, ubicacion, config).mapIndexed { idx, item -> item.copy(orden = idx) }
         ordenados.forEach { rutaIADao.updateOrden(it.id, it.orden) }
         try {
@@ -78,8 +77,12 @@ class RutaIAViewModel(
         viewModelScope.launch { filtroDao.guardar(RutaIAFiltroEntity(id = 1, criteriosOrden = serializarCriteriosRutaIA(_criterios.value))) }
     }
 
-    fun refrescarUbicacion() {
-        viewModelScope.launch { parseLatLngOrden(obtenerUbicacionActual(context))?.let { _ubicacionActual.value = it } }
+    fun refrescarUbicacion(onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val ubicacion = parseLatLngOrden(obtenerUbicacionActual(context))
+            if (ubicacion != null) _ubicacionActual.value = ubicacion
+            onResult(ubicacion != null)
+        }
     }
 
     fun importarJson(uri: Uri, configuracion: FiltrosRutaIA, onResult: (Boolean, String?, List<String>) -> Unit) {
@@ -88,8 +91,8 @@ class RutaIAViewModel(
             _procesando.value = true
             try {
                 val importado = leerClientesRutaIAJson(context, uri)
-                val ubicacion = parseLatLngOrden(obtenerUbicacionActual(context))
-                if (ubicacion != null) _ubicacionActual.value = ubicacion
+                // Importar una ruta no debe solicitar ni adjuntar el GPS del dispositivo.
+                val ubicacion = _ubicacionActual.value
                 val matrizActual = matrizDao.getAllMatriz().first()
                 fun normalizarCu(valor: String?): String = valor.orEmpty().uppercase(java.util.Locale.ROOT).replace(Regex("[^A-Z0-9]"), "")
                 fun buscarEnMatriz(cu: String?, nombre: String): MatrizEntity? {
@@ -178,25 +181,20 @@ class RutaIAViewModel(
         viewModelScope.launch {
             rutaIADao.updateEstadoLocal(item.id, nuevoEstado)
             if (nuevoEstado == "Visitado" && item.esNuevo && item.cuMatrizMatch == null) {
-                // Al marcar "Visitado" el gestor normalmente está parado en la puerta del cliente, así
-                // que se captura el GPS real del teléfono en este momento para el alta en Matriz, en vez
-                // de arrastrar la coordenada geocodificada por texto (imprecisa, ver fix del 24/09/2026).
-                // Si no hay fix de GPS disponible (permiso denegado, sin señal), cae de vuelta a la
-                // coordenada geocodificada como antes.
-                val ubicacionGps = parseLatLngOrden(obtenerUbicacionActual(context))
-                val idMatriz = darDeAltaEnMatriz(item, ubicacionGps)
+                // Marcar visitado da de alta el registro sin ubicación. El GPS solo se captura
+                // mediante el botón de ubicación del formulario de Matriz.
+                val idMatriz = darDeAltaEnMatriz(item)
                 rutaIADao.marcarAltaEnMatriz(item.id, idMatriz)
             }
             programarSincronizacionRutaIA()
         }
     }
 
-    private suspend fun darDeAltaEnMatriz(item: RutaIAEntity, ubicacionGps: Pair<Double, Double>? = null): String {
+    private suspend fun darDeAltaEnMatriz(item: RutaIAEntity): String {
         val idFinal = java.util.UUID.randomUUID().toString().replace("-", "").take(8)
         val semana = item.diasAtraso?.let { diasAtrasoASemana(it).toString() } ?: ""
         val requisito = (item.pagoRequerido ?: item.saldoAtraso)?.let { "%,.0f".format(it) } ?: ""
-        val ubicacion = ubicacionGps?.let { "${it.first},${it.second}" }
-            ?: if (item.lat != null && item.lng != null) "${item.lat},${item.lng}" else null
+        // Las coordenadas de Ruta IA no se copian a Matriz sin acción explícita del usuario.
         val ahora = System.currentTimeMillis()
         val hora = java.text.SimpleDateFormat("HH:mm", java.util.Locale("es", "MX")).format(java.util.Date(ahora))
         val nuevo = MatrizEntity(
@@ -209,7 +207,7 @@ class RutaIAViewModel(
             ref2 = "",
             observaciones = "Alta automática desde Ruta IA al marcar visitado",
             estado = "",
-            ubicacion = ubicacion,
+            ubicacion = null,
             imagenUrl = null,
             imagenUrl2 = null,
             fecha = ahora,
@@ -275,10 +273,10 @@ class RutaIAViewModel(
     fun prefillMatrizDesdeParada(item: RutaIAEntity): MatrizEntity {
         val semana = item.diasAtraso?.let { diasAtrasoASemana(it).toString() } ?: ""
         val requisito = (item.pagoRequerido ?: item.saldoAtraso)?.let { "%,.0f".format(it) } ?: ""
-        val ubicacion = if (item.lat != null && item.lng != null) "${item.lat},${item.lng}" else null
+        // El formulario no hereda coordenadas de Ruta IA; la ubicación se elige allí.
         return MatrizEntity(
             id = "", nombre = item.nombre.trim().uppercase(java.util.Locale.ROOT), semana = semana, requisito = requisito,
-            numTT = "", ref1 = "", ref2 = "", observaciones = null, estado = "", ubicacion = ubicacion,
+            numTT = "", ref1 = "", ref2 = "", observaciones = null, estado = "", ubicacion = null,
             imagenUrl = null, imagenUrl2 = null, fecha = System.currentTimeMillis(), hora = null, ruta = null,
             folioP = item.cu, isDirty = false
         )

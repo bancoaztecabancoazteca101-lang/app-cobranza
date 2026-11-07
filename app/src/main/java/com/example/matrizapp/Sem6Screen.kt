@@ -541,7 +541,7 @@ fun Sem6NuevoRegistroDialog(viewModel: Sem6ViewModel, onDismiss: () -> Unit, onC
 
     LaunchedEffect(buscandoUbicacion) {
         if (buscandoUbicacion) {
-            ubicacion = obtenerUbicacionActual(context) ?: ubicacion
+            ubicacion = capturarUbicacionRegistro(context, ubicacion) ?: ubicacion
             buscandoUbicacion = false
         }
     }

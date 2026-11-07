@@ -105,6 +105,12 @@ fun RutaIAScreen(viewModel: RutaIAViewModel, matrizViewModel: MatrizViewModel, s
                     Text(if (ruta.isEmpty()) "Sin ruta cargada" else "${ruta.size} paradas", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconButton(onClick = {
+                        viewModel.refrescarUbicacion { obtenida ->
+                            val mensaje = if (obtenida) "Ubicación GPS actualizada para ordenar la ruta" else "No se obtuvo una ubicación GPS precisa. Revisa el GPS y los permisos."
+                            Toast.makeText(context, mensaje, Toast.LENGTH_LONG).show()
+                        }
+                    }) { Icon(Icons.Default.MyLocation, contentDescription = "Obtener ubicación GPS para ordenar la ruta") }
                     IconButton(onClick = { mostrarAyuda = true }) { Icon(Icons.Default.HelpOutline, "Ayuda") }
                     if (ruta.any { it.lat != null && it.lng != null }) IconButton(onClick = { mostrarMapa = true }) { Icon(Icons.Default.Map, "Mapa") }
                     IconButton(onClick = { mostrarMenu = true }) { Icon(Icons.Default.MoreVert, "Más opciones") }
