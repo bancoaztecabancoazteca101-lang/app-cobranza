@@ -5,6 +5,11 @@ name: Guardar esquemas Room 37 y 38 en el repositorio
 # con el artefacto original y los COMMITEA en app/schemas/, que es donde Room recomienda tenerlos versionados.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'claude/room-ci-emulador'
+    paths:
+      - '.github/workflows/guardar-esquemas-room.yml'
 
 permissions:
   contents: write
