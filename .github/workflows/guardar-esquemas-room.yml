@@ -1,0 +1,101 @@
+name: Guardar esquemas Room 37 y 38 en el repositorio
+
+# Los snapshots de Room son la referencia para probar migraciones. El de la v37 solo vivía en un artefacto de
+# Actions que caduca (10-nov-2026). Este workflow (manual) los regenera desde el código, comprueba que el 37 coincide
+# con el artefacto original y los COMMITEA en app/schemas/, que es donde Room recomienda tenerlos versionados.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  guardar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout de la rama actual (código v38)
+        uses: actions/checkout@v4
+
+      - name: Checkout del commit que generó el snapshot 37 (b19c7fec, build de main con DB v37)
+        uses: actions/checkout@v4
+        with:
+          ref: b19c7fec1fac364b129d439c83cedeade2e0cac2
+          path: v37src
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+          cache-disabled: true
+
+      - name: Generar 38.json desde el código actual
+        run: gradle :app:compileDebugKotlin --stacktrace
+
+      - name: Generar 37.json desde el código de b19c7fec
+        working-directory: v37src
+        run: gradle :app:compileDebugKotlin --stacktrace
+
+      - name: Artefacto original del snapshot 37 (puede haber caducado)
+        uses: dawidd6/action-download-artifact@v6
+        continue-on-error: true
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          repo: bancoaztecabancoazteca101-lang/app-cobranza
+          run_id: 40543083998
+          name: room-schema-v37-b19c7fec1fac364b129d439c83cedeade2e0cac2
+          path: /tmp/room-schema-v37
+
+      - name: Comparar, validar y copiar a app/schemas
+        run: |
+          set -eu
+          DB="com.example.matrizapp.AppDatabase"
+          mkdir -p "app/schemas/$DB"
+          GEN37="v37src/app/schemas/$DB/37.json"
+          GEN38="app/schemas/$DB/38.json"
+          test -s "$GEN37"
+          test -s "$GEN38"
+          python3 - <<'PY'
+          import json, os
+          db = "com.example.matrizapp.AppDatabase"
+          def info(p):
+              j = json.load(open(p)); d = j["database"]
+              return d["version"], d["identityHash"], len(d["entities"])
+          v37, h37, e37 = info(f"v37src/app/schemas/{db}/37.json")
+          v38, h38, e38 = info(f"app/schemas/{db}/38.json")
+          assert v37 == 37 and v38 == 38, (v37, v38)
+          lineas = [
+              "# Esquemas Room 37 y 38 (generados por CI)",
+              "",
+              f"- 37.json: version={v37}, entidades={e37}, identityHash={h37} (regenerado desde el commit b19c7fec)",
+              f"- 38.json: version={v38}, entidades={e38}, identityHash={h38} (generado desde el código de esta rama)",
+          ]
+          art = "/tmp/room-schema-v37/" + db + "/37.json"
+          if os.path.exists(art):
+              va, ha, ea = info(art)
+              igual = open(art, "rb").read() == open(f"v37src/app/schemas/{db}/37.json", "rb").read()
+              lineas.append(f"- Artefacto original 37: identityHash={ha}; coincide con el regenerado: {'SI (byte a byte)' if igual else ('SI (mismo identityHash)' if ha == h37 else 'NO')}")
+              assert ha == h37, "El snapshot 37 regenerado NO coincide con el artefacto original"
+          else:
+              lineas.append("- Artefacto original 37: ya no está disponible (caducó); el 37 se regeneró desde el commit b19c7fec.")
+          open("docs/migracion-nube/ESQUEMAS_ROOM_37_38.md", "w").write("\n".join(lineas) + "\n")
+          print("\n".join(lineas))
+          PY
+          cp "$GEN37" "app/schemas/$DB/37.json"
+          test -s "app/schemas/$DB/37.json"
+
+      - name: Commitear los esquemas a la rama
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f app/schemas docs/migracion-nube/ESQUEMAS_ROOM_37_38.md
+          git status --short
+          git commit -m "Versionar los esquemas Room 37 y 38 (generados y verificados por CI)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
