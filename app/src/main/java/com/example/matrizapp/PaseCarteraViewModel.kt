@@ -4,6 +4,11 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -12,8 +17,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
-class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matrizDao: MatrizDao, val driveHelper: DriveHelper) : ViewModel() {
+class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matrizDao: MatrizDao, private val paseSyncDao: PaseSyncOperationDao, private val database: AppDatabase, private val workManager: WorkManager, val driveHelper: DriveHelper) : ViewModel() {
     val paseList: StateFlow<List<PaseEntity>> = paseDao.getAllPase().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _deleteInProgress = MutableStateFlow(false)
     val deleteInProgress: StateFlow<Boolean> = _deleteInProgress
@@ -29,6 +35,15 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
     )
 
     private var preferenciasContext: Context? = null
+
+    /** Usa el mismo trabajo único de sincronización que el resto de Matriz. */
+    private fun triggerSync() {
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setInitialDelay(3, TimeUnit.SECONDS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+        workManager.enqueueUniqueWork("sync_app_data", ExistingWorkPolicy.REPLACE, request)
+    }
 
     private fun normalizarCuPase(valor: String?): String =
         valor.orEmpty().trim()
@@ -210,6 +225,7 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
                     actualizados++
                 }
             }
+            if (actualizados > 0) triggerSync()
             onResult(if (actualizados > 0) "Contiene/Capitales actualizado en $actualizados registro(s) de Pase" else "No se encontró coincidencia para ningún registro de Pase existente")
         } catch (e: Exception) { onResult(e.message ?: "No se pudo procesar el reporte de Contiene/Capitales") }
     }
@@ -265,6 +281,9 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
                     }
                 }
             }
+            // La importación modifica filas locales dirty; programar la subida aquí evita
+            // depender de que el usuario realice después otra edición para sincronizarlas.
+            if (agregados > 0 || yaExistian > 0) triggerSync()
             onResult(
                 "Importación aplicada: $agregados registro(s) de Matriz fueron llevados a Pase. " +
                     if (yaExistian > 0) "$yaExistian ya existían en Pase. " else "" +
@@ -289,25 +308,67 @@ class PaseCarteraViewModel(private val paseDao: PaseCarteraDao, private val matr
     }
 
     fun actualizarCamposGcr(id: String, contiene: String?, capitales: String?, onResult: (String?) -> Unit) = viewModelScope.launch {
-        try { paseDao.updateCamposGcr(id, contiene, capitales); onResult(null) } catch (e: Exception) { onResult(e.message ?: "No se pudo guardar") }
+        try { paseDao.updateCamposGcr(id, contiene, capitales); triggerSync(); onResult(null) } catch (e: Exception) { onResult(e.message ?: "No se pudo guardar") }
     }
 
     fun cambiarIdYGuardar(idAnterior: String, idNuevo: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?, fecha: Long?, hora: String?, ruta: String?, folioP: String?, onResult: (Boolean, String?) -> Unit) = viewModelScope.launch {
-        val existente = paseList.value.find { it.id == idAnterior }
+        val existente = paseDao.getById(idAnterior)
         if (existente == null) { onResult(false, "El registro ya no existe"); return@launch }
-        paseDao.actualizar(existente.copy(nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true))
-        onResult(true, null)
+        val nuevoId = idNuevo.trim().ifBlank { idAnterior }
+        if (nuevoId != idAnterior && paseDao.contarPorId(nuevoId) > 0) {
+            onResult(false, "Ya existe otro registro de Pase con el ID $nuevoId")
+            return@launch
+        }
+        try {
+            if (nuevoId != idAnterior) {
+                val registroNuevo = existente.copy(id = nuevoId, nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true)
+                val completado = database.renombrarPaseAtomico(
+                    idAnterior,
+                    registroNuevo,
+                    PaseSyncOperationEntity("RENAME:$idAnterior:$nuevoId", "RENAME", idAnterior, nuevoId)
+                )
+                if (!completado) {
+                    onResult(false, "No se pudo completar el cambio: verifica si el registro anterior existe y si el nuevo ID está libre")
+                    return@launch
+                }
+            } else {
+                paseDao.actualizar(existente.copy(nombre = nombre, semana = semana, requisito = requisito, numTT = numTT, ref1 = ref1, ref2 = ref2, observaciones = observaciones, estado = estado, ubicacion = ubicacion, fecha = fecha, hora = hora, ruta = ruta, folioP = folioP, isDirty = true))
+            }
+            triggerSync()
+            onResult(true, null)
+        } catch (e: Exception) {
+            onResult(false, e.message ?: "No se pudo guardar el cambio de ID")
+        }
     }
 
     fun crearRegistro(id: String, nombre: String, semana: String, requisito: String, numTT: String, ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?, fecha: Long, hora: String?, ruta: String?, folioP: String?) {
         val idFinal = id.trim().ifBlank { UUID.randomUUID().toString().replace("-", "").take(12) }
-        viewModelScope.launch { paseDao.insertar(PaseEntity(idFinal, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, null, null, fecha, hora, ruta, folioP, "", isDirty = true)) }
+        viewModelScope.launch { val inserted = paseDao.insertar(PaseEntity(idFinal, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, null, null, fecha, hora, ruta, folioP, "", isDirty = true)); if (inserted != -1L) triggerSync() }
     }
 
     fun eliminarRegistro(id: String, onResult: (Boolean, String?) -> Unit) = viewModelScope.launch {
         _deleteInProgress.value = true
-        paseDao.eliminar(id)
-        _deleteInProgress.value = false
-        onResult(true, null)
+        try {
+            if (paseDao.getById(id) == null) {
+                _deleteInProgress.value = false
+                onResult(false, "El registro ya no existe")
+                return@launch
+            }
+            val eliminada = database.eliminarPaseAtomico(
+                id,
+                PaseSyncOperationEntity("DELETE:$id", "DELETE", id, null)
+            )
+            if (!eliminada) {
+                _deleteInProgress.value = false
+                onResult(false, "El registro ya no existe")
+                return@launch
+            }
+            _deleteInProgress.value = false
+            triggerSync()
+            onResult(true, null)
+        } catch (e: Exception) {
+            _deleteInProgress.value = false
+            onResult(false, e.message ?: "No se pudo eliminar de Pase")
+        }
     }
 }

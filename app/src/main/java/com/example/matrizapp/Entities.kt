@@ -45,6 +45,15 @@ data class PaseEntity(
     val isDirty: Boolean = false, val lastSync: Long = System.currentTimeMillis()
 )
 
+/** Cola durable de operaciones de Pase pendientes de confirmar en Google Sheets. */
+@Entity(tableName = "pase_sync_operation_table")
+data class PaseSyncOperationEntity(
+    @PrimaryKey val operationKey: String,
+    val type: String,
+    val oldId: String,
+    val newId: String? = null
+)
+
 @Entity(tableName = "solicitud_table")
 data class SolicitudEntity(
     @PrimaryKey val id: String,

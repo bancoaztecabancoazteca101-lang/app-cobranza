@@ -117,6 +117,10 @@ dependencies {
     implementation 'com.google.zxing:core:3.5.3'
 
     // Firebase BoM: mantiene compatibles las versiones de los SDK de Firebase.
-    implementation platform('com.google.firebase:firebase-bom:34.18.0')
+    implementation platform('com.google.firebase:firebase-bom:32.7.4')
     implementation 'com.google.firebase:firebase-messaging'
+    // Versiones del BoM 32.7.4: Auth 22.3.1 y Firestore 24.9.1.
+    // Candidata conservadora para validar con Kotlin Gradle Plugin 1.9.0 mediante CI.
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
 }

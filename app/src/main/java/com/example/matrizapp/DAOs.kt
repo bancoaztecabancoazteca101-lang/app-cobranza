@@ -197,7 +197,7 @@ interface MatrizDao {
         ref1: String, ref2: String, observaciones: String?, estado: String, ubicacion: String?,
         imagenUrl: String?, imagenUrl2: String?, fecha: Long?, hora: String?, ruta: String?, folioP: String?
     )
-    @Query("UPDATE matriz_table SET id = :idNuevo WHERE id = :idAnterior")
+    @Query("UPDATE matriz_table SET id = :idNuevo, isDirty = 1 WHERE id = :idAnterior")
     suspend fun renameId(idAnterior: String, idNuevo: String)
     @Query("UPDATE matriz_table SET folioP = :folioP, isDirty = 1 WHERE id = :id")
     suspend fun updateFolioP(id: String, folioP: String)
@@ -241,11 +241,15 @@ interface PaseCarteraDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<PaseEntity>)
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertar(item: PaseEntity)
+    suspend fun insertar(item: PaseEntity): Long
     @Update
     suspend fun actualizar(item: PaseEntity)
     @Query("DELETE FROM pase_cartera_table WHERE id = :id")
     suspend fun eliminar(id: String)
+    @Query("SELECT * FROM pase_cartera_table WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): PaseEntity?
+    @Query("SELECT COUNT(*) FROM pase_cartera_table WHERE id = :id")
+    suspend fun contarPorId(id: String): Int
     @Query("SELECT origenMatrizId FROM pase_cartera_table")
     suspend fun getOrigenesYaCopiados(): List<String>
     @Query("UPDATE pase_cartera_table SET estado = :nuevoEstado, isDirty = 1 WHERE id = :id")
@@ -258,6 +262,16 @@ interface PaseCarteraDao {
     suspend fun getDirtyItems(): List<PaseEntity>
     @Query("UPDATE pase_cartera_table SET isDirty = 0, lastSync = :syncTime WHERE id = :id")
     suspend fun markAsClean(id: String, syncTime: Long = System.currentTimeMillis())
+}
+
+@Dao
+interface PaseSyncOperationDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun encolar(operation: PaseSyncOperationEntity)
+    @Query("SELECT * FROM pase_sync_operation_table ORDER BY rowid ASC")
+    suspend fun pendientes(): List<PaseSyncOperationEntity>
+    @Query("DELETE FROM pase_sync_operation_table WHERE operationKey = :key")
+    suspend fun completar(key: String)
 }
 
 @Dao
