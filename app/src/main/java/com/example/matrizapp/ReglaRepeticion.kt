@@ -83,6 +83,16 @@ object MensajesCobranza {
         return plantillas[idx].texto.replace("%nombre%", nombre, ignoreCase = true).replace("%monto%", montoParte, ignoreCase = true)
     }
 
+    /** Texto del WhatsApp al titular (plantillas "WA_TT", editables en la app). Si todas están en
+     * blanco, cae al mismo texto del SMS al titular para no mandar un mensaje vacío. */
+    suspend fun paraWhatsAppTT(dao: PlantillaSmsDao, nombre: String, monto: String, sem: Int, variante: Int = 0): String {
+        val montoParte = if (monto.isNotBlank()) " por \$$monto" else ""
+        val plantillas = dao.obtenerActivasPara("WA_TT", sem)
+        if (plantillas.isEmpty()) return paraTT(dao, nombre, monto, sem, variante)
+        val idx = ((variante % plantillas.size) + plantillas.size) % plantillas.size
+        return plantillas[idx].texto.replace("%nombre%", nombre, ignoreCase = true).replace("%monto%", montoParte, ignoreCase = true)
+    }
+
     /** Párrafo de oferta de descuento del día, solo para el SMS del titular (nunca referencias).
      * Redacción fija en el código -- lo único que captura el gestor son los dos montos
      * (descuentoPago/descuentoAhorro de MatrizEntity) -- para que nunca se mande un texto

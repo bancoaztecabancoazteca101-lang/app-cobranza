@@ -40,6 +40,15 @@ jobs:
           gradle-version: '8.4'
           cache-disabled: true
 
+      # Evita que las tres variantes acumulen demasiados procesos/daemons en el runner.
+      - name: Limitar memoria y concurrencia de Gradle
+        run: |
+          {
+            echo 'org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8'
+            echo 'org.gradle.workers.max=2'
+            echo 'org.gradle.parallel=false'
+          } >> gradle.properties
+
       - name: Build Debug APK
         run: |
           # main publica SOLO la build release (sin R8, probada) como app-debug.apk (el enlace de siempre).
@@ -107,3 +116,16 @@ jobs:
           make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Las ramas de trabajo deben entregar un APK instalable sin modificar el enlace estable de main.
+      - name: Upload APKs as workflow artifact (ramas de trabajo)
+        if: always() && env.BUILD_FAILED != 'true' && github.ref_name != 'main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Matriz-APK-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/optimizado/*.apk
+          if-no-files-found: error
+          retention-days: 14

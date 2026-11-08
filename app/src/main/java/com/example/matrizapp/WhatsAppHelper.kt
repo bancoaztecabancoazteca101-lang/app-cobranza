@@ -51,7 +51,8 @@ object WhatsAppHelper {
         return "52$d"
     }
 
-    private fun urlWhatsApp(numero: String) = Uri.parse("https://api.whatsapp.com/send?phone=$numero")
+    private fun urlWhatsApp(numero: String, texto: String? = null) =
+        Uri.parse("https://api.whatsapp.com/send?phone=$numero" + (texto?.takeIf { it.isNotBlank() }?.let { "&text=" + Uri.encode(it) } ?: ""))
 
     /** Intent para abrir el chat en la app [paquete] (para botones de notificación). */
     fun intentPara(numeroRaw: String?, paquete: String): Intent? {
@@ -61,7 +62,7 @@ object WhatsAppHelper {
 
     /** Abre el chat. [negocio] = app preferida; [alterno] = true usa la otra. Si la app preferida no está instalada
      *  prueba la otra. Si el número no es válido, lo avisa en vez de abrir WhatsApp con un número imposible. */
-    fun abrir(context: Context, numeroRaw: String?, negocio: Boolean, alterno: Boolean = false) {
+    fun abrir(context: Context, numeroRaw: String?, negocio: Boolean, alterno: Boolean = false, texto: String? = null) {
         val num = normalizar(numeroRaw)
         if (num == null) {
             Toast.makeText(context, "Número no válido para WhatsApp: ${numeroRaw.orEmpty().ifBlank { "vacío" }}. Debe tener 10 dígitos (no empezar en 0 ni 1).", Toast.LENGTH_LONG).show()
@@ -71,11 +72,11 @@ object WhatsAppHelper {
         val orden = if (usarNegocio) listOf(PKG_BUSINESS, PKG_NORMAL) else listOf(PKG_NORMAL, PKG_BUSINESS)
         for (pkg in orden) {
             try {
-                context.startActivity(Intent(Intent.ACTION_VIEW, urlWhatsApp(num)).setPackage(pkg))
+                context.startActivity(Intent(Intent.ACTION_VIEW, urlWhatsApp(num, texto)).setPackage(pkg))
                 return
             } catch (_: ActivityNotFoundException) { /* prueba la otra */ }
         }
-        try { context.startActivity(Intent(Intent.ACTION_VIEW, urlWhatsApp(num))) }
+        try { context.startActivity(Intent(Intent.ACTION_VIEW, urlWhatsApp(num, texto))) }
         catch (_: Exception) { Toast.makeText(context, "WhatsApp no está instalado", Toast.LENGTH_SHORT).show() }
     }
 }

@@ -52,6 +52,7 @@ fun PlantillaSmsScreen(viewModel: PlantillaSmsViewModel) {
             ) {
                 FilterChip(selected = tipoSeleccionado == "TT", onClick = { tipoSeleccionado = "TT" }, label = { Text("Titular (TT)") })
                 FilterChip(selected = tipoSeleccionado == "REF", onClick = { tipoSeleccionado = "REF" }, label = { Text("Referencias") })
+                FilterChip(selected = tipoSeleccionado == "WA_TT", onClick = { tipoSeleccionado = "WA_TT" }, label = { Text("WhatsApp (TT)") })
             }
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
@@ -62,8 +63,11 @@ fun PlantillaSmsScreen(viewModel: PlantillaSmsViewModel) {
                 }
             }
             Text(
-                if (tipoSeleccionado == "TT") "Usa %nombre% y %monto% — se rellenan solos al enviar el SMS"
-                else "Usa %nombre% — se rellena solo al enviar el SMS",
+                when (tipoSeleccionado) {
+                    "TT" -> "Usa %nombre% y %monto% — se rellenan solos al enviar el SMS"
+                    "WA_TT" -> "Mensaje de WhatsApp al titular desde Seguimiento Por Día. Usa %nombre% y %monto%. Si todas quedan en blanco se usa el texto del SMS al titular."
+                    else -> "Usa %nombre% — se rellena solo al enviar el SMS"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)

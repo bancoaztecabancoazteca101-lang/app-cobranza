@@ -104,14 +104,23 @@ fun inicioDelDia(millis: Long = System.currentTimeMillis()): Long =
 /** Registra la visita de HOY. Nunca debe romper el guardado que la dispara: cualquier fallo se ignora. */
 suspend fun VisitaMapaDao.registrarVisitaHoy(clave: String, nombre: String, ubicacion: String?, matrizId: String?) {
     try {
-        val partes = ubicacion?.split(",")?.map { it.trim() } ?: return
-        if (partes.size != 2 || partes[0].toDoubleOrNull() == null || partes[1].toDoubleOrNull() == null) return
+        // El seguimiento por cartucho no debe depender de que el cliente tenga coordenadas válidas.
+        // El mapa ignora ubicaciones vacías, pero la fila conserva fecha, ID y cartucho para automatización.
+        val partes = ubicacion?.split(",")?.map { it.trim() }
+        val ubicacionValida = if (partes != null && partes.size == 2 &&
+            partes[0].toDoubleOrNull() != null && partes[1].toDoubleOrNull() != null) {
+            partes.joinToString(",")
+        } else ""
         val hoy = inicioDelDia()
         asegurarCartuchoDia(hoy)
         val cartucho = getCartuchoActivo(hoy) ?: 1
-        registrar(VisitaMapaEntity(clave, hoy, nombre, partes.joinToString(","), matrizId, cartucho))
+        // IGNORE conserva una asignación manual de cartucho que ya exista para este punto.
+        // Las filas importadas nuevas ya no se crean automáticamente como visitas desde el ViewModel.
+        registrar(VisitaMapaEntity(clave, hoy, nombre, ubicacionValida, matrizId, cartucho))
         borrarAnteriores(hoy - 120L * 24 * 60 * 60 * 1000) // se conservan ~4 meses
-    } catch (_: Exception) { }
+    } catch (e: Exception) {
+        android.util.Log.e("VisitaMapa", "No se pudo guardar el historial de visita de Matriz ID=$matrizId", e)
+    }
 }
 
 /** Guarda en el historial del Mapa TODOS los registros de hoy (los mismos que muestra Filtro Fecha:
@@ -125,13 +134,18 @@ suspend fun VisitaMapaDao.registrarRegistrosDeHoy(items: List<MatrizEntity>) {
         val cartucho = getCartuchoActivo(hoy) ?: 1
         val nuevos = items.mapNotNull { m ->
             val f = m.fecha ?: return@mapNotNull null
-            if (f < hoy || f >= finHoy || m.estado.equals("PASE", ignoreCase = true)) return@mapNotNull null
-            val p = m.ubicacion?.split(",")?.map { it.trim() } ?: return@mapNotNull null
-            if (p.size != 2 || p[0].toDoubleOrNull() == null || p[1].toDoubleOrNull() == null) return@mapNotNull null
-            VisitaMapaEntity("M:${m.id}", hoy, m.nombre, p.joinToString(","), m.id, cartucho)
+            if (f < hoy || f >= finHoy) return@mapNotNull null
+            // Guardar también registros sin GPS: no se mostrarán como punto en el mapa, pero
+            // sí estarán disponibles para seguimiento por día y cartucho.
+            val p = m.ubicacion?.split(",")?.map { it.trim() }
+            val ubicacionValida = if (p != null && p.size == 2 &&
+                p[0].toDoubleOrNull() != null && p[1].toDoubleOrNull() != null) p.joinToString(",") else ""
+            VisitaMapaEntity("M:${m.id}", hoy, m.nombre, ubicacionValida, m.id, cartucho)
         }
         if (nuevos.isNotEmpty()) registrarVarias(nuevos)
-    } catch (_: Exception) { }
+    } catch (e: Exception) {
+        android.util.Log.e("VisitaMapa", "No se pudo completar el registro automático de visitas de hoy", e)
+    }
 }
 
 @Dao

@@ -18,6 +18,7 @@ class BackupManager(private val context: Context, private val database: AppDatab
         private const val PREFS = "matriz_backup"
         private const val LAST_LOCAL = "last_local"
         private const val LAST_DRIVE = "last_drive"
+        private const val UPLOADED_NAMES = "uploaded_names"
         private const val LAST_APP_VERSION = "last_app_version"
         private const val MAX_LOCAL_BACKUPS = 7
         const val FOLDER_NAME = "MATRIZ_BACKUPS"
@@ -130,7 +131,10 @@ class BackupManager(private val context: Context, private val database: AppDatab
             true
         }.getOrDefault(false)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong(LAST_LOCAL, now).apply()
-        if (uploaded) context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong(LAST_DRIVE, now).apply()
+        if (uploaded) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong(LAST_DRIVE, now).apply()
+            marcarSubido(backup.name)
+        }
         pruneLocalBackups()
         BackupInfo(backup, now, reason, uploaded)
     }
@@ -145,6 +149,7 @@ class BackupManager(private val context: Context, private val database: AppDatab
             driveHelper.uploadLocalFile(pending, FOLDER_NAME, "application/zip")
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putLong(LAST_DRIVE, pending.lastModified()).apply()
+            marcarSubido(pending.name)
         } catch (_: Exception) {
         }
     }
@@ -152,8 +157,51 @@ class BackupManager(private val context: Context, private val database: AppDatab
     fun listLocalBackups(): List<BackupInfo> =
         backupDir.listFiles { f -> f.isFile && f.extension.equals("zip", true) }
             ?.sortedByDescending { it.lastModified() }
-            ?.map { BackupInfo(it, it.lastModified(), it.name.substringAfterLast("_").removeSuffix(".zip"), it.lastModified() == lastDriveTime()) }
+            ?.map { BackupInfo(it, it.lastModified(), it.name.substringAfterLast("_").removeSuffix(".zip"), estaSubido(it)) }
             .orEmpty()
+
+    // El ícono de nube se decidía comparando milisegundos exactos con la hora del último Drive y casi nunca
+    // coincidía; ahora se anota el nombre de cada respaldo que sí se subió (o se bajó) de Drive.
+    private fun marcarSubido(nombre: String) {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val set = p.getStringSet(UPLOADED_NAMES, emptySet()).orEmpty().toMutableSet().apply { add(nombre) }
+        p.edit().putStringSet(UPLOADED_NAMES, set).apply()
+    }
+    private fun estaSubido(file: File): Boolean =
+        file.lastModified() == lastDriveTime() ||
+            file.name in context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet(UPLOADED_NAMES, emptySet()).orEmpty()
+
+    /** Respaldos de la carpeta de Drive (los de ESTE y de cualquier otro teléfono con la misma cuenta). */
+    suspend fun listDriveBackups(): List<DriveBackupFile> = driveHelper.listBackups(FOLDER_NAME)
+
+    /** Baja un respaldo de Drive a la carpeta local de respaldos (queda listo para restaurarse). */
+    suspend fun downloadDriveBackup(f: DriveBackupFile): File = withContext(Dispatchers.IO) {
+        val temp = File(backupDir, f.name + ".tmp")
+        val ok = driveHelper.downloadFile(f.id, temp)
+        val valido = ok && runCatching { ZipFile(temp).use { it.getEntry(DB_NAME) != null } }.getOrDefault(false)
+        if (!valido) { temp.delete(); error("No se pudo descargar un respaldo válido desde Drive.") }
+        val destino = File(backupDir, f.name)
+        destino.delete()
+        if (!temp.renameTo(destino)) { temp.delete(); error("No se pudo guardar el respaldo descargado.") }
+        marcarSubido(destino.name)
+        destino
+    }
+
+    /** Copia a la carpeta de respaldos un .zip elegido por el usuario (WhatsApp, Drive, archivos...) y lo valida. */
+    suspend fun importBackup(uri: android.net.Uri): File = withContext(Dispatchers.IO) {
+        val destino = File(backupDir, "matriz_" + System.currentTimeMillis() + "_importado.zip")
+        context.contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(destino).use { input.copyTo(it) } }
+            ?: error("No se pudo abrir el archivo seleccionado.")
+        val valido = runCatching { ZipFile(destino).use { it.getEntry(DB_NAME) != null } }.getOrDefault(false)
+        if (!valido) { destino.delete(); error("El archivo no es un respaldo de Matriz válido.") }
+        destino
+    }
+
+    /** Copia el respaldo a la carpeta compartible (cache/compartir) para mandarlo por FileProvider. */
+    suspend fun prepararParaCompartir(file: File): File = withContext(Dispatchers.IO) {
+        val dir = File(context.cacheDir, "compartir").apply { mkdirs() }
+        File(dir, file.name).also { file.copyTo(it, overwrite = true) }
+    }
 
     suspend fun restoreLocalBackup(file: File): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
