@@ -208,6 +208,13 @@ class FiltroFechaViewModel(
                     else -> {
                         val ok = sem6Dao.actualizarSusceptible(hojaSem6, matchS6.id, "Recuperado") > 0
                         if (ok) {
+                            // Si ese cliente también está en Matriz (mismo CU), sale de las llamadas/SMS automáticos de hoy:
+                            // el comprobante puede llegar justo cuando corre un bloque o el catchup.
+                            val cuS6 = matchS6.cu.filter { it.isDigit() }
+                            if (cuS6.isNotEmpty()) {
+                                matrizDao.getAllMatriz().first().firstOrNull { it.folioP?.filter { c -> c.isDigit() } == cuS6 }
+                                    ?.let { AutomatizacionPrefs.excluirHoy(context, it.id, true) }
+                            }
                             onSem6Cambio()
                             mensajes += "Semana 6: ${matchS6.nombre} marcado Recuperado ($montoTxt ≥ Abono)"
                         } else mensajes += "Semana 6: no se pudo marcar a ${matchS6.nombre} como Recuperado (revisa tu conexión)"

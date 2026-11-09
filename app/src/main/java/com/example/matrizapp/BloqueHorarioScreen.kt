@@ -69,7 +69,7 @@ private fun tienePermisoAlarmasExactas(context: android.content.Context): Boolea
 }
 
 @Composable
-fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
+fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel, onAbrirCatchup: () -> Unit = {}) {
     val bloques by viewModel.bloques.collectAsState()
     val automatizacionActiva by viewModel.automatizacionActiva.collectAsState()
     val catchupActiva by viewModel.catchupActiva.collectAsState()
@@ -125,7 +125,8 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
             item {
                 InterruptorCatchupCard(
                     activa = catchupActiva,
-                    onCambiar = { viewModel.setCatchupActiva(it) }
+                    onCambiar = { viewModel.setCatchupActiva(it) },
+                    onAbrirCatchup = onAbrirCatchup
                 )
             }
             if (!permisoAlarmasOk) {
@@ -305,7 +306,7 @@ private fun InterruptorGeneralCard(activa: Boolean, onCambiar: (Boolean) -> Unit
  * (8:15 y 9:15) que reintentan a quien se quedó corto de contactos el día anterior — deja
  * intactos los bloques normales del día de abajo. */
 @Composable
-private fun InterruptorCatchupCard(activa: Boolean, onCambiar: (Boolean) -> Unit) {
+private fun InterruptorCatchupCard(activa: Boolean, onCambiar: (Boolean) -> Unit, onAbrirCatchup: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         colors = CardDefaults.cardColors(containerColor = if (activa) ClayBlueContainer else ClayNeutralContainer)
@@ -317,17 +318,18 @@ private fun InterruptorCatchupCard(activa: Boolean, onCambiar: (Boolean) -> Unit
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Reintento automático (8:15 y 9:15)",
+                    "Reintento automático (Catchup)",
                     style = MaterialTheme.typography.titleMedium,
                     color = if (activa) AZUL_ACENTO else Color.Gray
                 )
                 Text(
                     if (activa) "Activo — recontacta solo a quien se dio de alta ayer y se quedó corto de su meta"
-                    else "Apagado — solo corren los bloques normales del día, sin las 2 corridas de recuperación",
+                    else "Apagado — solo corren los bloques normales del día, sin las corridas de recuperación",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                     modifier = Modifier.padding(top = 2.dp)
                 )
+                TextButton(onClick = onAbrirCatchup) { Text("Horarios y cola de hoy") }
             }
             Switch(checked = activa, onCheckedChange = onCambiar)
         }
