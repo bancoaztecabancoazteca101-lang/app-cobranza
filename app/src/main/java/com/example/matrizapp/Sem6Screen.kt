@@ -539,6 +539,7 @@ fun Sem6NuevoRegistroDialog(viewModel: Sem6ViewModel, onDismiss: () -> Unit, onC
         }
     }
 
+    // Solo captura GPS tras pulsar el botón. Si la lectura falla, conserva la ubicación previa.
     LaunchedEffect(buscandoUbicacion) {
         if (buscandoUbicacion) {
             ubicacion = capturarUbicacionRegistro(context, ubicacion) ?: ubicacion
