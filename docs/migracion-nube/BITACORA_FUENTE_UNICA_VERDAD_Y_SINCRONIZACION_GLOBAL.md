@@ -1042,3 +1042,16 @@ Se consultaron los runs asociados al commit que contiene la modificación de `Lo
 ### Interpretación
 
 La integración de código Google Sign-In → Firebase Auth **superó la compilación Debug en CI**. Esto valida compatibilidad de compilación, no el flujo OAuth en ejecución. No hay evidencia de prueba en dispositivo, ID token recibido, Firebase sign-in exitoso ni UID. La validación funcional continúa pendiente. No conectar Firestore ni cambiar reglas/datos hasta completar esa prueba.
+
+
+### Anexo 23-B. APK localizado y verificado en Release — 13-11-2026
+
+Una consulta posterior de Releases encontró el activo que no apareció en la consulta de artifacts de Actions:
+
+- Release: `latest-debug-chatgpt/sincronizacion-integridad-nube`.
+- URL: https://github.com/bancoaztecabancoazteca101-lang/app-cobranza/releases/tag/latest-debug-chatgpt/sincronizacion-integridad-nube
+- El cuerpo del Release identifica como origen el commit `f5fbb0571eb4b857c1e59f94492f78a56ffec54c`, que contiene el cambio de autenticación y la actualización de bitácora.
+- Activos cargados: `app-debug.apk` (67,137,029 bytes), `app-optimizado.apk` (60,077,121 bytes) y `app-release.apk` (60,077,121 bytes).
+- SHA-256 publicado para `app-debug.apk`: `f99cde7042ef02416c06c75fe1c02e739fda2591aee6ae629cf9ba815fefe6e9`.
+
+Corrección de la nota del anexo 23-A: la consulta de artifacts de workflow fue vacía, pero eso no significa que no exista APK; el workflow publicó activos en el Release de la rama. Se confirma la existencia del APK y su referencia de commit. No se ha instalado ni probado en dispositivo. El usuario debe usar primero `app-debug.apk` para la prueba controlada, sin desinstalar la versión actual.
