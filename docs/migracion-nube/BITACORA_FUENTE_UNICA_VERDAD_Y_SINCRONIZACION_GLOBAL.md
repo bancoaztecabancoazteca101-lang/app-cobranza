@@ -988,3 +988,43 @@ Antes de implementar el intercambio Google→Firebase hay que verificar el clien
 ### Límites y estado al cierre
 
 Esta revisión no cambió código funcional, no ejecutó build nuevo, no creó APK, no probó Firebase Auth en dispositivo y no accedió a Firebase Console. El último build confirmado sigue siendo el Debug CI de la sección 21.4. Firestore no está conectado a datos operativos; Room permanece v38 y Sheets continúa siendo el mecanismo actual. El siguiente paso es resolver/verificar el OAuth Web client, después implementar Auth de forma aislada y validarla antes de conectar Firestore.
+
+
+---
+
+## 23. Primera integración de Google Sign-In con Firebase Authentication — 12-11-2026
+
+### Configuración utilizada
+
+El usuario compartió y confirmó el ID OAuth 2.0 de tipo Aplicación web que aparece en Google Cloud Credentials del proyecto `app-matriz`:
+
+`542876060274-8r4jl5t1s3gaulc6i9ofbiu5bd3sckm8.apps.googleusercontent.com`
+
+Se utiliza como Web Client ID para solicitar el ID token de Google. No se solicitó ni almacenó Client Secret.
+
+### Cambio aplicado
+
+- Rama: `chatgpt/sincronizacion-integridad-nube`.
+- Archivo modificado: `app/src/main/java/com/example/matrizapp/LoginScreen.kt`.
+- Commit: `a27e44760c0e8bca5e244c14d5ef9fc65e379640`.
+- Se agregó `requestIdToken(FIREBASE_WEB_CLIENT_ID)` a la configuración existente de Google Sign-In.
+- Se conservan los scopes existentes de Google Sheets (`SPREADSHEETS`) y Drive (`DRIVE`).
+- Tras recibir el resultado de Google, la pantalla obtiene el ID token, crea `GoogleAuthProvider.getCredential(idToken, null)` y llama a `FirebaseAuth.signInWithCredential(...)`.
+- El callback de entrada se ejecuta solo cuando la tarea Firebase termina correctamente y devuelve un usuario.
+- `hasSignedInAccount(context)`, que usa `MainActivity` como guard de acceso, ahora exige usuario Firebase autenticado y conserva la comprobación de permisos Google Sheets/Drive.
+- Los errores de Google/Firebase se muestran en la pantalla; no se registran tokens.
+
+### Alcance que no se modificó
+
+No se modificaron `MainActivity.kt`, `AppContainer.kt`, `SyncWorker.kt`, `SheetsRepository.kt`, entidades/DAOs ni Room. No se agregó lectura/escritura Firestore. No se cambiaron reglas ni se migraron datos. Sheets continúa siendo el mecanismo operativo actual.
+
+### Validación pendiente / límites
+
+- El commit fue consultado inmediatamente después de crearse y todavía no aparecían ejecuciones de workflow asociadas; por tanto, **no hay build CI confirmado para este cambio**.
+- No se probó en dispositivo/emulador la obtención de ID token, el intercambio Firebase ni la persistencia de sesión.
+- No se ha verificado todavía el UID real desde una ejecución autenticada.
+- El hecho de que exista un OAuth Web Client en Cloud Console no sustituye la prueba de que el ID token se emita y sea aceptado por Firebase.
+- Si el build falla, corregir según el log exacto antes de continuar. Si compila, instalar el APK de prueba y validar inicio de sesión, cierre/reinicio de app, recuperación de sesión y scopes de Sheets/Drive.
+- Firestore debe permanecer cerrado (deny-all) hasta confirmar UID, autorización y reglas específicas probadas.
+
+**Estado:** primera integración de código Firebase Auth aplicada en la rama. Aún no está validada por CI ni por prueba funcional; no declarar autenticación terminada ni conectar Firestore.
