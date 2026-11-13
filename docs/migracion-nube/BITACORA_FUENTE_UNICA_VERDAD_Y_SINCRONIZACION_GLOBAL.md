@@ -1028,3 +1028,17 @@ No se modificaron `MainActivity.kt`, `AppContainer.kt`, `SyncWorker.kt`, `Sheets
 - Firestore debe permanecer cerrado (deny-all) hasta confirmar UID, autorización y reglas específicas probadas.
 
 **Estado:** primera integración de código Firebase Auth aplicada en la rama. Aún no está validada por CI ni por prueba funcional; no declarar autenticación terminada ni conectar Firestore.
+
+
+### Anexo 23-A. Resultado de CI de la integración Firebase Auth — 13-11-2026
+
+Se consultaron los runs asociados al commit que contiene la modificación de `LoginScreen.kt` y la bitácora:
+
+- Run 1089, push, ID `43356592420`, HEAD `fc291c0d0ffabc6ed2c332be66ca946b7e10a792`: conclusión `success`; paso `Build Debug APK` = `success`; pasos de publicación de release = `success`.
+- Run 1090, pull request #122, ID `43356598511`, mismo HEAD: conclusión `success`; paso `Build Debug APK` = `success`.
+- Run 1088, ID `43356553532`: intento anterior cancelado durante Gradle; no se toma como fallo de compilación.
+- En la consulta de artifacts de los runs 1089/1090 no se encontraron artifacts adjuntos. El run 1090 omite la publicación de APK por tratarse de PR; el run 1089 indica publicación de release exitosa en sus pasos, pendiente de localizar/verificar el tag/asset exacto antes de compartir un APK como instalable.
+
+### Interpretación
+
+La integración de código Google Sign-In → Firebase Auth **superó la compilación Debug en CI**. Esto valida compatibilidad de compilación, no el flujo OAuth en ejecución. No hay evidencia de prueba en dispositivo, ID token recibido, Firebase sign-in exitoso ni UID. La validación funcional continúa pendiente. No conectar Firestore ni cambiar reglas/datos hasta completar esa prueba.
