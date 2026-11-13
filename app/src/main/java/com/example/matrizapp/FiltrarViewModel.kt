@@ -255,10 +255,35 @@ class FiltrarViewModel(
             val idFinal = idNuevo.trim().ifBlank { idAnterior }
             if (idFinal != idAnterior) {
                 try {
-                    repository.renameRowId(Constants.SHEET_MATRIZ, idAnterior, idFinal, Constants.MatrizCols.COL_ID)
+                    // Reutiliza la política de MatrizViewModel: comprobar colisiones y no cambiar
+                    // Room si Sheets no confirma el renombre. Si el registro aún no existe en
+                    // Sheets, se conserva como alta local pendiente para el próximo push.
+                    if (matrizDao.getById(idFinal) != null) {
+                        onResult(false, "El ID $idFinal ya pertenece a otro registro de Matriz")
+                        return@launch
+                    }
+                    val remotoConNuevoId = repository.findRowIndexById(
+                        Constants.SHEET_MATRIZ, idFinal, Constants.MatrizCols.COL_ID
+                    )
+                    val remotoAnterior = repository.findRowIndexById(
+                        Constants.SHEET_MATRIZ, idAnterior, Constants.MatrizCols.COL_ID
+                    )
+                    if (remotoConNuevoId != -1 && remotoConNuevoId != remotoAnterior) {
+                        onResult(false, "El ID $idFinal ya existe en Sheets")
+                        return@launch
+                    }
+                    if (remotoAnterior != -1) {
+                        val renombrado = repository.renameRowId(
+                            Constants.SHEET_MATRIZ, idAnterior, idFinal, Constants.MatrizCols.COL_ID
+                        )
+                        if (!renombrado) {
+                            onResult(false, "No se pudo confirmar el cambio de ID en Sheets")
+                            return@launch
+                        }
+                    }
                     matrizDao.renameId(idAnterior, idFinal)
                 } catch (e: Exception) {
-                    onResult(false, "No se pudo cambiar el ID en el Sheet (revisa tu conexión): ${e.message}")
+                    onResult(false, "No se pudo cambiar el ID en Sheets (revisa tu conexión): ${e.message}")
                     return@launch
                 }
             }

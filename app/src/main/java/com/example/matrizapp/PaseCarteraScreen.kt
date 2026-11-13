@@ -153,7 +153,7 @@ fun PaseCarteraScreen(viewModel: PaseCarteraViewModel, searchQuery: String = "")
             onSave = { idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP, contiene, capitales ->
                 viewModel.cambiarIdYGuardar(item.id, idEditado, nombre, semana, requisito, numTT, ref1, ref2, observaciones, estado, ubicacion, fecha, hora, ruta, folioP) { ok, error ->
                     if (!ok) Toast.makeText(context, error ?: "No se pudo guardar", Toast.LENGTH_LONG).show()
-                    else viewModel.actualizarCamposGcr(item.id, contiene, capitales) { gcrError ->
+                    else viewModel.actualizarCamposGcr(idEditado.trim().ifBlank { item.id }, contiene, capitales) { gcrError ->
                         if (gcrError != null) Toast.makeText(context, gcrError, Toast.LENGTH_LONG).show()
                     }
                 }
