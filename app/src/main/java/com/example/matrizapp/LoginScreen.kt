@@ -1,6 +1,5 @@
 package com.example.matrizapp
 
-import android.app.Activity.RESULT_OK
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -53,17 +52,28 @@ fun LoginScreen(onSignedIn: () -> Unit) {
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode != RESULT_OK) {
+        /*
+         * No interpretar RESULT_CANCELED como cancelación manual antes de leer
+         * el Intent: Google Sign-In puede devolver allí el ApiException real.
+         */
+        val resultCode = result.resultCode
+        val resultData = result.data
+
+        if (resultData == null) {
             loading = false
-            error = "Inicio de sesión cancelado."
+            error = "Google Sign-In no devolvió datos. " +
+                "Código de actividad: $resultCode; Intent recibido: no. " +
+                "Esto no confirma que el usuario haya cancelado."
         } else {
             try {
-                val googleTask = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                val googleTask = GoogleSignIn.getSignedInAccountFromIntent(resultData)
                 val account = googleTask.getResult(ApiException::class.java)
                 val idToken = account.idToken
+
                 if (idToken.isNullOrBlank()) {
                     loading = false
-                    error = "Google no entregó el ID token. Verifica el cliente OAuth Web de Firebase."
+                    error = "Google completó la respuesta, pero no entregó el ID token. " +
+                        "Verifica el cliente OAuth Web configurado en Firebase."
                 } else {
                     val credential = GoogleAuthProvider.getCredential(idToken, null)
                     firebaseAuth.signInWithCredential(credential)
@@ -80,10 +90,16 @@ fun LoginScreen(onSignedIn: () -> Unit) {
                 }
             } catch (e: ApiException) {
                 loading = false
-                error = "Error de Google Sign-In (código ${e.statusCode}). Verifica conexión y configuración OAuth."
+                val statusMessage = e.status.statusMessage
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "Google no proporcionó descripción"
+                error = "Google Sign-In falló. Código de actividad: $resultCode. " +
+                    "Código Google: ${e.statusCode}. Detalle: $statusMessage."
             } catch (e: Exception) {
                 loading = false
-                error = "No se pudo completar la autenticación: ${e.localizedMessage ?: "error desconocido"}"
+                error = "No se pudo completar la autenticación. " +
+                    "Código de actividad: $resultCode. " +
+                    "Detalle: ${e.localizedMessage ?: "error desconocido"}"
             }
         }
     }
