@@ -305,7 +305,7 @@ fun SolicitudFullFormDialog(
     // antes, pero ahora se puede editar a mano tocando el ícono del reloj.
     var fechaHoraEditable by remember { mutableStateOf(item?.fechaHora ?: System.currentTimeMillis()) }
 
-    // Ubicación con un clic: toma las coordenadas del GPS directamente, sin escribir nada.
+    // Solo captura GPS tras pulsar el botón. Si la lectura falla, conserva la ubicación previa.
     var buscandoUbicacion by remember { mutableStateOf(false) }
     LaunchedEffect(buscandoUbicacion) {
         if (buscandoUbicacion) {

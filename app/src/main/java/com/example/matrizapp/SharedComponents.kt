@@ -1367,7 +1367,7 @@ fun OrdenSelectorButton(orden: OrdenLista, onOrdenChange: (OrdenLista, Pair<Doub
                                 val ubic = parseLatLngOrden(obtenerUbicacionActual(context))
                                 buscandoUbicacion = false
                                 if (ubic == null) {
-                                    Toast.makeText(context, "No se pudo obtener tu ubicación actual (revisa el GPS)", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "GPS impreciso o sin señal reciente. Intenta de nuevo.", Toast.LENGTH_SHORT).show()
                                 } else {
                                     onOrdenChange(opcion, ubic)
                                 }
@@ -1423,7 +1423,7 @@ fun FiltroFechaOrdenButton(
                                 val ubic = parseLatLngOrden(obtenerUbicacionActual(context))
                                 buscandoUbicacion = false
                                 if (ubic == null) {
-                                    Toast.makeText(context, "No se pudo obtener tu ubicación actual (revisa el GPS)", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "GPS impreciso o sin señal reciente. Intenta de nuevo.", Toast.LENGTH_SHORT).show()
                                 } else {
                                     onOrdenChange(opcion, ubic)
                                 }
@@ -1751,8 +1751,28 @@ fun rememberTodosMatriz(): List<MatrizEntity> {
 @Composable
 fun rememberCoincidenciasUbicacion(coordenadas: String?, excluirId: String?): List<CoincidenciaUbicacion> {
     val todos = rememberTodosMatriz()
-    return produceState(emptyList<CoincidenciaUbicacion>(), coordenadas, excluirId, todos) {
-        value = withContext(Dispatchers.Default) { buscarCoincidenciasUbicacion(coordenadas, todos, excluirId) }
+    // Las coordenadas de Matriz no cambian mientras se edita el campo de ubicación.
+    // Parsearlas solo cuando cambia la lista evita repetir trabajo por cada ajuste del GPS.
+    val coordenadasRegistros = remember(todos) {
+        todos.mapNotNull { registro ->
+            parseLatLngOrden(registro.ubicacion)?.let { registro to it }
+        }
+    }
+    return produceState(emptyList<CoincidenciaUbicacion>(), coordenadas, excluirId, coordenadasRegistros) {
+        value = withContext(Dispatchers.Default) {
+            val origen = parseLatLngOrden(coordenadas)
+            if (origen == null) emptyList()
+            else coordenadasRegistros.asSequence()
+                .filter { (registro, _) -> registro.id != excluirId }
+                .mapNotNull { (registro, punto) ->
+                    val metros = distanciaKm(origen, punto) * 1000.0
+                    if (metros <= RADIO_MISMA_UBICACION_M) {
+                        CoincidenciaUbicacion(registro.id, registro.nombre, metros.toInt())
+                    } else null
+                }
+                .sortedBy { it.distanciaM }
+                .toList()
+        }
     }.value
 }
 

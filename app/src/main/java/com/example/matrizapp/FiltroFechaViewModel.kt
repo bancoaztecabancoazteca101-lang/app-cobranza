@@ -1,6 +1,7 @@
 package com.example.matrizapp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -26,6 +27,11 @@ class FiltroFechaViewModel(
     private fun finDeHoy(): Long = java.time.LocalDate.now().plusDays(1)
         .atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
 
+    // Una única observación de Room compartida por la lista y las sumatorias evita abrir
+    // consultas/observadores idénticos separados cuando ambas secciones están visibles.
+    private val matrizSource: StateFlow<List<MatrizEntity>> = matrizDao.getAllMatriz()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _desde = MutableStateFlow<Long?>(inicioDeHoy())
     val desde: StateFlow<Long?> = _desde
 
@@ -50,8 +56,13 @@ class FiltroFechaViewModel(
     private fun ordenar(list: List<MatrizEntity>, o: OrdenLista, miUbicacion: Pair<Double, Double>?): List<MatrizEntity> = when (o) {
         OrdenLista.FECHA_HORA_RECIENTE -> list.sortedByDescending { it.fecha ?: 0L }
         OrdenLista.FECHA_HORA_ANTIGUA -> list.sortedBy { it.fecha ?: 0L }
-        OrdenLista.UBICACION_CERCA -> if (miUbicacion == null) list else list.sortedBy { distanciaOrNull(it.ubicacion, miUbicacion) ?: Double.MAX_VALUE }
-        OrdenLista.UBICACION_LEJOS -> if (miUbicacion == null) list else list.sortedByDescending { distanciaOrNull(it.ubicacion, miUbicacion) ?: -1.0 }
+        // Precalcular cada distancia una vez y mantener los mismos valores de respaldo para GPS inválido.
+        OrdenLista.UBICACION_CERCA -> if (miUbicacion == null) list else list
+            .map { item -> item to (distanciaOrNull(item.ubicacion, miUbicacion) ?: Double.MAX_VALUE) }
+            .sortedBy { it.second }.map { it.first }
+        OrdenLista.UBICACION_LEJOS -> if (miUbicacion == null) list else list
+            .map { item -> item to (distanciaOrNull(item.ubicacion, miUbicacion) ?: -1.0) }
+            .sortedByDescending { it.second }.map { it.first }
         OrdenLista.ALFABETICO_AZ -> list.sortedBy { it.nombre.lowercase() }
         OrdenLista.ALFABETICO_ZA -> list.sortedByDescending { it.nombre.lowercase() }
         OrdenLista.ORIGINAL -> list
@@ -65,7 +76,7 @@ class FiltroFechaViewModel(
     val filteredList: StateFlow<List<MatrizEntity>> = combine(_desde, _hasta, _orden, _miUbicacion, _soloPagados) { d, h, o, loc, solo ->
         FiltroParams(d, h, o, loc, solo)
     }.flatMapLatest { p ->
-        matrizDao.getAllMatriz().map { list ->
+        matrizSource.map { list ->
             val enRango = if (p.desde != null && p.hasta != null) {
                 list.filter { val f = it.fecha; f != null && f in p.desde..p.hasta && !it.estado.equals("PASE", ignoreCase = true) }
             } else {
@@ -74,7 +85,8 @@ class FiltroFechaViewModel(
             val filtrada = if (p.soloPagados) enRango.filter { it.estado.equals("Pagado", ignoreCase = true) } else enRango
             ordenar(filtrada, p.orden, p.loc)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Sumatoria de montoCobrado de los registros "Pagado" del rango de fecha actual (para el
      * encabezado que se muestra cuando el filtro "Pagados" está activo). Independiente de
@@ -82,11 +94,12 @@ class FiltroFechaViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val totalCobradoRango: StateFlow<Double> = combine(_desde, _hasta) { d, h -> d to h }
         .flatMapLatest { (d, h) ->
-            matrizDao.getAllMatriz().map { list ->
+            matrizSource.map { list ->
                 list.filter { val f = it.fecha; (d == null || h == null || (f != null && f in d..h)) && it.estado.equals("Pagado", ignoreCase = true) }
                     .sumOf { it.montoCobrado ?: 0.0 }
             }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+        }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     /** Tickets leídos por OCR en el rango visible (para verlos y borrar uno mal leído). */
     @OptIn(ExperimentalCoroutinesApi::class)
