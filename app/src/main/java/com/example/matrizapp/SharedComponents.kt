@@ -618,9 +618,9 @@ fun MatrizFullFormDialog(
                 )
                 if (mostrarCamposExtra) {
                     OutlinedTextField(
-                        value = diaPago, onValueChange = { diaPago = filtrarMoneda(it) }, label = { Text("Día de pago") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        visualTransformation = MonedaVisualTransformation(),
+                        value = diaPago, onValueChange = { diaPago = it }, label = { Text("Día de pago") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -887,52 +887,6 @@ private fun BuscarDireccionDialog(buscando: Boolean, onDismiss: () -> Unit, onBu
  * desde Google Maps, ej. 19.367936, -99.140631). */
 private fun filtrarCoordenadas(v: String): String =
     v.filter { it.isDigit() || it == '.' || it == ',' || it == '-' || it == ' ' }
-
-/** Moneda: guarda solo dígitos y un punto decimal (máx. 2 decimales); el "$" y las comas de
- * miles son solo visuales (ver MonedaVisualTransformation), no se guardan. */
-private fun filtrarMoneda(v: String): String {
-    val limpio = v.filter { it.isDigit() || it == '.' }
-    val i = limpio.indexOf('.')
-    if (i < 0) return limpio
-    val entera = limpio.substring(0, i)
-    val decimales = limpio.substring(i + 1).replace(".", "").take(2)
-    return entera + "." + decimales
-}
-
-/** Muestra el valor como $1,234.50 sin alterar el texto guardado (ej. "1234.5"). */
-private class MonedaVisualTransformation : androidx.compose.ui.text.input.VisualTransformation {
-    override fun filter(text: androidx.compose.ui.text.AnnotatedString): androidx.compose.ui.text.input.TransformedText {
-        val raw = text.text
-        if (raw.isEmpty()) {
-            return androidx.compose.ui.text.input.TransformedText(text, androidx.compose.ui.text.input.OffsetMapping.Identity)
-        }
-        val punto = raw.indexOf('.')
-        val entera = if (punto >= 0) raw.substring(0, punto) else raw
-        val decimales = if (punto >= 0) raw.substring(punto) else ""
-        val sb = StringBuilder("\$")
-        val mapa = IntArray(raw.length + 1)
-        var salida = 1
-        for (i in entera.indices) {
-            if (i > 0 && (entera.length - i) % 3 == 0) { sb.append(','); salida++ }
-            mapa[i] = salida
-            sb.append(entera[i]); salida++
-        }
-        for (j in decimales.indices) {
-            mapa[entera.length + j] = salida
-            sb.append(decimales[j]); salida++
-        }
-        mapa[raw.length] = salida
-        val offsets = object : androidx.compose.ui.text.input.OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int = mapa[offset.coerceIn(0, raw.length)]
-            override fun transformedToOriginal(offset: Int): Int {
-                var res = 0
-                for (i in 0..raw.length) { if (mapa[i] <= offset) res = i else break }
-                return res
-            }
-        }
-        return androidx.compose.ui.text.input.TransformedText(androidx.compose.ui.text.AnnotatedString(sb.toString()), offsets)
-    }
-}
 
 @Composable
 fun ImagenCaptureBox(url: String?, enabled: Boolean, driveHelper: DriveHelper?, onClick: () -> Unit, onDelete: (() -> Unit)? = null) {
