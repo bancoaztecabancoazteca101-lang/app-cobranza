@@ -51,10 +51,10 @@ jobs:
 
       - name: Build Debug APK
         run: |
-          # main publica SOLO la build release (sin R8, probada) como app-debug.apk (el enlace de siempre).
-          # La variante "optimizado" hoy es idéntica a release (R8 apagado), así que no se compila en main.
+          # main publica la build release (sin R8, probada) como app-debug.apk (el enlace de siempre)
+          # y TAMBIÉN la variante optimizado como app-optimizado.apk (Diego la busca por ese nombre).
           # Las ramas publican las tres para poder comparar.
-          TASKS="assembleRelease"
+          TASKS="assembleRelease assembleOptimizado"
           if [ "${{ github.ref_name }}" != "main" ]; then TASKS="assembleDebug assembleRelease assembleOptimizado"; fi
           set +e
           gradle $TASKS --stacktrace > build_output.log 2>&1
