@@ -6,7 +6,7 @@ import java.util.Calendar
 /** Reemplazo, dentro de la app, del script de Apps Script `guardarRegistroSemana6`. Reglas del script que se conservan:
  *  - Solo registros de Matriz cuya SEMANA APERTURA sea 6 (la semana de atraso que traían el lunes; se calcula con los
  *    Días apertura del registro, ver [perteneceASemana6]), con Id, y con Fecha dentro de la SEMANA ISO ACTUAL (lunes a domingo).
- *    Si el registro no trae Días apertura (no se puede calcular), se usa su campo Sem como antes, para no perderlo.
+ *    Sin Días apertura el registro no entra (ya no se usa el campo Sem como respaldo).
  *  - Van a la hoja "Cont-Sem-NN" (NN = semana ISO). Un cliente aparece UNA vez por semana (por Id).
  *  - Registro nuevo: nombre, sem, req, id, CU, ubicación, imagen, teléfono; visitas = 1.
  *  - Registro ya existente: se rellenan teléfono/ubicación/imagen si estaban vacíos.
@@ -15,13 +15,13 @@ import java.util.Calendar
  *  número). Aquí "Visitas" = días distintos en que el registro tuvo fecha/edición (visita real): +1 cuando la fecha del registro
  *  es un día posterior a la última fecha de visita guardada. */
 /**
- * Regla de Semana 6: un registro pertenece si su SEMANA APERTURA es 6 (Días apertura 34 a 40, tabla de Diego en
- * [diasAperturaASemanas]). Sin Días apertura capturados no hay semana de apertura: se cae al campo Sem.
+ * Regla de Semana 6: un registro pertenece SOLO si su SEMANA APERTURA es 6 (Días apertura 34 a 40, tabla de Diego en
+ * [diasAperturaASemanas]). El campo Sem (que sale de los días de atraso marcados) ya NO decide: sin Días apertura
+ * no hay semana de apertura y el registro no entra. [semana] se conserva en la firma por compatibilidad.
  */
-internal fun perteneceASemana6(diasApertura: String?, semana: String): Boolean {
-    val apertura = diasApertura?.trim()?.toIntOrNull()?.let { diasAperturaASemanas(it) }
-    return if (apertura != null) apertura == 6 else semana.trim().toIntOrNull() == 6
-}
+@Suppress("UNUSED_PARAMETER")
+internal fun perteneceASemana6(diasApertura: String?, semana: String): Boolean =
+    diasApertura?.trim()?.toIntOrNull()?.let { diasAperturaASemanas(it) } == 6
 
 object Sem6Generador {
     private fun inicioSemanaMillis(): Long {
