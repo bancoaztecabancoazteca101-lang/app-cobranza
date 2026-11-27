@@ -514,6 +514,8 @@ fun MatrizFullFormDialog(
                     diasApertura = calcularDiasApertura(datos.diasAtraso.toInt()).toString()
                 }
                 if (!datos.cu.isNullOrBlank() && folioP.isBlank()) folioP = datos.cu
+                // Día de pago = día de la semana de (hoy - días de atraso). Solo si está vacío (no pisa uno escrito a mano).
+                if (diaPago.isBlank()) datos.diasAtraso?.toIntOrNull()?.let { diaDePagoDesdeAtraso(it)?.let { dia -> diaPago = dia } }
             }
         }
     }
@@ -1511,6 +1513,16 @@ data class DatosClienteOcr(val nombre: String?, val monto: String?, val semana: 
 /** Días transcurridos desde el lunes de la semana actual (lunes=0 ... domingo=6). */
 fun diasDesdeLunes(hoy: java.util.Calendar = java.util.Calendar.getInstance()): Int =
     (hoy.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
+
+/** Día de pago a partir de los días de atraso: el día de la semana de (hoy - días de atraso), en español.
+ * Ej.: hoy viernes con 12 días de atraso -> hace 12 días fue domingo -> "Domingo". Sin atraso (0) no hay dato. */
+fun diaDePagoDesdeAtraso(diasAtraso: Int, hoy: java.util.Calendar = java.util.Calendar.getInstance()): String? {
+    if (diasAtraso < 1) return null
+    val fecha = hoy.clone() as java.util.Calendar
+    fecha.add(java.util.Calendar.DAY_OF_YEAR, -diasAtraso)
+    val nombres = arrayOf("Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado")
+    return nombres[fecha.get(java.util.Calendar.DAY_OF_WEEK) - 1]
+}
 
 /** Días de atraso que el cliente tenía el lunes de esta semana (apertura): días de atraso de hoy
  * menos los días que han pasado desde el lunes. Ej.: hoy sábado (5 días desde lunes), 20 de atraso -> 15. */
