@@ -128,6 +128,7 @@ fun BloqueHorarioScreen(viewModel: BloqueHorarioViewModel) {
                     onCambiar = { viewModel.setCatchupActiva(it) }
                 )
             }
+            item { SyncAutoCard() }
             if (!permisoAlarmasOk) {
                 item {
                     PermisoAlarmasBanner(
@@ -591,4 +592,80 @@ private fun SelectorHoraDialog(
             TextButton(onClick = onCancelar) { Text("Cancelar") }
         }
     )
+}
+
+/** Sincronización automática en segundo plano: LOCAL de este teléfono (no se comparte con los demás
+ * dispositivos), apagada por defecto. Pensada para el teléfono de las llamadas automáticas, cuya app
+ * casi nunca está abierta y por eso no actualizaba las vistas del día. */
+@Composable
+private fun SyncAutoCard() {
+    val context = LocalContext.current
+    var activa by remember { mutableStateOf(SyncAutoPrefs.activa(context)) }
+    var minutos by remember { mutableStateOf(SyncAutoPrefs.minutos(context)) }
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(12.dp),
+        colors = CardDefaults.cardColors(containerColor = if (activa) ClayBlueContainer else ClayNeutralContainer)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Sincronizar en segundo plano (solo este teléfono)",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (activa) AZUL_ACENTO else Color.Gray
+                    )
+                    Text(
+                        if (activa) "Activa — actualiza las vistas cada $minutos min aunque la app esté cerrada"
+                        else "Apagada — solo se actualiza al abrir la app. Prende esto solo en el teléfono de las llamadas automáticas para cuidar la batería",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+                Switch(
+                    checked = activa,
+                    onCheckedChange = { nuevo ->
+                        activa = nuevo
+                        SyncAutoPrefs.setActiva(context, nuevo)
+                        if (nuevo) {
+                            SyncAutoScheduler.iniciar(context)
+                            // Sin esta exención Android puede retrasar las sincronizaciones con la pantalla apagada.
+                            try {
+                                val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                                if (!pm.isIgnoringBatteryOptimizations(context.packageName)) {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                        }
+                                    )
+                                }
+                            } catch (e: Exception) { }
+                        } else SyncAutoScheduler.cancelar(context)
+                    }
+                )
+            }
+            if (activa) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    SyncAutoPrefs.OPCIONES_MINUTOS.forEach { opcion ->
+                        FilterChip(
+                            selected = minutos == opcion,
+                            onClick = {
+                                minutos = opcion
+                                SyncAutoPrefs.setMinutos(context, opcion)
+                                SyncAutoScheduler.iniciar(context)
+                            },
+                            label = { Text("$opcion min") }
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

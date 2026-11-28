@@ -31,6 +31,8 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 programarLimpiezaRutaIA(context.applicationContext)
                 // Limpieza diaria de la oferta de descuento: misma razón, se pierde con el reinicio.
                 programarLimpiezaDescuento(context.applicationContext)
+                // Sincronización automática en segundo plano (solo si está prendida en este teléfono).
+                SyncAutoScheduler.programarTrasReinicio(context.applicationContext)
             } catch (e: Exception) {
                 // Si algo falla aquí no hay forma de avisarle al usuario (no hay UI); se
                 // reintentará solo la próxima vez que se abra la app y cambien los datos.
